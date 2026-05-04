@@ -24,11 +24,17 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–3 complete in current worktree.**
+**Tasks 1–4 complete in current worktree.**
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
-- Full business models, services, views, and URLs for most domain apps are **not implemented yet**.
+- `apps/accounts/models.py` implements `ParentAccount` and `MagicLinkToken`.
+- `apps/accounts/services.py` implements `issue_magic_link`, `send_magic_link`, `consume_magic_link`.
+- `apps/accounts/views.py` implements request, verify, and logout views.
+- `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
+- `.env` autoload works for local commands and app startup.
+- Current user acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
+- Full business models for registrations, members, billing, and documents are **not implemented yet**.
 
 Reference docs:
 - Design spec: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
@@ -71,6 +77,10 @@ Rules:
 - No sensitive PII in logs. Mask personal IDs; redact external API payloads.
 - All external API calls (Invoice Ninja, OCR) run through background jobs with retry state.
 - Develop each task or feature in its own git worktree branch, then merge back to `main` only after user approval.
+- Create future worktrees inside project directory (for example `.worktrees/` or `worktrees/`), not outside repository.
+- On future iterations, copy project-root `.env` into the worktree before running env-driven commands or local app flows.
+- When app is exposed through a tunnel, ensure worktree `.env` uses the correct `SITE_URL` and related trusted-origin settings so CSRF-protected forms work over the tunnel.
+- Current acceptance-test baseline uses LAN bind on `192.168.3.245:8000`.
 - Ask before major structural changes or architecture changes.
 - Keep context lean; read only files needed for current task.
 - Keep `README.md` and project docs accurate when architecture or workflows change.

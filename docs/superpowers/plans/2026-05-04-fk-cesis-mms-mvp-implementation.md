@@ -199,7 +199,11 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - **Task 3 completed** on 2026-05-04.
 - Task 3 delivered: `apps/` package skeleton, app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`, `apps/core/models.py` with abstract `TimeStampedModel`, `apps/core/enums.py`, `apps/core/audit.py`, `tests/core/test_base_models.py`, and `tests/conftest.py`.
 - Verified green after Task 3: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
-- **Next active task:** Task 4 (`Parent accounts and magic links`).
+- **Task 4 completed** on 2026-05-04.
+- Task 4 delivered: `ParentAccount`, `MagicLinkToken`, magic-link request/verify/logout flow, `ensure_admin_user` command, `.env` autoload, tunnel/LAN-aware settings coverage, and Task 4 account/settings tests.
+- Verified green after Task 4: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
+- **Current user acceptance-test URL:** `http://192.168.3.245:8000`.
+- **Next active task:** Task 5 (`Registration application workflow`).
 
 ### Task 1: Project bootstrap and repo metadata — completed
 

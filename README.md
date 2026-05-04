@@ -37,17 +37,24 @@ docs/               # Design docs, milestones
 
 ## Status
 
-**Tasks 1–3 complete.** Django project scaffold, settings, and app skeletons are in place.
+**Tasks 1–4 complete.** Foundation, security baseline, and parent magic-link auth are implemented.
 
 - `apps/` contains `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, and `integrations`
 - `apps/core/models.py` defines the abstract `TimeStampedModel` base model
-- Full business models, services, views, and URLs are **not implemented yet**
+- `apps/accounts/models.py` defines `ParentAccount` and `MagicLinkToken`
+- `apps/accounts/services.py` provides `issue_magic_link`, `send_magic_link`, `consume_magic_link`
+- `apps/accounts/views.py` provides request, verify, and logout views
+- `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation
+- `.env` autoload works for management commands and app startup
+- current acceptance-test URL: `http://192.168.3.245:8000`
+- Full business models for registrations, members, billing, and documents are **not implemented yet**
 
 ## Development Workflow
 
 - Develop each task or feature in its own git worktree branch.
 - Merge work back to `main` only after user approval.
 - Expose usable app slices on LAN as early as practical for acceptance testing.
+- Current preferred acceptance-test host is `192.168.3.245:8000` on the local network.
 - Do not wait until end of MVP to share first working flow.
 
 ## Documentation

@@ -1,9 +1,12 @@
 # FK Cēsis MMS Milestones
 
 ## Current Execution Snapshot
-- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`)
-- **Next active implementation task:** Task 4 — Parent accounts and magic links
+- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links)
+- **Next active implementation task:** Task 5 — Registration application workflow
 - **Current milestone focus:** `M2` has not started yet; remaining `M1` deliverables still need implementation (private documents, background jobs, auth foundations, audit baseline)
+- **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000`
+- **Future sprint note:** add automatic `.env` loading for management commands and local app startup so env-driven workflows do not require manual `source .env`
+- **Future sprint note:** when starting work from a new worktree, copy project-root `.env` into that worktree and refresh `SITE_URL` / trusted-origin config for the active tunnel URL; current tunnel admin login failure is consistent with missing tunnel-aware CSRF configuration
 
 ## M1 — Foundation and security baseline
 **Priority:** High

@@ -1,0 +1,6 @@
+<form method="post" action="{% url 'accounts:request-magic-link' %}">
+  {% csrf_token %}
+  {{ form.email.label_tag }} {{ form.email }}
+  {% if form.email.errors %}<p>{{ form.email.errors }}</p>{% endif %}
+  <button type="submit">Send magic link</button>
+</form>

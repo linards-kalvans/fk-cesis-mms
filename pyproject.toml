@@ -7,7 +7,14 @@ dependencies = [
     "django>=5.0",
     "pytest>=9.0.3",
     "pytest-django>=4.12.0",
+    "python-dotenv>=1.2.2",
 ]
+
+[tool.ruff]
+lint.extend-ignore = ["F841"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F841"]
 
 [dependency-groups]
 dev = [

@@ -5,11 +5,16 @@ Task 1: minimal scaffold. Full settings will be fleshed out in later tasks.
 """
 
 import os
+from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Auto-load .env from project root (one level above this file's parent).
+load_dotenv(dotenv_path=BASE_DIR / ".env")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
@@ -20,7 +25,11 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS: list[str] = []
+# Derive ALLOWED_HOSTS from SITE_URL.
+SITE_URL = os.environ.get("SITE_URL", "http://localhost")
+_parsed = urlparse(SITE_URL)
+ALLOWED_HOSTS: list[str] = [_parsed.hostname] if _parsed.hostname else []
+ALLOWED_HOSTS.extend(["localhost", "127.0.0.1"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -54,7 +63,7 @@ ROOT_URLCONF = "fk_cesis_mms.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -80,3 +89,23 @@ DATABASES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
+
+# Derive CSRF_TRUSTED_ORIGINS from SITE_URL.
+# Tunnel URLs (kimaki.dev) are HTTPS — keep the scheme from SITE_URL.
+CSRF_TRUSTED_ORIGINS: list[str] = [SITE_URL] if SITE_URL else []
+
+# Tunnel/proxy HTTPS support.
+# Trust the proxy's X-Forwarded-Proto so Django knows the original request was HTTPS.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Trust the forwarded Host header (tunnel may rewrite it).
+USE_X_FORWARDED_HOST = True
+# Secure cookies when SITE_URL is https:// (tunnel/proxy deployments).
+_SESSION_URL = urlparse(SITE_URL)
+SESSION_COOKIE_SECURE = _SESSION_URL.scheme == "https"
+CSRF_COOKIE_SECURE = _SESSION_URL.scheme == "https"
+SESSION_COOKIE_SAMESITE = "None" if _SESSION_URL.scheme == "https" else "Lax"
+CSRF_COOKIE_SAMESITE = "None" if _SESSION_URL.scheme == "https" else "Lax"
+
+# Magic-link auth
+MAGIC_LINK_TTL_MINUTES = 60
+MAGIC_LINK_RATE_LIMIT_PER_MINUTE = 5

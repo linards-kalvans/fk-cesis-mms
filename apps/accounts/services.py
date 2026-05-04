@@ -1,0 +1,143 @@
+"""Magic-link service functions."""
+
+import secrets
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from typing import cast
+from urllib.parse import urljoin
+
+from django.conf import settings
+from django.core.mail import send_mail
+
+from apps.accounts.models import MagicLinkToken, ParentAccount
+
+# ---------------------------------------------------------------------------
+# Rate-limit tracking (in-memory, app-level)
+# ---------------------------------------------------------------------------
+_send_timestamps: dict[str, list[float]] = {}
+
+
+def _get_rate_limit() -> int:
+    """Return configured rate limit (per minute per email)."""
+    return int(
+        getattr(settings, "MAGIC_LINK_RATE_LIMIT_PER_MINUTE", 5),
+    )
+
+
+def _get_ttl_minutes() -> int:
+    """Return configured TTL in minutes."""
+    return int(getattr(settings, "MAGIC_LINK_TTL_MINUTES", 60))
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _hash_token(raw: str) -> str:
+    return sha256(raw.encode()).hexdigest()
+
+
+def _check_rate_limit(email: str) -> None:
+    """Raise ValueError if rate limit exceeded."""
+    limit = _get_rate_limit()
+    now = _now_utc().timestamp()
+    window_start = now - 60.0
+    timestamps = _send_timestamps.setdefault(email, [])
+    # Prune old entries
+    _send_timestamps[email] = [t for t in timestamps if t > window_start]
+    if len(_send_timestamps[email]) >= limit:
+        raise ValueError("Rate limit exceeded")
+
+
+def _record_send(email: str) -> None:
+    """Record a send timestamp for rate-limit tracking."""
+    _send_timestamps.setdefault(email, []).append(_now_utc().timestamp())
+
+
+def issue_magic_link(account: ParentAccount) -> str:
+    """Issue a new magic-link token for *account*.
+
+    Returns the raw (unhashed) token string.  Only one active token
+    per account is allowed — raises ``ValueError`` if one already
+    exists.
+
+    A token is considered "active" when it is unused and unsent.
+    """
+    active = account.magic_link_tokens.filter(
+        used_at__isnull=True,
+        sent_at__isnull=True,
+        expires_at__gt=_now_utc(),
+    ).exists()
+    if active:
+        raise ValueError("Active token already exists")
+
+    raw = secrets.token_urlsafe(32)
+    ttl = _get_ttl_minutes()
+    now = _now_utc()
+
+    MagicLinkToken.objects.create(
+        account=account,
+        token_hash=_hash_token(raw),
+        expires_at=now + timedelta(minutes=ttl),
+    )
+    return raw
+
+
+def send_magic_link(account: ParentAccount, raw_token: str) -> None:
+    """Send magic-link email to *account* with the verify URL.
+
+    Marks the token as sent so ``issue_magic_link`` can issue a
+    replacement.  The token remains consumable until
+    ``consume_magic_link`` marks it used.
+    """
+    _check_rate_limit(account.email)
+
+    token = MagicLinkToken.objects.get(
+        account=account,
+        token_hash=_hash_token(raw_token),
+        used_at__isnull=True,
+    )
+    token.sent_at = _now_utc()
+    token.save(update_fields=["sent_at"])
+
+    verify_url = urljoin(
+        getattr(settings, "SITE_URL", "http://localhost"),
+        f"/accounts/verify/{raw_token}/",
+    )
+
+    subject = "Log in to FK Cēsis MMS"
+    body = f"Click here to log in: {verify_url}"
+
+    send_mail(
+        subject=subject,
+        message=body,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@example.com"),
+        recipient_list=[account.email],
+        fail_silently=False,
+    )
+    _record_send(account.email)
+
+
+def consume_magic_link(raw_token: str) -> ParentAccount:
+    """Consume a magic-link token and return the associated account.
+
+    Raises ``ValueError`` if the token is invalid, expired, already
+    used, or the account is inactive.
+    """
+    token = MagicLinkToken.objects.filter(
+        token_hash=_hash_token(raw_token),
+        used_at__isnull=True,
+    ).first()
+
+    if token is None:
+        raise ValueError("Invalid or already consumed token")
+
+    if token.expires_at < _now_utc():
+        raise ValueError("Token expired")
+
+    if not token.account.is_active:
+        raise ValueError("Account is inactive")
+
+    token.used_at = _now_utc()
+    token.save(update_fields=["used_at"])
+    return cast(ParentAccount, token.account)
