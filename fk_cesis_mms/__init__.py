@@ -1,0 +1,1 @@
+"""FK Cēsis MMS project."""
