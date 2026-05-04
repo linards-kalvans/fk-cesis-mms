@@ -1,7 +1,13 @@
 # FK Cēsis MMS Milestones
 
+## Current Execution Snapshot
+- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`)
+- **Next active implementation task:** Task 4 — Parent accounts and magic links
+- **Current milestone focus:** `M2` has not started yet; remaining `M1` deliverables still need implementation (private documents, background jobs, auth foundations, audit baseline)
+
 ## M1 — Foundation and security baseline
 **Priority:** High
+**Status:** In progress
 **Goal:** Create secure project foundation for sensitive youth-member data.
 
 **Deliverables**
@@ -22,6 +28,7 @@
 
 ## M2 — Parent registration intake
 **Priority:** High
+**Status:** Pending — next milestone after remaining M1 foundation work
 **Goal:** Allow parent to create and submit child registration with secure document upload.
 
 **Execution rule**
@@ -42,6 +49,7 @@
 
 ## M3 — Admin review and member creation
 **Priority:** High
+**Status:** Pending
 **Goal:** Let admins review applications and convert approved ones into official members.
 
 **Deliverables**
@@ -58,6 +66,7 @@
 
 ## M4 — Billing and Invoice Ninja sync
 **Priority:** High
+**Status:** Pending
 **Goal:** Automate recurring membership billing setup and payment-status visibility.
 
 **Deliverables**
@@ -75,6 +84,7 @@
 
 ## M5 — Admin operations and export
 **Priority:** Medium
+**Status:** Pending
 **Goal:** Provide usable day-to-day administration tools.
 
 **Deliverables**
@@ -90,6 +100,7 @@
 
 ## M6 — Production readiness
 **Priority:** Medium
+**Status:** Pending
 **Goal:** Make MVP deployable and supportable.
 
 **Deliverables**

@@ -29,6 +29,14 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # FK Cēsis MMS domain apps
+    "apps.core",
+    "apps.accounts",
+    "apps.registrations",
+    "apps.members",
+    "apps.billing",
+    "apps.documents",
+    "apps.integrations",
 ]
 
 MIDDLEWARE = [

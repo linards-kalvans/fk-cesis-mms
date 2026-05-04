@@ -23,22 +23,25 @@ uv run mypy .                    # type check
 
 ```
 fk_cesis_mms/       # Django project package
-apps/               # Domain apps (planned — not yet created)
+apps/               # Domain apps
   accounts/
   registrations/
   members/
   billing/
   documents/
   integrations/
-  admin_ops/
+  admin_ops/        # Planned, not yet implemented
 tests/              # Test suite
 docs/               # Design docs, milestones
 ```
 
 ## Status
 
-**Task 1 complete.** Django project scaffold and settings are in place.
-Full app structure (`apps/`) and configuration will be added in subsequent tasks.
+**Tasks 1–3 complete.** Django project scaffold, settings, and app skeletons are in place.
+
+- `apps/` contains `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, and `integrations`
+- `apps/core/models.py` defines the abstract `TimeStampedModel` base model
+- Full business models, services, views, and URLs are **not implemented yet**
 
 ## Development Workflow
 
@@ -49,6 +52,7 @@ Full app structure (`apps/`) and configuration will be added in subsequent tasks
 
 ## Documentation
 
+- Authoritative project guide: `AGENTS.md`
 - Design spec: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-05-04-fk-cesis-mms-mvp-implementation.md`
 - Milestones: `docs/milestones.md`

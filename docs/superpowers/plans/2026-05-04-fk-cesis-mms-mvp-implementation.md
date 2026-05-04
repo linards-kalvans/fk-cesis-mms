@@ -27,7 +27,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 ## 2. File-by-file architecture plan
 
 ### Root project files
-- Create: `CLAUDE.md`
+- Create: `AGENTS.md`
   - project purpose, stack, commands, conventions, relevant skills
 - Create: `.gitignore`
   - Python, Django, env, uploads, `.superpowers/`, local db/files
@@ -87,7 +87,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - Create/update during implementation:
   - `docs/superpowers/plans/2026-05-04-fk-cesis-mms-mvp-implementation.md`
   - `README.md`
-  - `CLAUDE.md`
+  - `AGENTS.md`
   - optional `docs/security-baseline.md`
   - optional `docs/invoice-ninja-mapping.md`
 
@@ -184,7 +184,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - document delete action exists and is audited
 
 ### Unit F — Docs and readiness
-- README and CLAUDE are accurate
+- README and AGENTS are accurate
 - `.env.example` covers all required settings
 - deployment/security notes exist
 
@@ -193,10 +193,13 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 ## 6.1 Execution status update
 
 - **Task 1 completed** on 2026-05-04.
-- Task 1 delivered: `.gitignore`, `pyproject.toml`, `.env.example`, `README.md`, `CLAUDE.md`, `AGENTS.md`, `manage.py`, `fk_cesis_mms/__init__.py`, `fk_cesis_mms/settings.py`, `fk_cesis_mms/urls.py`, `fk_cesis_mms/asgi.py`, `fk_cesis_mms/wsgi.py`, `mypy.ini`, and `tests/test_project_smoke.py`.
+- Task 1 delivered: `.gitignore`, `pyproject.toml`, `.env.example`, `README.md`, `AGENTS.md`, `manage.py`, `fk_cesis_mms/__init__.py`, `fk_cesis_mms/settings.py`, `fk_cesis_mms/urls.py`, `fk_cesis_mms/asgi.py`, `fk_cesis_mms/wsgi.py`, `mypy.ini`, and `tests/test_project_smoke.py`.
 - Verified green after Task 1: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
 - **Task 2 was absorbed into Task 1** because the initial scaffold already included the minimal Django package and settings work.
-- **Next active task:** Task 3 (`Core apps skeleton and base models`).
+- **Task 3 completed** on 2026-05-04.
+- Task 3 delivered: `apps/` package skeleton, app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`, `apps/core/models.py` with abstract `TimeStampedModel`, `apps/core/enums.py`, `apps/core/audit.py`, `tests/core/test_base_models.py`, and `tests/conftest.py`.
+- Verified green after Task 3: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
+- **Next active task:** Task 4 (`Parent accounts and magic links`).
 
 ### Task 1: Project bootstrap and repo metadata — completed
 
@@ -205,7 +208,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - Create: `pyproject.toml`
 - Create: `.env.example`
 - Create: `README.md`
-- Create: `CLAUDE.md`
+- Create: `AGENTS.md`
 
 - [ ] **Step 1: Write the failing smoke test list**
 
@@ -265,7 +268,7 @@ staticfiles/
 ```
 
 ```md
-# CLAUDE.md
+# AGENTS.md
 ## Project Purpose
 FK Cēsis youth member registration, approval, and billing MVP.
 
@@ -752,7 +755,7 @@ Expected: PASS
 
 **Files:**
 - Modify: `README.md`
-- Modify: `CLAUDE.md`
+- Modify: `AGENTS.md`
 - Modify: `.env.example`
 - Optional create: `docs/security-baseline.md`
 - Optional create: `docs/invoice-ninja-mapping.md`
@@ -805,7 +808,7 @@ Run before any completion claim:
 ## 8. Documentation scope
 
 Must create/update:
-- `CLAUDE.md` with commands, stack, conventions, and relevant skills
+- `AGENTS.md` with commands, stack, conventions, and relevant skills
 - `README.md` with setup/run/test flow
 - `.env.example` with integration settings
 - `docs/milestones.md` maintained as units complete
