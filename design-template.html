@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FK Cēsis — Responsīvs apmeklējuma panelis</title>
+  <style>
+    :root {
+      --navy-950: #061832;
+      --navy-900: #08214a;
+      --navy-800: #0b2b62;
+      --blue-700: #0b55d9;
+      --blue-600: #1266f1;
+      --blue-100: #eaf2ff;
+      --orange-600: #ff4d16;
+      --orange-500: #ff6a2a;
+      --orange-100: #fff0e8;
+      --green-600: #16a34a;
+      --green-100: #e9f8ee;
+      --red-600: #ef2f35;
+      --red-100: #ffeded;
+      --ink: #071a3d;
+      --muted: #66728a;
+      --line: #e8edf5;
+      --card: #ffffff;
+      --bg: #f3f6fb;
+      --shadow: 0 18px 45px rgba(7, 26, 61, 0.12);
+      --soft-shadow: 0 8px 24px rgba(7, 26, 61, 0.08);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 12%, rgba(18, 102, 241, 0.12), transparent 28%),
+        radial-gradient(circle at 85% 85%, rgba(255, 77, 22, 0.10), transparent 24%),
+        var(--bg);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, var(--navy-950), var(--navy-800));
+      color: white;
+      padding: 28px 18px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar::after {
+      content: "";
+      position: absolute;
+      left: -34px;
+      right: 18px;
+      bottom: 28px;
+      height: 130px;
+      opacity: 0.18;
+      border: 2px solid #c8d7ff;
+      transform: rotate(-23deg);
+      border-radius: 8px;
+    }
+
+    .brand {
+      display: grid;
+      place-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .logo {
+      width: 112px;
+      height: 112px;
+      object-fit: contain;
+      filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.28));
+    }
+
+    .brand small {
+      color: #ff7c45;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav {
+      display: grid;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .nav a {
+      color: rgba(255, 255, 255, 0.9);
+      text-decoration: none;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 0 14px;
+      border-radius: 13px;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .nav a.active {
+      color: white;
+      background: linear-gradient(135deg, var(--blue-600), var(--blue-700));
+      box-shadow: 0 12px 22px rgba(18, 102, 241, 0.25);
+    }
+
+    .main {
+      padding: 28px clamp(18px, 3vw, 42px) 36px;
+      min-width: 0;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .title-group h1 {
+      margin: 0;
+      font-size: clamp(28px, 3.2vw, 44px);
+      letter-spacing: -0.055em;
+    }
+
+    .title-group p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .control,
+    .search {
+      height: 48px;
+      border: 1px solid #d9e3f1;
+      background: white;
+      color: var(--ink);
+      border-radius: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      font-weight: 800;
+      box-shadow: 0 6px 18px rgba(7, 26, 61, 0.04);
+    }
+
+    .search {
+      width: min(280px, 34vw);
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .user {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #f4d9c1, #d9e8ff);
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      box-shadow: 0 8px 20px rgba(7, 26, 61, 0.12);
+      flex: 0 0 auto;
+    }
+
+    .user strong,
+    .user span {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .user span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .mobile-head {
+      display: none;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .kpi,
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .kpi {
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 132px;
+    }
+
+    .kpi-icon,
+    .round-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 30px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .kpi-icon.blue,
+    .round-icon.blue {
+      color: white;
+      background: linear-gradient(145deg, var(--blue-700), var(--blue-600));
+    }
+
+    .kpi-icon.orange,
+    .round-icon.orange {
+      color: var(--orange-600);
+      background: var(--orange-100);
+    }
+
+    .kpi small {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .kpi strong {
+      font-size: 40px;
+      line-height: 1;
+      letter-spacing: -0.06em;
+    }
+
+    .kpi strong.orange {
+      color: var(--orange-600);
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card {
+      padding: 24px;
+    }
+
+    .card h2 {
+      margin: 0 0 18px;
+      font-size: 22px;
+      letter-spacing: -0.045em;
+    }
+
+    .chart {
+      height: 295px;
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .axis {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #48607f;
+      padding: 8px 0 34px;
+      font-weight: 700;
+    }
+
+    .bars-wrap {
+      border-left: 1px solid #dce5f1;
+      border-bottom: 1px solid #dce5f1;
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      align-items: end;
+      gap: clamp(12px, 2.2vw, 30px);
+      padding: 24px 18px 40px;
+    }
+
+    .bars-wrap::before,
+    .bars-wrap::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: #edf2f8;
+    }
+
+    .bars-wrap::before { top: 38%; }
+    .bars-wrap::after { top: 66%; }
+
+    .bar-col {
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .bar {
+      width: min(42px, 8vw);
+      height: var(--h);
+      border-radius: 10px 10px 0 0;
+      background: linear-gradient(180deg, var(--blue-700), #0048c7);
+      position: relative;
+      z-index: 2;
+    }
+
+    .bar.empty {
+      background: transparent;
+      border: 2px dashed #b6c5da;
+      height: 42%;
+    }
+
+    .bar-label {
+      position: absolute;
+      bottom: calc(var(--h) + 10px);
+      font-size: 15px;
+      font-weight: 900;
+      color: #193463;
+    }
+
+    .bar-label.empty-label {
+      bottom: 100px;
+    }
+
+    .day-label {
+      position: absolute;
+      bottom: -29px;
+      font-size: 13px;
+      color: #48607f;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 20px;
+    }
+
+    .session-row,
+    .task-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto 24px;
+      align-items: center;
+      min-height: 54px;
+      border-bottom: 1px solid var(--line);
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .session-row:last-of-type,
+    .task-row:last-of-type {
+      border-bottom: 0;
+    }
+
+    .mini-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--blue-100);
+      color: var(--blue-700);
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+    }
+
+    .task-row .mini-icon {
+      color: var(--orange-600);
+      background: var(--orange-100);
+    }
+
+    .muted {
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .chev {
+      color: #17396f;
+      font-size: 24px;
+      line-height: 0;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 13px;
+      min-height: 50px;
+      padding: 0 18px;
+      width: 100%;
+      font: inherit;
+      font-weight: 900;
+      color: white;
+      background: linear-gradient(180deg, var(--orange-500), var(--orange-600));
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(255, 77, 22, 0.22);
+    }
+
+    .records {
+      grid-column: 1 / -1;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 14px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 15px;
+    }
+
+    th {
+      color: #2b3b59;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .person {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 850;
+    }
+
+    .initials {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #edf1f7;
+      color: #233351;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 13px;
+      flex: 0 0 auto;
+    }
+
+    .status {
+      display: inline-grid;
+      place-items: center;
+      min-height: 30px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .status.green {
+      color: var(--green-600);
+      background: var(--green-100);
+    }
+
+    .status.orange {
+      color: var(--orange-600);
+      background: var(--orange-100);
+    }
+
+    .status.red {
+      color: var(--red-600);
+      background: var(--red-100);
+    }
+
+    .status.blue {
+      color: var(--blue-700);
+      background: var(--blue-100);
+    }
+
+    .outline-btn {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 9px;
+      border: 1.5px solid var(--blue-600);
+      background: white;
+      color: var(--blue-700);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .mobile-bottom-nav {
+      display: none;
+    }
+
+    /* Tablet */
+    @media (max-width: 1080px) {
+      .app-shell {
+        grid-template-columns: 92px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        padding: 18px 12px;
+      }
+
+      .brand small,
+      .nav span {
+        display: none;
+      }
+
+      .logo {
+        width: 68px;
+        height: 68px;
+      }
+
+      .nav a {
+        justify-content: center;
+        padding: 0;
+        font-size: 22px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .side-stack {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    /* Mobile app layout */
+    @media (max-width: 760px) {
+      body {
+        background: #fff;
+      }
+
+      .app-shell {
+        display: block;
+        min-height: 100svh;
+        background: #fff;
+      }
+
+      .sidebar,
+      .topbar .title-group,
+      .top-actions .search,
+      .top-actions .user,
+      .records {
+        display: none;
+      }
+
+      .main {
+        padding: 0 14px calc(88px + var(--safe-bottom));
+      }
+
+      .topbar {
+        display: block;
+        margin: 0 -14px 0;
+      }
+
+      .top-actions {
+        display: none;
+      }
+
+      .mobile-head {
+        display: block;
+        background: linear-gradient(145deg, var(--navy-950), var(--navy-800));
+        color: white;
+        padding: 42px 18px 20px;
+        border-bottom-left-radius: 26px;
+        border-bottom-right-radius: 26px;
+      }
+
+      .mobile-head-main {
+        display: grid;
+        grid-template-columns: 88px 1fr 44px;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .mobile-head .logo {
+        width: 84px;
+        height: 84px;
+      }
+
+      .mobile-head h1 {
+        margin: 0;
+        font-size: 26px;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .mobile-season {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.34);
+        border-radius: 12px;
+        padding: 9px 14px;
+        margin-left: 112px;
+        margin-top: -2px;
+        font-weight: 800;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .kpis {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 7px;
+        margin-top: -8px;
+        margin-bottom: 12px;
+      }
+
+      .kpi {
+        min-height: 112px;
+        padding: 14px 9px 12px;
+        display: block;
+        text-align: center;
+        border-radius: 14px;
+      }
+
+      .kpi-icon,
+      .round-icon {
+        width: 44px;
+        height: 44px;
+        margin: 0 auto 8px;
+        font-size: 22px;
+      }
+
+      .kpi small {
+        font-size: 11px;
+        line-height: 1.2;
+        margin-bottom: 4px;
+      }
+
+      .kpi strong {
+        font-size: 30px;
+      }
+
+      .dashboard-grid {
+        display: block;
+      }
+
+      .card {
+        padding: 18px;
+        margin-bottom: 12px;
+        border-radius: 20px;
+      }
+
+      .card h2 {
+        font-size: 18px;
+        margin-bottom: 14px;
+      }
+
+      .chart-card {
+        margin-top: 12px;
+      }
+
+      .chart {
+        height: 170px;
+        grid-template-columns: 38px 1fr;
+        gap: 8px;
+      }
+
+      .axis {
+        font-size: 11px;
+        padding: 8px 0 24px;
+      }
+
+      .bars-wrap {
+        gap: 13px;
+        padding: 18px 8px 30px;
+      }
+
+      .bar {
+        width: 24px;
+        border-radius: 7px 7px 0 0;
+      }
+
+      .bar-label {
+        font-size: 11px;
+        bottom: calc(var(--h) + 8px);
+      }
+
+      .bar-label.empty-label {
+        bottom: 75px;
+      }
+
+      .day-label {
+        bottom: -24px;
+        font-size: 10px;
+      }
+
+      .side-stack {
+        display: contents;
+      }
+
+      .session-card {
+        order: 1;
+      }
+
+      .task-card {
+        order: 3;
+      }
+
+      .chart-card {
+        order: 2;
+      }
+
+      .session-row,
+      .task-row {
+        grid-template-columns: 34px 1fr auto 20px;
+        min-height: 42px;
+        font-size: 14px;
+      }
+
+      .mini-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+      }
+
+      .btn {
+        min-height: 46px;
+        border-radius: 12px;
+      }
+
+      .mobile-bottom-nav {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: calc(72px + var(--safe-bottom));
+        padding: 8px 12px calc(10px + var(--safe-bottom));
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        background: rgba(255, 255, 255, 0.96);
+        border-top: 1px solid var(--line);
+        z-index: 30;
+        box-shadow: 0 -10px 30px rgba(7, 26, 61, 0.06);
+      }
+
+      .mobile-bottom-nav a {
+        color: #43506a;
+        text-decoration: none;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 800;
+        display: grid;
+        gap: 2px;
+        place-items: center;
+      }
+
+      .mobile-bottom-nav a strong {
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .mobile-bottom-nav a.active {
+        color: var(--blue-700);
+      }
+    }
+
+    @media (max-width: 390px) {
+      .main {
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+
+      .topbar {
+        margin-left: -10px;
+        margin-right: -10px;
+      }
+
+      .mobile-head-main {
+        grid-template-columns: 78px 1fr 40px;
+      }
+
+      .mobile-head .logo {
+        width: 76px;
+        height: 76px;
+      }
+
+      .mobile-season {
+        margin-left: 98px;
+      }
+
+      .status-wide {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Galvenā navigācija">
+      <div class="brand">
+        <img class="logo" src="https://fkcesis.lv/cdn/shop/files/FK_Cesis_2.png?v=1741252753&width=240" alt="FK Cēsis logo" />
+        <small>Vienoti. Lepojamies. Uzvaram.</small>
+      </div>
+      <nav class="nav">
+        <a href="#"><span aria-hidden="true">⌂</span><span>Pārskats</span></a>
+        <a href="#"><span aria-hidden="true">👥</span><span>Biedri</span></a>
+        <a href="#"><span aria-hidden="true">⚽</span><span>Komandas</span></a>
+        <a class="active" href="#"><span aria-hidden="true">▣</span><span>Apmeklējums</span></a>
+        <a href="#"><span aria-hidden="true">▤</span><span>Maksājumi</span></a>
+        <a href="#"><span aria-hidden="true">◷</span><span>Pieteikumi</span></a>
+        <a href="#"><span aria-hidden="true">▥</span><span>Atskaites</span></a>
+        <a href="#"><span aria-hidden="true">⚙</span><span>Iestatījumi</span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <section class="mobile-head" aria-label="Mobilā galvene">
+          <div class="mobile-head-main">
+            <img class="logo" src="https://fkcesis.lv/cdn/shop/files/FK_Cesis_2.png?v=1741252753&width=200" alt="FK Cēsis logo" />
+            <h1>Apmeklējums</h1>
+            <div class="avatar" aria-label="Administrators">👤</div>
+          </div>
+          <div class="mobile-season">📅 <span>2026. sezona</span>⌄</div>
+        </section>
+
+        <div class="title-group">
+          <h1>Apmeklējuma panelis</h1>
+          <p>Šodienas treniņi, neierašanās un apmeklējuma dinamika vienā skatā.</p>
+        </div>
+
+        <div class="top-actions">
+          <div class="control">📅 <span>2026. sezona</span>⌄</div>
+          <div class="search">⌕ <span>Meklēt...</span></div>
+          <div class="control" aria-label="Paziņojumi">🔔</div>
+          <div class="user">
+            <div class="avatar">👤</div>
+            <div><strong>Jānis Bērziņš</strong><span>Administrators</span></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="kpis" aria-label="Apmeklējuma kopsavilkums">
+        <article class="kpi">
+          <span class="kpi-icon blue">▣</span>
+          <div><small>Treniņi šodien</small><strong>6</strong></div>
+        </article>
+        <article class="kpi">
+          <span class="kpi-icon blue">↗</span>
+          <div><small>Apmeklējums<span class="status-wide"> šonedēļ</span></small><strong>87%</strong></div>
+        </article>
+        <article class="kpi">
+          <span class="kpi-icon orange">●×</span>
+          <div><small>Nav ieradušies</small><strong class="orange">14</strong></div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="card chart-card">
+          <h2>Apmeklējuma pārskats <span class="muted">(šonedēļ)</span></h2>
+          <div class="chart" role="img" aria-label="Apmeklējums pa nedēļas dienām">
+            <div class="axis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+            <div class="bars-wrap">
+              <div class="bar-col"><span class="bar-label" style="--h:90%;">90%</span><span class="bar" style="--h:90%;"></span><span class="day-label">Prmd.</span></div>
+              <div class="bar-col"><span class="bar-label" style="--h:82%;">82%</span><span class="bar" style="--h:82%;"></span><span class="day-label">Otrd.</span></div>
+              <div class="bar-col"><span class="bar-label" style="--h:88%;">88%</span><span class="bar" style="--h:88%;"></span><span class="day-label">Trešd.</span></div>
+              <div class="bar-col"><span class="bar-label" style="--h:76%;">76%</span><span class="bar" style="--h:76%;"></span><span class="day-label">Ceturtd.</span></div>
+              <div class="bar-col"><span class="bar-label" style="--h:91%;">91%</span><span class="bar" style="--h:91%;"></span><span class="day-label">Piektd.</span></div>
+              <div class="bar-col"><span class="bar-label" style="--h:69%;">69%</span><span class="bar" style="--h:69%;"></span><span class="day-label">Sestd.</span></div>
+              <div class="bar-col"><span class="bar-label empty-label">–</span><span class="bar empty"></span><span class="day-label">Svētd.</span></div>
+            </div>
+          </div>
+        </article>
+
+        <div class="side-stack">
+          <article class="card session-card">
+            <h2>Šodienas treniņi</h2>
+            <div class="session-row">
+              <span class="mini-icon">👥</span><span>U9</span><span>17:00</span><span class="chev">›</span>
+            </div>
+            <div class="session-row">
+              <span class="mini-icon">👥</span><span>U11</span><span>17:30</span><span class="chev">›</span>
+            </div>
+            <div class="session-row">
+              <span class="mini-icon">👥</span><span>U13</span><span>18:30</span><span class="chev">›</span>
+            </div>
+            <div class="session-row">
+              <span class="mini-icon">👥</span><span>Sieviešu komanda</span><span>19:00</span><span class="chev">›</span>
+            </div>
+            <button class="btn" style="margin-top: 16px;">Atzīmēt apmeklējumu</button>
+          </article>
+
+          <article class="card task-card">
+            <h2>Uzdevumi</h2>
+            <div class="task-row">
+              <span class="mini-icon">◷</span><span>Apstiprināt kavējuma iemeslus</span><span></span><span class="chev">›</span>
+            </div>
+            <div class="task-row">
+              <span class="mini-icon">●×</span><span>Pārbaudīt neierašanās</span><span></span><span class="chev">›</span>
+            </div>
+            <div class="task-row">
+              <span class="mini-icon">✈</span><span>Nosūtīt ziņu vecākiem</span><span></span><span class="chev">›</span>
+            </div>
+          </article>
+        </div>
+
+        <article class="card records">
+          <h2>Pēdējie apmeklējuma ieraksti</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bērns</th>
+                  <th>Komanda</th>
+                  <th>Statuss</th>
+                  <th>Datums</th>
+                  <th>Darbība</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="person"><span class="initials">MK</span>Markuss Kalniņš</span></td>
+                  <td>U11 (2015)</td>
+                  <td><span class="status green">Ieradies</span></td>
+                  <td>16.05.2025 17:30</td>
+                  <td><button class="outline-btn">Skatīt</button></td>
+                </tr>
+                <tr>
+                  <td><span class="person"><span class="initials">RA</span>Ralfs Ozoliņš</span></td>
+                  <td>U9 (2017)</td>
+                  <td><span class="status orange">Kavē</span></td>
+                  <td>16.05.2025 17:00</td>
+                  <td><button class="outline-btn">Skatīt</button></td>
+                </tr>
+                <tr>
+                  <td><span class="person"><span class="initials">AS</span>Alise Strauta</span></td>
+                  <td>U13 (2013)</td>
+                  <td><span class="status red">Nav ieradies</span></td>
+                  <td>16.05.2025 18:30</td>
+                  <td><button class="outline-btn">Skatīt</button></td>
+                </tr>
+                <tr>
+                  <td><span class="person"><span class="initials">LM</span>Laura Mežīte</span></td>
+                  <td>Sieviešu komanda</td>
+                  <td><span class="status blue">Attaisnots</span></td>
+                  <td>16.05.2025 19:00</td>
+                  <td><button class="outline-btn">Skatīt</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <nav class="mobile-bottom-nav" aria-label="Mobilā navigācija">
+      <a href="#"><strong>⌂</strong><span>Pārskats</span></a>
+      <a class="active" href="#"><strong>▣</strong><span>Apmeklējums</span></a>
+      <a href="#"><strong>♟</strong><span>Komandas</span></a>
+      <a href="#"><strong>•••</strong><span>Vairāk</span></a>
+    </nav>
+  </div>
+</body>
+</html>
