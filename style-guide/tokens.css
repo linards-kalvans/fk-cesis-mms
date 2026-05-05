@@ -1,0 +1,6 @@
+:root {
+  /* Canonical FK Cēsis visual tokens. Supersedes design-template.html on conflict. */
+  --fk-cesis-font-display: "Anton";
+  --fk-cesis-blue: #0f0851;
+  --fk-cesis-red: #ce1c20;
+}

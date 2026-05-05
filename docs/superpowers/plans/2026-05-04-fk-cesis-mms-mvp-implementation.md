@@ -84,6 +84,9 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 ### Documentation
 - Already created: `docs/milestones.md`
 - Already created: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
+- Already created: `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`
+- Already created: `style-guide/tokens.md`
+- Already created: `style-guide/tokens.css`
 - Create/update during implementation:
   - `docs/superpowers/plans/2026-05-04-fk-cesis-mms-mvp-implementation.md`
   - `README.md`
@@ -113,6 +116,12 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 
 ### 3.7 Server-rendered UI first
 **Why:** Fastest way to deliver reliable admin-heavy flows while keeping frontend complexity low. JavaScript should only enhance file upload, OCR prefill UX, and filters where needed.
+
+### 3.8 Style-guide assets are canonical
+**Why:** Visual work now has an approved design-source directory at `style-guide/`. Its PDF, background image, and token files supersede exploratory values in `design-template.html`, reducing ambiguity during implementation.
+
+### 3.9 Loose coupling to external services
+**Why:** Self-hosted services may run in separate infrastructure or Ansible projects outside this repository. This app should integrate through adapters and external configuration so self-hosted and SaaS variants can be swapped with minimal domain-level churn.
 
 ## 4. Test strategy
 
@@ -206,7 +215,10 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - Task 5 delivered: `RegistrationApplication`, `Document`, draft save/submit flow, anonymous same-browser draft continuation, magic-link parent portal, single edit form with save-draft and submit actions, and native browser date picker for child birth date.
 - Verified green after Task 5: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
 - **Current user acceptance-test URL:** `http://192.168.3.245:8000`.
-- **Next active task:** Task 6 (`Admin review and member creation`).
+- **Approved design-system source of truth:** `style-guide/` supersedes `design-template.html`; canonical tokens currently `Anton`, `#0f0851`, and `#ce1c20`.
+- **Approved new design/research spec:** `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
+- **Next active build task:** visual system + registration form redesign from the 2026-05-05 design spec.
+- **Task 6 (`Admin review and member creation`) remains next major domain milestone after the approved redesign work.**
 
 ### Task 1: Project bootstrap and repo metadata — completed
 
