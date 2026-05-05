@@ -1,0 +1,8 @@
+<h1>Rediģēt pieteikumu</h1>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <input type="hidden" name="submit_action" value="save_draft">
+  {{ form.as_p }}
+  <button type="submit" name="submit_action" value="save_draft">Saglabāt melnrakstu</button>
+  <button type="submit" name="submit_action" value="submit">Iesniegt pieteikumu</button>
+</form>

@@ -1,10 +1,11 @@
 # FK Cēsis MMS Milestones
 
 ## Current Execution Snapshot
-- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links)
-- **Next active implementation task:** Task 5 — Registration application workflow
-- **Current milestone focus:** `M2` has not started yet; remaining `M1` deliverables still need implementation (private documents, background jobs, auth foundations, audit baseline)
-- **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000`
+- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links), Task 5 (registration application workflow)
+- **Next active implementation task:** Task 6 — Admin review and member creation
+- **Current milestone focus:** `M2` registration intake is substantially implemented (draft/submit, magic-link portal, document upload); remaining `M1` deliverables still need implementation (private document access controls, background jobs, audit baseline)
+- **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000` — registration workflow is usable for acceptance flow
+- **Task 5 polish:** `/register/` accessible without login; anonymous save-draft creates/links `ParentAccount`; single edit form with save-draft and submit actions; native date picker for child birth date
 - **Future sprint note:** add automatic `.env` loading for management commands and local app startup so env-driven workflows do not require manual `source .env`
 - **Future sprint note:** when starting work from a new worktree, copy project-root `.env` into that worktree and refresh `SITE_URL` / trusted-origin config for the active tunnel URL; current tunnel admin login failure is consistent with missing tunnel-aware CSRF configuration
 
@@ -31,24 +32,24 @@
 
 ## M2 — Parent registration intake
 **Priority:** High
-**Status:** Pending — next milestone after remaining M1 foundation work
+**Status:** Partially complete — draft/submit workflow, parent portal, magic-link resume, and document upload implemented; OCR assist still placeholder
 **Goal:** Allow parent to create and submit child registration with secure document upload.
 
 **Execution rule**
 - Implement this milestone in isolated git worktree branches and merge back only after user approval.
 
 **Deliverables**
-- Latvian registration form
-- guardian + child data capture
-- identity document upload
-- OCR assist pipeline with manual correction
-- draft/submitted workflow state
-- parent magic-link access to resume application
+- Latvian registration form ✅
+- guardian + child data capture ✅
+- identity document upload ✅
+- OCR assist pipeline with manual correction *(placeholder only)*
+- draft/submitted workflow state ✅
+- parent magic-link access to resume application ✅
 
 **Acceptance criteria**
-- parent can start, save, return, and submit application
-- OCR failure does not block submission
-- uploaded documents are private
+- parent can start, save, return, and submit application ✅
+- OCR failure does not block submission ✅ *(no OCR integration yet)*
+- uploaded documents are private *(model exists; access controls pending M1 audit baseline)*
 
 ## M3 — Admin review and member creation
 **Priority:** High

@@ -36,7 +36,7 @@ def verify_magic_link(request, token):
         )
 
     request.session[PARENT_ACCOUNT_SESSION_KEY] = account.pk
-    return redirect("/")
+    return redirect("registrations:parent-portal")
 
 
 @require_POST
@@ -47,4 +47,4 @@ def logout_view(request):
     except KeyError:
         pass
     request.session.flush()
-    return redirect("/")
+    return redirect("registrations:start-registration")

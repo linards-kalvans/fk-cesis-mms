@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–4 complete in current worktree.**
+**Tasks 1–5 complete in current worktree.** Registration workflow is usable for LAN acceptance testing.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -32,9 +32,20 @@ Target Django monolith with domain apps:
 - `apps/accounts/services.py` implements `issue_magic_link`, `send_magic_link`, `consume_magic_link`.
 - `apps/accounts/views.py` implements request, verify, and logout views.
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
+- `apps/registrations/models.py` implements `RegistrationApplication` with draft/submitted states.
+- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, link to parent account.
+- `apps/registrations/views.py` provides start, edit, and parent portal views.
+- `apps/documents/models.py` implements `Document` model with private storage and placeholder OCR status.
 - `.env` autoload works for local commands and app startup.
-- Current user acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
-- Full business models for registrations, members, billing, and documents are **not implemented yet**.
+- Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
+- Full business models for members and billing are **not implemented yet**.
+
+### Task 5 polish (registration workflow UX)
+- `/register/` accessible without prior login — no mandatory magic-link gate.
+- Anonymous save-draft creates/links a `ParentAccount`; same browser session can continue editing.
+- Edit page uses a single form with two actions: **save draft** and **submit application**.
+- Child birth date field uses native browser `<input type="date">` picker.
+- Conflicting birth-date hint text removed from edit form.
 
 Reference docs:
 - Design spec: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`

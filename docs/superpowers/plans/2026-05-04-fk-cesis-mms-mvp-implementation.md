@@ -202,8 +202,11 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - **Task 4 completed** on 2026-05-04.
 - Task 4 delivered: `ParentAccount`, `MagicLinkToken`, magic-link request/verify/logout flow, `ensure_admin_user` command, `.env` autoload, tunnel/LAN-aware settings coverage, and Task 4 account/settings tests.
 - Verified green after Task 4: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
+- **Task 5 completed** on 2026-05-05.
+- Task 5 delivered: `RegistrationApplication`, `Document`, draft save/submit flow, anonymous same-browser draft continuation, magic-link parent portal, single edit form with save-draft and submit actions, and native browser date picker for child birth date.
+- Verified green after Task 5: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
 - **Current user acceptance-test URL:** `http://192.168.3.245:8000`.
-- **Next active task:** Task 5 (`Registration application workflow`).
+- **Next active task:** Task 6 (`Admin review and member creation`).
 
 ### Task 1: Project bootstrap and repo metadata — completed
 
@@ -449,7 +452,7 @@ class MagicLinkToken(TimeStampedModel):
 Run: `uv run pytest tests/accounts/test_magic_links.py::test_magic_link_token_is_single_use -v`
 Expected: PASS
 
-### Task 5: Registration application workflow
+### Task 5: Registration application workflow — completed
 
 **Files:**
 - Create: `apps/registrations/models.py`

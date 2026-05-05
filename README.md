@@ -37,7 +37,7 @@ docs/               # Design docs, milestones
 
 ## Status
 
-**Tasks 1–4 complete.** Foundation, security baseline, and parent magic-link auth are implemented.
+**Tasks 1–5 complete.** Registration workflow is usable for LAN acceptance testing.
 
 - `apps/` contains `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, and `integrations`
 - `apps/core/models.py` defines the abstract `TimeStampedModel` base model
@@ -45,9 +45,22 @@ docs/               # Design docs, milestones
 - `apps/accounts/services.py` provides `issue_magic_link`, `send_magic_link`, `consume_magic_link`
 - `apps/accounts/views.py` provides request, verify, and logout views
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation
+- `apps/registrations/models.py` defines `RegistrationApplication` with draft/submitted states
+- `apps/registrations/services.py` implements application lifecycle (create, save draft, submit, link to parent account)
+- `apps/registrations/views.py` provides start, edit, and parent portal views
+- `apps/documents/models.py` defines `Document` with private storage and placeholder OCR status
 - `.env` autoload works for management commands and app startup
 - current acceptance-test URL: `http://192.168.3.245:8000`
-- Full business models for registrations, members, billing, and documents are **not implemented yet**
+- Full business models for members and billing are **not implemented yet**
+
+### Registration workflow UX (Task 5 polish)
+- `/register/` accessible without prior login
+- Anonymous save-draft creates/links a `ParentAccount`; same browser session continues editing
+- Single edit form with two actions: **save draft** and **submit application**
+- Child birth date uses native browser `<input type="date">` picker
+
+### Next task
+Task 6 — Admin review and member creation is the active implementation task.
 
 ## Development Workflow
 

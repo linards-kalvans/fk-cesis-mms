@@ -29,7 +29,7 @@ DEBUG = True
 SITE_URL = os.environ.get("SITE_URL", "http://localhost")
 _parsed = urlparse(SITE_URL)
 ALLOWED_HOSTS: list[str] = [_parsed.hostname] if _parsed.hostname else []
-ALLOWED_HOSTS.extend(["localhost", "127.0.0.1"])
+ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "testserver", "192.168.3.245"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -89,6 +89,9 @@ DATABASES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "uploads"
 
 # Derive CSRF_TRUSTED_ORIGINS from SITE_URL.
 # Tunnel URLs (kimaki.dev) are HTTPS — keep the scheme from SITE_URL.

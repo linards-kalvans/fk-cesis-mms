@@ -1,0 +1,15 @@
+<h1>Mani pieteikumi</h1>
+
+{% for application in applications %}
+  <article>
+    <h2>{{ application.child_full_name|default:application.guardian_email }}</h2>
+    <p>{{ application.guardian_full_name }}</p>
+    <p>Statuss: {{ application.status }}</p>
+    <p>{{ application.guardian_email }}</p>
+    {% if application.status == "draft" %}
+      <a href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
+    {% endif %}
+  </article>
+{% empty %}
+  <p>Nav pieteikumu.</p>
+{% endfor %}
