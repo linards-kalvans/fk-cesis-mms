@@ -44,6 +44,8 @@ db.sqlite3-journal
 /media
 /staticfiles
 uploads/
+private-uploads/
+.worktrees/
 .superpowers/
 
 # Environment

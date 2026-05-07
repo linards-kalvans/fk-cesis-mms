@@ -35,7 +35,8 @@ Target Django monolith with domain apps:
 - `apps/registrations/models.py` implements `RegistrationApplication` with draft/submitted states.
 - `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, link to parent account.
 - `apps/registrations/views.py` provides start, edit, and parent portal views.
-- `apps/documents/models.py` implements `Document` model with private storage and placeholder OCR status.
+- `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`) and placeholder OCR status.
+- `apps/documents` uses a dedicated private storage root (`private-uploads/`) and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
 - `.env` autoload works for local commands and app startup.
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 - Full business models for members and billing are **not implemented yet**.
@@ -49,6 +50,8 @@ Target Django monolith with domain apps:
 
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
+- Registration edit form does not show that an identity document was already uploaded; users can re-upload unnecessarily, which soft-deletes the earlier document and creates confusing duplicate admin rows.
+- Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
@@ -117,6 +120,8 @@ Rules:
 - Keep `README.md` and project docs accurate when architecture or workflows change.
 
 ## Security Rules (PII / Documents)
+- Registration identity documents stored under `PRIVATE_DOCUMENTS_ROOT` (`private-uploads/`), separate from `MEDIA_ROOT`.
+- No public file URLs for registration documents. Every preview/download passes through admin-only Django views that enforce staff authorization.
 - Identity documents stored in private storage; streamed through authenticated backend views.
 - No public file URLs. Every download checks application/member authorization.
 - Personal IDs masked in list/search; full values only on restricted detail views.
