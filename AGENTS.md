@@ -47,6 +47,9 @@ Target Django monolith with domain apps:
 - Child birth date field uses native browser `<input type="date">` picker.
 - Conflicting birth-date hint text removed from edit form.
 
+### Task 6 follow-up debt
+- Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
+
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
 - **Security fix — parent identity verification:** typed email in registration draft is a claim, not proof of ownership. Two-layer model: unverified browser-session drafts + verified parent identity gate (email code/link now, social login later). Portal access based on verified identity only. See `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`.
@@ -103,6 +106,7 @@ Rules:
 - Business rules live in `services.py` / `rules.py`, not views or templates.
 - No sensitive PII in logs. Mask personal IDs; redact external API payloads.
 - All external API calls (Invoice Ninja, OCR) run through background jobs with retry state.
+- Develop all new work only inside a local git worktree directory; do not develop directly on checked-out `main`.
 - Develop each task or feature in its own git worktree branch, then merge back to `main` only after user approval.
 - Create future worktrees inside project directory (for example `.worktrees/` or `worktrees/`), not outside repository.
 - On future iterations, copy project-root `.env` into the worktree before running env-driven commands or local app flows.
