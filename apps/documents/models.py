@@ -3,6 +3,9 @@
 from django.db import models
 
 from apps.core.models import TimeStampedModel
+from apps.documents.storage import PrivateDocumentStorage
+
+private_document_storage = PrivateDocumentStorage()
 
 
 class Document(TimeStampedModel):
@@ -23,7 +26,10 @@ class Document(TimeStampedModel):
         related_name="documents",
     )
     kind = models.CharField(max_length=32, choices=Kind.choices)
-    file = models.FileField(upload_to="private/child-identity/")
+    file = models.FileField(
+        upload_to="private/child-identity/",
+        storage=private_document_storage,
+    )
     original_filename = models.CharField(max_length=255)
     content_type = models.CharField(max_length=255)
     file_size = models.PositiveIntegerField(default=0)

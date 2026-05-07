@@ -97,7 +97,8 @@ docs/               # Design docs, milestones
 - `apps/registrations/models.py` defines `RegistrationApplication` with draft/submitted states
 - `apps/registrations/services.py` implements application lifecycle (create, save draft, submit, claimed-email draft ownership, verified parent linking)
 - `apps/registrations/views.py` provides start, edit, and parent portal views
-- `apps/documents/models.py` defines `Document` with private storage and placeholder OCR status
+- `apps/documents/models.py` defines `Document` with private storage (`PRIVATE_DOCUMENTS_ROOT`) and placeholder OCR status
+- `apps/documents` exposes admin-only protected preview/download endpoints; anonymous users are redirected to admin login, non-admin users receive `404`
 - `.env` autoload works for management commands and app startup
 - current acceptance-test URL: `http://192.168.3.245:8000`
 - Full business models for members and billing are **not implemented yet**

@@ -103,6 +103,7 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@fkcesis.local
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "uploads"
+PRIVATE_DOCUMENTS_ROOT = BASE_DIR / "private-uploads"
 
 # Derive CSRF_TRUSTED_ORIGINS from SITE_URL.
 # Tunnel URLs (kimaki.dev) are HTTPS — keep the scheme from SITE_URL.
