@@ -1,0 +1,14 @@
+/* Runtime design tokens — FK Cēsis MMS.
+ * Mirrors style-guide/tokens.css as source of truth.
+ */
+:root {
+  --fk-font-display: "Anton", Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  --fk-color-blue: #0f0851;
+  --fk-color-red: #ce1c20;
+  --fk-color-surface: #ffffff;
+  --fk-color-bg: #f6f4f1;
+  --fk-color-ink: #161616;
+  --fk-color-muted: #5e6173;
+  --fk-radius-card: 24px;
+  --fk-shadow-soft: 0 16px 40px rgba(15, 8, 81, 0.12);
+}
