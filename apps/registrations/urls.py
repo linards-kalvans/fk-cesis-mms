@@ -10,5 +10,7 @@ urlpatterns = [
     path("register/", views.start_registration, name="start-registration"),
     path("applications/<int:application_id>/edit/", views.edit_registration, name="edit-registration"),
     path("applications/<int:application_id>/submit/", views.submit_registration, name="submit-registration"),
+    path("applications/<int:application_id>/summary/", views.view_registration_summary, name="view-registration-summary"),
+    path("applications/<int:application_id>/detail/", views.view_registration_detail, name="view-registration-detail"),
     path("portal/", views.parent_portal, name="parent-portal"),
 ]

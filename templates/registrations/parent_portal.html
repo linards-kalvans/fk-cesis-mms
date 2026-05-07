@@ -1,15 +1,28 @@
-<h1>Mani pieteikumi</h1>
+{% extends "base.html" %}
+{% load static %}
 
-{% for application in applications %}
-  <article>
-    <h2>{{ application.child_full_name|default:application.guardian_email }}</h2>
-    <p>{{ application.guardian_full_name }}</p>
-    <p>Statuss: {{ application.status }}</p>
-    <p>{{ application.guardian_email }}</p>
-    {% if application.status == "draft" %}
-      <a href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
-    {% endif %}
-  </article>
-{% empty %}
-  <p>Nav pieteikumu.</p>
-{% endfor %}
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <section class="fk-card fk-portal-summary">
+      <h1>Mani pieteikumi</h1>
+      <p>Šeit redzams katra pieteikuma statuss un nākamais solis.</p>
+    </section>
+
+    {% for application in applications %}
+      <article class="fk-status-card">
+        <h2>{{ application.child_full_name|default:application.guardian_email }}</h2>
+        <p class="fk-status-card__guardian">{{ application.guardian_full_name|default:application.guardian_email }}</p>
+        <p>{{ application.get_status_display }}</p>
+        {% if application.can_edit %}
+          <a class="fk-button fk-button--secondary" href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
+        {% else %}
+          <a class="fk-button fk-button--secondary" href="{% url 'registrations:view-registration-summary' application.id %}">Skatīt pieteikumu</a>
+        {% endif %}
+      </article>
+    {% empty %}
+      <p>Nav pieteikumu.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

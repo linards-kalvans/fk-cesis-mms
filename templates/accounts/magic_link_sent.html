@@ -1,1 +1,16 @@
-<p>A magic link has been sent. Check your email.</p>
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <section class="fk-card fk-portal-summary">
+      <h1>Piekļuves saite nosūtīta</h1>
+      <p>Pārbaudiet savu e-pastu. Ja konts pastāv, nosūtījām drošu piekļuves saiti.</p>
+      {% if debug_verify_url %}
+        <p><strong>Izstrādes priekšskatījums:</strong></p>
+        <p><a href="{{ debug_verify_url }}">{{ debug_verify_url }}</a></p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

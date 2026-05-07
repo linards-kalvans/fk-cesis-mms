@@ -2,14 +2,16 @@
 
 from django import forms
 
-from apps.accounts.models import ParentAccount
-
 
 class MagicLinkRequestForm(forms.Form):
-    email = forms.EmailField()
+    email = forms.EmailField(
+        label="E-pasts",
+        error_messages={
+            "required": "E-pasts ir obligāts.",
+            "invalid": "Ievadiet derīgu e-pasta adresi.",
+        },
+    )
 
     def clean_email(self):
         email = self.cleaned_data["email"]
-        if not ParentAccount.objects.filter(email=email).exists():
-            raise forms.ValidationError("No account found with this email.")
         return email

@@ -27,7 +27,18 @@ REQUIRED_SUBMIT_FIELDS = (
 
 
 def _latest_application(account: ParentAccount) -> RegistrationApplication | None:
-    result: RegistrationApplication | None = account.applications.order_by("-created_at").first()
+    # Consider both linked applications and unlinked drafts with matching
+    # claimed_email, so prefill works even before verification.
+    linked = account.applications.order_by("-created_at")
+    unlinked = RegistrationApplication.objects.filter(
+        claimed_email__iexact=account.email,
+        parent_account__isnull=True,
+    ).order_by("-created_at")
+    # Merge and pick the most recent
+    combined = list(linked) + list(unlinked)
+    if not combined:
+        return None
+    result: RegistrationApplication | None = max(combined, key=lambda a: a.created_at)
     return result
 
 
@@ -66,24 +77,6 @@ def can_edit_application(application: RegistrationApplication, actor_account: Pa
 # ---------------------------------------------------------------------------
 
 
-def _get_or_create_parent_account(email: str, phone: str) -> ParentAccount:
-    # Case-insensitive lookup to handle mixed-case email inputs
-    existing = ParentAccount.objects.filter(email__iexact=email).first()
-    if existing is not None:
-        if phone and existing.phone != phone:
-            existing.phone = phone
-            existing.save(update_fields=["phone", "updated_at"])
-        result: ParentAccount = existing
-        return result
-
-    account, _ = ParentAccount.objects.get_or_create(
-        email=email,
-        defaults={"phone": phone or ""},
-    )
-    acct: ParentAccount = account
-    return acct
-
-
 def _replace_child_identity_document(application: RegistrationApplication, upload) -> None:
     existing = application.documents.filter(
         kind=Document.Kind.CHILD_IDENTITY,
@@ -109,25 +102,36 @@ def create_or_update_draft(
     data: Mapping[str, Any],
     files: Mapping[str, Any],
     application: RegistrationApplication | None = None,
+    verified_account: ParentAccount | None = None,
 ) -> RegistrationApplication:
-    """Create or update a draft registration application."""
+    """Create or update a draft registration application.
+
+    Drafts store the typed email as claimed_email. A draft_session_key is
+    assigned for same-browser access. Typed email is a claim only, so no
+    ParentAccount lookup or linking happens here.
+    """
     email = str(data.get("guardian_email", "")).strip().lower()
     if not email:
         raise ValueError("guardian_email is required to save draft")
 
-    phone = str(data.get("guardian_phone", "")).strip()
-    account = _get_or_create_parent_account(email, phone)
-
     if application is None:
-        application = RegistrationApplication(parent_account=account)
-    elif application.parent_account_id != account.id:
-        raise ValueError("application email cannot change owner")
+        application = RegistrationApplication()
+        application.claimed_email = email
+    else:
+        if application.parent_account_id is not None and application.claimed_email.lower() != email:
+            raise ValueError("application email cannot change verified owner")
+        if application.parent_account_id is None:
+            application.claimed_email = email
 
-    application.parent_account = account
+    if verified_account is not None:
+        if verified_account.email.lower() != email:
+            raise ValueError("verified account email must match claimed email")
+        application.parent_account = verified_account
+
     application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
     application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
     application.guardian_email = email
-    application.guardian_phone = phone
+    application.guardian_phone = str(data.get("guardian_phone", "")).strip()
     application.guardian_address = str(data.get("guardian_address", "")).strip()
     application.child_full_name = str(data.get("child_full_name", "")).strip()
     application.child_personal_id = str(data.get("child_personal_id", "")).strip()
@@ -164,10 +168,12 @@ def _require_active_child_identity_document(application: RegistrationApplication
 
 def submit_application(
     application: RegistrationApplication,
-    actor_account: ParentAccount,
+    actor_account: ParentAccount | None,
 ) -> RegistrationApplication:
     """Submit a draft application. Raises ValueError on validation failure."""
-    if application.parent_account_id != actor_account.id:
+    if application.parent_account_id is not None and (
+        actor_account is None or application.parent_account_id != actor_account.id
+    ):
         raise ValueError("not allowed to submit this application")
     if application.status != RegistrationApplication.Status.DRAFT:
         raise ValueError("only draft applications can be submitted")
@@ -179,3 +185,20 @@ def submit_application(
     application.submitted_at = timezone.now()
     application.save(update_fields=["status", "submitted_at", "updated_at"])
     return application
+
+
+# ---------------------------------------------------------------------------
+# Post-verification: attach unverified applications to verified parent
+# ---------------------------------------------------------------------------
+
+
+def attach_claimed_email_apps_to_parent(email: str, parent_account: ParentAccount) -> int:
+    """Attach drafts with matching claimed_email to the verified parent.
+
+    Returns the number of applications attached.
+    """
+    count: int = RegistrationApplication.objects.filter(
+        claimed_email__iexact=email,
+        parent_account__isnull=True,
+    ).update(parent_account=parent_account)
+    return count

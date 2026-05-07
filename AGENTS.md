@@ -49,6 +49,7 @@ Target Django monolith with domain apps:
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
+- **Security fix — parent identity verification:** typed email in registration draft is a claim, not proof of ownership. Two-layer model: unverified browser-session drafts + verified parent identity gate (email code/link now, social login later). Portal access based on verified identity only. See `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`.
 - **Research spikes:** ID document extraction vendor shortlist + architecture, agreement generation/signing module (post-approval, configurable signing order, club countersign, secure storage/delivery out of box), SMTP/email provider strategy for scale.
 - **Hosting stance:** self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability.
 - **Visual direction:** unified design system, calm centered parent flow, denser admin shell, club logo hero-style on parent entry screens.
@@ -61,6 +62,7 @@ Target Django monolith with domain apps:
 Reference docs:
 - Design spec: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
 - Registration + integrations design: `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`
+- Parent identity verification design: `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`
 - Implementation plan: `docs/superpowers/plans/2026-05-04-fk-cesis-mms-mvp-implementation.md`
 - Milestones: `docs/milestones.md`
 - Style guide assets: `style-guide/`

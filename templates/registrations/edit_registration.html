@@ -1,8 +1,44 @@
-<h1>Rediģēt pieteikumu</h1>
-<form method="post" enctype="multipart/form-data">
-  {% csrf_token %}
-  <input type="hidden" name="submit_action" value="save_draft">
-  {{ form.as_p }}
-  <button type="submit" name="submit_action" value="save_draft">Saglabāt melnrakstu</button>
-  <button type="submit" name="submit_action" value="submit">Iesniegt pieteikumu</button>
-</form>
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <h1>Rediģēt pieteikumu</h1>
+
+    {% if form.errors %}
+      <div class="fk-error-summary">Lūdzu pārbaudiet laukus zemāk</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <h2 class="fk-section-heading">Vecāka informācija</h2>
+      <div class="fk-form-section">
+        <p><label for="{{ form.guardian_full_name.id_for_label }}">{{ form.guardian_full_name.label }}</label>{{ form.guardian_full_name }}</p>
+        <p><label for="{{ form.guardian_personal_id.id_for_label }}">{{ form.guardian_personal_id.label }}</label>{{ form.guardian_personal_id }}</p>
+        <p><label for="{{ form.guardian_email.id_for_label }}">{{ form.guardian_email.label }}</label>{{ form.guardian_email }}</p>
+        <p><label for="{{ form.guardian_phone.id_for_label }}">{{ form.guardian_phone.label }}</label>{{ form.guardian_phone }}</p>
+        <p><label for="{{ form.guardian_address.id_for_label }}">{{ form.guardian_address.label }}</label>{{ form.guardian_address }}</p>
+      </div>
+
+      <h2 class="fk-section-heading">Bērna informācija</h2>
+      <div class="fk-form-section">
+        <p><label for="{{ form.child_full_name.id_for_label }}">{{ form.child_full_name.label }}</label>{{ form.child_full_name }}</p>
+        <p><label for="{{ form.child_personal_id.id_for_label }}">{{ form.child_personal_id.label }}</label>{{ form.child_personal_id }}</p>
+        <p><label for="{{ form.child_birth_date.id_for_label }}">{{ form.child_birth_date.label }}</label>{{ form.child_birth_date }}</p>
+      </div>
+
+      <h2 class="fk-section-heading">Dokuments</h2>
+      <div class="fk-form-section">
+        <p><label for="{{ form.child_identity_document.id_for_label }}">{{ form.child_identity_document.label }}</label>{{ form.child_identity_document }}</p>
+      </div>
+
+      <div class="fk-form-actions">
+        <button type="submit" name="submit_action" value="save_draft">Saglabāt melnrakstu</button>
+        <button type="submit" name="submit_action" value="submit">Iesniegt pieteikumu</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

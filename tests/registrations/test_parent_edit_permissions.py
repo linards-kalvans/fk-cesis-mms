@@ -14,7 +14,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 
 from apps.accounts.models import ParentAccount
-from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY  # noqa: F401
 from apps.accounts.services import issue_magic_link
 
 pytestmark = pytest.mark.django_db
@@ -82,7 +81,7 @@ class TestEditRegistrationView:
         self.client = Client()
 
     def _create_draft_with_owner(self, email="edit@example.com"):
-        """Helper: create a ParentAccount, log in, create a draft app."""
+        """Helper: create a ParentAccount, log in, create a verified draft app."""
         acct = ParentAccount.objects.create(
             email=email,
             phone="+37111111111",
@@ -102,6 +101,7 @@ class TestEditRegistrationView:
                 "child_birth_date": "2025-01-01",
             },
             files={},
+            verified_account=acct,
         )
         return acct, app
 
@@ -177,6 +177,7 @@ class TestSubmitRegistrationView:
             files={
                 "child_identity_document": _make_child_identity_file("subview_id.jpg"),
             },
+            verified_account=acct,
         )
         return acct, app
 
@@ -212,6 +213,7 @@ class TestSubmitRegistrationView:
                 "child_birth_date": "2025-03-01",
             },
             files={},
+            verified_account=acct,
         )
         resp = self.client.post(
             f"/applications/{app.pk}/submit/",
@@ -252,6 +254,7 @@ class TestParentPortalView:
                 "child_birth_date": "2025-04-01",
             },
             files={},
+            verified_account=acct_a,
         )
 
         # Parent B
@@ -272,6 +275,7 @@ class TestParentPortalView:
                 "child_birth_date": "2025-05-01",
             },
             files={},
+            verified_account=acct_b,
         )
 
         # Re-login as A and check portal
@@ -296,8 +300,8 @@ class TestResumedParentCanContinueDraft:
     """After magic-link login, parent should see and continue their draft."""
 
     def test_resumed_parent_can_continue_own_draft(self):
-        """Parent creates draft without login, then logs in via magic link and continues."""
-        # Step 1: Create draft without login (anonymous)
+        """Parent creates draft without login, requests magic link, verifies, then continues."""
+        # Step 1: Create draft without login (anonymous) — no ParentAccount created
         from apps.registrations.services import create_or_update_draft
 
         app = create_or_update_draft(
@@ -314,14 +318,39 @@ class TestResumedParentCanContinueDraft:
             files={},
         )
 
-        # Step 2: Login via magic link
-        from apps.accounts.models import ParentAccount
+        # Step 2: No ParentAccount exists yet — draft is unlinked
+        assert app.parent_account is None
+        assert app.claimed_email == "resume@example.com"
 
-        acct = ParentAccount.objects.get(email="resume@example.com")
+        # Step 3: Request magic link for claimed email (no ParentAccount needed)
         client = Client()
-        _login_via_magic_link(client, acct)
+        resp = client.post(
+            "/accounts/request-magic-link/",
+            {"email": "resume@example.com"},
+        )
+        assert resp.status_code == 200, (
+            f"Magic-link request failed: {resp.status_code}"
+        )
 
-        # Step 3: Open edit page — should work
+        # Step 4: Extract verify URL and consume it
+        content = resp.content.decode()
+        import re
+
+        verify_urls = re.findall(r"/accounts/verify/[^\
+'\"<>]+", content)
+        assert verify_urls, "No verify URL found in magic-link response"
+        verify_url = verify_urls[-1]
+        if not verify_url.endswith("/"):
+            verify_url += "/"
+        verify_resp = client.get(verify_url)
+        assert verify_resp.status_code == 302  # redirects to portal
+
+        # Step 5: After verification, draft is linked to new ParentAccount
+        # and should be editable
+        app.refresh_from_db()
+        assert app.parent_account is not None
+
+        # Step 6: Open edit page — should work (session has verified parent)
         resp = client.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 200
 
@@ -371,7 +400,7 @@ class TestEditPageNoDuplicateFields:
         self.client = Client()
 
     def _create_draft_with_owner(self, email="edit@example.com"):
-        """Helper: create a ParentAccount, log in, create a draft app."""
+        """Helper: create a ParentAccount, log in, create a verified draft app."""
         acct = ParentAccount.objects.create(
             email=email,
             phone="+37111111111",
@@ -391,6 +420,7 @@ class TestEditPageNoDuplicateFields:
                 "child_birth_date": "2025-01-01",
             },
             files={},
+            verified_account=acct,
         )
         return acct, app
 
@@ -496,6 +526,7 @@ class TestChildBirthDateNativeDatePicker:
                 "child_birth_date": "2025-01-01",
             },
             files={},
+            verified_account=acct,
         )
         resp = client.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 200
@@ -515,4 +546,153 @@ class TestChildBirthDateNativeDatePicker:
         assert "DD.MM.GGGG" not in content, (
             "Conflicting hint text 'DD.MM.GGGG vai izvēlieties no kalendāra.' "
             "still rendered on start page. Help text should be removed."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Regression: submitted application portal card must show 'Skatīt pieteikumu'
+# ---------------------------------------------------------------------------
+
+
+class TestSubmittedApplicationPortalCard:
+    """Submitted application card must show 'Skatīt pieteikumu', not 'Turpināt'."""
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_and_login(self, email="submittedperm@example.com"):
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37111111111",
+        )
+        _login_via_magic_link(self.client, acct)
+        return acct
+
+    def _create_submitted_application(self, email="submittedperm@example.com"):
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = self._create_and_login(email)
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Submitted Perm Guardian",
+                "guardian_personal_id": "010101-55555",
+                "guardian_phone": "+37166666666",
+                "guardian_address": "Riga 55",
+                "child_full_name": "Child SubmittedPerm",
+                "child_personal_id": "010125-55555",
+                "child_birth_date": "2025-01-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("submittedperm_id.png"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        return app
+
+    def test_portal_card_shows_skatit_ieteikumu_for_submitted(self):
+        """Submitted application must show 'Skatīt pieteikumu' link on portal."""
+        self._create_submitted_application()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Skatīt pieteikumu" in content, (
+            "Submitted application portal card must show 'Skatīt pieteikumu'."
+        )
+
+    def test_portal_card_no_turpat_for_submitted(self):
+        """Submitted application must NOT show 'Turpināt' link on portal."""
+        self._create_submitted_application()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Turpināt" not in content, (
+            "Submitted application portal card must not show 'Turpināt'."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Parent identity gate: same-browser vs cross-browser draft access
+# ---------------------------------------------------------------------------
+
+class TestSameBrowserVsCrossBrowser:
+    """Draft continuity must work in same browser but not across browsers."""
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _save_draft_anonymously(self, email="samebrowser@example.com"):
+        """Save a draft as anonymous user and return the application."""
+        from apps.registrations.services import create_or_update_draft
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Same Browser Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_phone": "+37120000000",
+                "guardian_address": "Riga, Brivibas 1",
+                "child_full_name": "Child SB",
+                "child_personal_id": "010125-12345",
+                "child_birth_date": "2025-01-01",
+            },
+            files={},
+        )
+        return app
+
+    def test_same_browser_can_edit_draft_after_save(self):
+        """Same browser that saved draft can edit it without verification."""
+        app = self._save_draft_anonymously("samesame@example.com")
+
+        # POST to /register/ to get session
+        resp = self.client.post(
+            "/register/",
+            data={
+                "guardian_email": "samesame@example.com",
+                "guardian_full_name": "Same Same",
+                "guardian_personal_id": "010101-12346",
+                "guardian_phone": "+37120000001",
+                "guardian_address": "Riga 1",
+                "child_full_name": "Child SS",
+                "child_personal_id": "010125-12346",
+                "child_birth_date": "2025-01-02",
+            },
+            follow=False,
+        )
+        assert resp.status_code == 302
+
+        # Same browser can access edit page
+        edit_resp = self.client.get(resp.url, follow=False)
+        assert edit_resp.status_code == 200, (
+            "Same browser must access draft edit page after save."
+        )
+
+    def test_cross_browser_cannot_access_draft(self):
+        """A fresh browser session cannot access a draft saved in another session."""
+        self._save_draft_anonymously("crosscross@example.com")
+
+        # Fresh client = different browser
+        other_browser = Client()
+
+        # Try to access by application ID
+        from apps.registrations.models import RegistrationApplication
+
+        app = RegistrationApplication.objects.get(
+            guardian_email="crosscross@example.com"
+        )
+        resp = other_browser.get(f"/applications/{app.pk}/edit/")
+        assert resp.status_code == 404, (
+            "Cross-browser must not access draft by application ID."
+        )
+
+    def test_cross_browser_cannot_access_via_portal(self):
+        """Cross-browser cannot see another browser's drafts in portal."""
+        self._save_draft_anonymously("crossportal@example.com")
+
+        other_browser = Client()
+        resp = other_browser.get("/portal/")
+        # Should redirect to login
+        assert resp.status_code == 302, (
+            "Unauthenticated cross-browser must be redirected from portal."
         )

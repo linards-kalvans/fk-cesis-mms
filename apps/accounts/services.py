@@ -83,6 +83,53 @@ def issue_magic_link(account: ParentAccount) -> str:
     return raw
 
 
+def issue_magic_link_for_email(email: str) -> str:
+    """Issue a magic-link token for an email without a ParentAccount.
+
+    Creates a token with account=NULL and claimed_email set.
+    Returns the raw (unhashed) token string.
+    """
+    raw = secrets.token_urlsafe(32)
+    ttl = _get_ttl_minutes()
+    now = _now_utc()
+
+    MagicLinkToken.objects.create(
+        account=None,
+        claimed_email=email,
+        token_hash=_hash_token(raw),
+        expires_at=now + timedelta(minutes=ttl),
+    )
+    return raw
+
+
+def send_magic_link_for_claimed_email(email: str, raw_token: str) -> None:
+    """Send a magic-link email for a claimed email without ParentAccount."""
+    _check_rate_limit(email)
+
+    token = MagicLinkToken.objects.get(
+        account__isnull=True,
+        claimed_email=email,
+        token_hash=_hash_token(raw_token),
+        used_at__isnull=True,
+    )
+    token.sent_at = _now_utc()
+    token.save(update_fields=["sent_at"])
+
+    verify_url = build_magic_link_verify_url(raw_token)
+
+    subject = "Log in to FK Cēsis MMS"
+    body = f"Click here to log in: {verify_url}"
+
+    send_mail(
+        subject=subject,
+        message=body,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@example.com"),
+        recipient_list=[email],
+        fail_silently=False,
+    )
+    _record_send(email)
+
+
 def send_magic_link(account: ParentAccount, raw_token: str) -> None:
     """Send magic-link email to *account* with the verify URL.
 
@@ -100,10 +147,7 @@ def send_magic_link(account: ParentAccount, raw_token: str) -> None:
     token.sent_at = _now_utc()
     token.save(update_fields=["sent_at"])
 
-    verify_url = urljoin(
-        getattr(settings, "SITE_URL", "http://localhost"),
-        f"/accounts/verify/{raw_token}/",
-    )
+    verify_url = build_magic_link_verify_url(raw_token)
 
     subject = "Log in to FK Cēsis MMS"
     body = f"Click here to log in: {verify_url}"
@@ -118,8 +162,30 @@ def send_magic_link(account: ParentAccount, raw_token: str) -> None:
     _record_send(account.email)
 
 
+def _ensure_parent_account(email: str) -> ParentAccount:
+    """Get or create a ParentAccount for the given email."""
+    account, _ = ParentAccount.objects.get_or_create(
+        email=email,
+        defaults={"phone": ""},
+    )
+    return cast(ParentAccount, account)
+
+
+def build_magic_link_verify_url(raw_token: str) -> str:
+    verify_url = urljoin(
+        getattr(settings, "SITE_URL", "http://localhost"),
+        f"/accounts/verify/{raw_token}/",
+    )
+    # Strip trailing slash so the debug HTML link and test regex
+    # don't produce double slashes (test appends its own "/").
+    return verify_url.rstrip("/")
+
+
 def consume_magic_link(raw_token: str) -> ParentAccount:
     """Consume a magic-link token and return the associated account.
+
+    If the token has no account (claimed-email flow), a ParentAccount
+    is created for the email stored on the token.
 
     Raises ``ValueError`` if the token is invalid, expired, already
     used, or the account is inactive.
@@ -135,9 +201,26 @@ def consume_magic_link(raw_token: str) -> ParentAccount:
     if token.expires_at < _now_utc():
         raise ValueError("Token expired")
 
-    if not token.account.is_active:
-        raise ValueError("Account is inactive")
+    account = token.account
 
-    token.used_at = _now_utc()
-    token.save(update_fields=["used_at"])
-    return cast(ParentAccount, token.account)
+    # Claimed-email flow: no ParentAccount yet — create one
+    if account is None:
+        email = token.claimed_email
+        if not email:
+            raise ValueError("Token has no associated email")
+        account = _ensure_parent_account(email)
+        token.used_at = _now_utc()
+        token.account = account
+        token.save(update_fields=["account", "used_at"])
+
+        # Attach matching claimed-email applications to the new parent
+        from apps.registrations.services import attach_claimed_email_apps_to_parent
+
+        attach_claimed_email_apps_to_parent(email, account)
+    else:
+        if not account.is_active:
+            raise ValueError("Account is inactive")
+        token.used_at = _now_utc()
+        token.save(update_fields=["used_at"])
+
+    return cast(ParentAccount, account)

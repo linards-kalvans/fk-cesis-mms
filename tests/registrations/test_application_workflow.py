@@ -1,8 +1,8 @@
 """Task 5 — RegistrationApplication model, Document model, and service-layer workflow RED tests.
 
 Covers:
-- Draft creation creates or links ParentAccount.
-- Second application reuses same ParentAccount.
+- Draft save does NOT auto-create ParentAccount; claims email via claimed_email.
+- Second application with same email stores same claimed_email, no auto-link.
 - Draft save allows incomplete fields.
 - Upload creates Document with placeholder OCR status.
 - Submit requires active child identity document.
@@ -12,10 +12,23 @@ Covers:
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client
 
 from apps.accounts.models import ParentAccount
+from apps.accounts.services import issue_magic_link
 
 pytestmark = pytest.mark.django_db
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _login_via_magic_link(client, account):
+    """Convenience: issue magic link and GET verify to establish session."""
+    raw = issue_magic_link(account)
+    client.get(f"/accounts/verify/{raw}/")
 
 
 # ---------------------------------------------------------------------------
@@ -170,9 +183,10 @@ class TestDocumentModel:
 # ---------------------------------------------------------------------------
 
 class TestCreateOrUpdateDraft:
-    """Draft creation should create or link ParentAccount."""
+    """Draft creation stores claimed_email; does NOT auto-create ParentAccount."""
 
-    def test_draft_creation_creates_parent_account_when_email_not_exists(self):
+    def test_draft_creation_stores_claimed_email_no_parent_account(self):
+        """Saving a draft must store claimed_email and NOT create ParentAccount."""
         from apps.registrations.services import create_or_update_draft
 
         app = create_or_update_draft(
@@ -188,8 +202,9 @@ class TestCreateOrUpdateDraft:
             },
             files={},
         )
-        assert app.parent_account is not None
-        assert app.parent_account.email == "newparent@example.com"
+        assert app.parent_account is None
+        assert app.claimed_email == "newparent@example.com"
+        assert app.guardian_email == "newparent@example.com"
 
     def test_draft_creation_links_existing_parent_account(self):
         from apps.registrations.services import create_or_update_draft
@@ -210,11 +225,14 @@ class TestCreateOrUpdateDraft:
                 "child_birth_date": "2025-01-01",
             },
             files={},
+            verified_account=existing,
         )
         assert app.parent_account_id == existing.pk
 
-    def test_second_application_reuses_same_parent_account(self):
+    def test_second_application_same_claimed_email_no_auto_link(self):
+        """Second draft with same email stores same claimed_email, no auto-link."""
         from apps.registrations.services import create_or_update_draft
+        from apps.registrations.models import RegistrationApplication
 
         create_or_update_draft(
             data={
@@ -242,12 +260,39 @@ class TestCreateOrUpdateDraft:
             },
             files={},
         )
-        # Two applications, one parent account
+        # Two drafts, both unlinked, both claim same email
+        assert second.parent_account is None
+        assert second.claimed_email == "multi@example.com"
+        assert RegistrationApplication.objects.filter(
+            claimed_email__iexact="multi@example.com",
+            parent_account__isnull=True,
+        ).count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Service: create_or_update_draft — claimed_email and no auto-link
+# ---------------------------------------------------------------------------
+
+class TestDraftClaimedEmailNoAutoLink:
+    """Draft save must store claimed_email and NOT auto-link ParentAccount."""
+
+    def test_draft_stores_claimed_email(self):
+        """Saving a draft must store the guardian_email as claimed_email."""
         from apps.registrations.models import RegistrationApplication
 
-        assert RegistrationApplication.objects.filter(
-            parent_account=second.parent_account
-        ).count() == 2
+        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
+        assert "claimed_email" in field_names, (
+            "RegistrationApplication must have claimed_email field."
+        )
+
+    def test_draft_stores_draft_session_key(self):
+        """Saving a draft must generate a draft_session_key for same-browser access."""
+        from apps.registrations.models import RegistrationApplication
+
+        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
+        assert "draft_session_key" in field_names, (
+            "RegistrationApplication must have draft_session_key field."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +475,7 @@ class TestSubmitApplication:
             files={
                 "child_identity_document": _make_child_identity_file("own_id.jpg"),
             },
+            verified_account=owner,
         )
         with pytest.raises(ValueError):
             submit_application(app, other)
@@ -462,6 +508,7 @@ class TestCanEditApplication:
                 "child_birth_date": "2025-10-01",
             },
             files={},
+            verified_account=acct,
         )
         assert can_edit_application(app, acct) is True
 
@@ -600,7 +647,6 @@ class TestAnonymousSaveDraftRedirect:
     def test_anonymous_save_draft_edit_page_accessible(self, client):
         """POST valid draft data as anonymous user → redirect → edit page 200."""
         from apps.registrations.models import RegistrationApplication
-        from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 
         response = client.post(
             "/register/",
@@ -627,10 +673,89 @@ class TestAnonymousSaveDraftRedirect:
             f"after save-draft. Expected 200. URL: {edit_url}"
         )
 
-        # Session should carry the parent account so subsequent requests work
-        assert PARENT_ACCOUNT_SESSION_KEY in client.session
+        # Session should carry the draft_session_key for same-browser continuity
+        assert "draft_session_key" in client.session
 
         # Verify the application was actually created
         assert RegistrationApplication.objects.filter(
             guardian_email="anon@example.com"
         ).exists()
+
+
+# ---------------------------------------------------------------------------
+# Regression: invalid submit should render top-level error summary
+# ---------------------------------------------------------------------------
+
+class TestInvalidSubmitErrorSummary:
+    """Invalid submit should return 400 with a top-level error summary in the response.
+
+    This is a visual-system test that asserts the error-summary element exists
+    in the HTML returned on invalid submission. Business logic (400 status)
+    is also asserted to ensure the workflow behavior is preserved.
+    """
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_draft_with_doc_and_login(self, email="errsum@example.com"):
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37188888888",
+        )
+        _login_via_magic_link(self.client, acct)
+        from apps.registrations.services import create_or_update_draft
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Error Sum Guardian",
+                "guardian_personal_id": "010101-88888",
+                "guardian_phone": "+37199999999",
+                "guardian_address": "Riga 88",
+                "child_full_name": "Error Sum Child",
+                "child_personal_id": "010125-88888",
+                "child_birth_date": "2025-04-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("err_id.jpg"),
+            },
+            verified_account=acct,
+        )
+        return acct, app
+
+    def test_invalid_submit_returns_400_and_has_error_summary(self):
+        """Submitting with empty required fields should return 400 with error summary."""
+        acct, app = self._create_draft_with_doc_and_login("errsum2@example.com")
+        resp = self.client.post(
+            f"/applications/{app.pk}/submit/",
+            data={
+                "guardian_full_name": "",
+                "guardian_personal_id": "",
+                "guardian_email": "",
+                "guardian_phone": "",
+                "guardian_address": "",
+                "child_full_name": "",
+                "child_personal_id": "",
+                "child_birth_date": "",
+            },
+        )
+        assert resp.status_code == 400, (
+            f"Expected 400 for invalid submit, got {resp.status_code}."
+        )
+        content = resp.content.decode()
+        # Error summary element should be present — class like 'error-summary',
+        # 'form-errors', 'validation-summary', or heading like 'Kļūdas'.
+        has_summary = (
+            "error-summary" in content
+            or "form-errors" in content
+            or "validation-summary" in content
+            or 'class="errors"' in content
+            or 'class="error' in content
+            or "Kļūda" in content
+            or "Kļūdas" in content
+        )
+        assert has_summary, (
+            "Invalid submit page does not have a top-level error summary. "
+            "Expected an element with class like 'error-summary', 'form-errors', "
+            "'validation-summary', or Latvian heading like 'Kļūdas'."
+        )

@@ -6,9 +6,10 @@
 - **Current milestone focus:** `M2` registration intake is substantially implemented (draft/submit, magic-link portal, document upload); remaining `M1` deliverables still need implementation (private document access controls, background jobs, audit baseline)
 - **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000` — registration workflow is usable for acceptance flow
 - **Task 5 polish:** `/register/` accessible without login; anonymous save-draft creates/links `ParentAccount`; single edit form with save-draft and submit actions; native date picker for child birth date
-- **New approved direction (2026-05-05):** Whole-app visual system and registration form redesign approved. Three research spikes launched: ID document extraction vendor, agreement generation/signing module, SMTP/email provider strategy. Hosting stance: self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability. Self-hosted services may live in separate infrastructure/Ansible projects while this repo integrates loosely through adapters and external config. Visual style source of truth is now `style-guide/`, which supersedes `design-template.html`; current canonical tokens are font `Anton`, blue `#0f0851`, red `#ce1c20`. See `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
+- **New approved direction (2026-05-05):** Whole-app visual system and registration form redesign approved. Parent identity verification security fix approved — typed email in registration draft is a claim, not proof of ownership; two-layer model (unverified browser-session drafts + verified parent identity gate); portal access based on verified identity only. See `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`. Three research spikes launched: ID document extraction vendor, agreement generation/signing module, SMTP/email provider strategy. Hosting stance: self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability. Self-hosted services may live in separate infrastructure/Ansible projects while this repo integrates loosely through adapters and external config. Visual style source of truth is now `style-guide/`, which supersedes `design-template.html`; current canonical tokens are font `Anton`, blue `#0f0851`, red `#ce1c20`. See `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
 - **Future sprint note:** add automatic `.env` loading for management commands and local app startup so env-driven workflows do not require manual `source .env`
 - **Future sprint note:** when starting work from a new worktree, copy project-root `.env` into that worktree and refresh `SITE_URL` / trusted-origin config for the active tunnel URL; current tunnel admin login failure is consistent with missing tunnel-aware CSRF configuration
+- **Future sprint note:** email gateway — automated verification emails (not just debug-mode magic links) with proper SMTP provider integration; social login (Google/Facebook) as alternative verification method for parent identity gate
 
 ## M1 — Foundation and security baseline
 **Priority:** High
@@ -33,8 +34,10 @@
 
 ## M2 — Parent registration intake
 **Priority:** High
-**Status:** Partially complete — draft/submit workflow, parent portal, magic-link resume, and document upload implemented; OCR assist still placeholder; visual redesign and UX improvements planned
+**Status:** Partially complete — draft/submit workflow, parent portal, magic-link resume, and document upload implemented; OCR assist still placeholder; visual redesign and UX improvements planned; **verified identity gating required as follow-up**
 **Goal:** Allow parent to create and submit child registration with secure document upload.
+
+**Security note:** Current draft flow auto-links `ParentAccount` by typed email — a security flaw. Follow-up work must implement the two-layer model (unverified drafts + verified parent identity gate) described in `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`.
 
 **Execution rule**
 - Implement this milestone in isolated git worktree branches and merge back only after user approval.

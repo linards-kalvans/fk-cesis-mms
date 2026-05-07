@@ -1,6 +1,29 @@
-<form method="post" action="{% url 'accounts:request-magic-link' %}">
-  {% csrf_token %}
-  {{ form.email.label_tag }} {{ form.email }}
-  {% if form.email.errors %}<p>{{ form.email.errors }}</p>{% endif %}
-  <button type="submit">Send magic link</button>
-</form>
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <section class="fk-card fk-hero-card">
+      {% include "includes/site_logo.html" with variant="hero" %}
+      <p class="fk-eyebrow">FK Cēsis</p>
+      <h1>Saņemt piekļuves saiti</h1>
+      <p>Ievadiet savu e-pastu, lai saņemtu drošu saiti pieteikuma apskatei.</p>
+    </section>
+
+    <section class="fk-card">
+      <form method="post" action="{% url 'accounts:request-magic-link' %}">
+        {% csrf_token %}
+        <div class="fk-form-section">
+          <p>
+            <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+            {{ form.email }}
+          </p>
+          {% if form.email.errors %}<p class="fk-error-summary">{{ form.email.errors|join:", " }}</p>{% endif %}
+        </div>
+        <button type="submit" class="fk-button fk-button--primary">Saņemt piekļuves saiti</button>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}

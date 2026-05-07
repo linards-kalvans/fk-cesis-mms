@@ -1,1 +1,13 @@
-<p>Invalid or expired magic link.</p>
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <section class="fk-card fk-portal-summary">
+      <h1>Piekļuves saite nav derīga</h1>
+      <p>Nederīga vai noilgusi piekļuves saite.</p>
+      <a class="fk-button fk-button--secondary" href="{% url 'accounts:request-magic-link' %}">Pieprasīt jaunu saiti</a>
+    </section>
+  </div>
+</div>
+{% endblock %}

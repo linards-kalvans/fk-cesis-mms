@@ -196,6 +196,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - README and AGENTS are accurate
 - `.env.example` covers all required settings
 - deployment/security notes exist
+- roadmap notes cover future email gateway integration and social account login support
 
 ## 6. Implementation tasks
 
@@ -218,6 +219,8 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - **Approved design-system source of truth:** `style-guide/` supersedes `design-template.html`; canonical tokens currently `Anton`, `#0f0851`, and `#ce1c20`.
 - **Approved new design/research spec:** `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
 - **Next active build task:** visual system + registration form redesign from the 2026-05-05 design spec.
+- **Security follow-up:** parent identity verification gate must replace typed-email auto-linking before broader rollout.
+- **Future auth/infrastructure roadmap:** add production email gateway integration for verification delivery and evaluate social account login as an alternative verified-identity path.
 - **Task 6 (`Admin review and member creation`) remains next major domain milestone after the approved redesign work.**
 
 ### Task 1: Project bootstrap and repo metadata — completed

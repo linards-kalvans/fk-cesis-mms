@@ -1,0 +1,10 @@
+{% load static %}
+{% if variant == "hero" %}
+  <div class="fk-logo fk-logo--hero">
+    <img src="{% static 'img/fk-cesis-logo.png' %}" alt="FK Cēsis">
+  </div>
+{% else %}
+  <div class="fk-logo fk-logo--compact">
+    <img src="{% static 'img/fk-cesis-logo.png' %}" alt="FK Cēsis">
+  </div>
+{% endif %}

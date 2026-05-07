@@ -32,13 +32,31 @@ def _active_document_exists(application: RegistrationApplication) -> bool:
     return result
 
 
+def _parent_can_view_application(
+    application: RegistrationApplication,
+    parent_account: ParentAccount | None,
+) -> bool:
+    result: bool = bool(
+        parent_account and application.parent_account_id == parent_account.id
+    )
+    return result
+
+
 def start_registration(request: HttpRequest) -> HttpResponse:
     account = _current_parent_account(request)
     if request.method == "POST":
         form = RegistrationApplicationForm(request.POST, request.FILES)
         if form.is_valid():
-            application = create_or_update_draft(data=form.cleaned_data, files=request.FILES)
-            request.session[PARENT_ACCOUNT_SESSION_KEY] = application.parent_account_id
+            application = create_or_update_draft(
+                data=form.cleaned_data,
+                files=request.FILES,
+                verified_account=account,
+            )
+            # Store session key for same-browser draft continuity
+            request.session["draft_session_key"] = str(application.draft_session_key)
+            # If there's a verified parent account, store that too.
+            if application.parent_account_id:
+                request.session[PARENT_ACCOUNT_SESSION_KEY] = application.parent_account_id
             return redirect("registrations:edit-registration", application_id=application.id)
     else:
         form = RegistrationApplicationForm(initial=get_application_prefill(account))
@@ -48,8 +66,16 @@ def start_registration(request: HttpRequest) -> HttpResponse:
 def edit_registration(request: HttpRequest, application_id: int) -> HttpResponse:
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     account = _current_parent_account(request)
+
+    # Check ownership: either verified parent or same-browser session key
     if not can_edit_application(application, account):
-        raise Http404
+        # Same-browser check via draft_session_key stored in session
+        session_key = request.session.get("draft_session_key")
+        if session_key and str(application.draft_session_key) == session_key:
+            # Grant access for same-browser continuity
+            pass
+        else:
+            raise Http404
 
     if request.method == "POST":
         form = RegistrationApplicationForm(
@@ -63,9 +89,9 @@ def edit_registration(request: HttpRequest, application_id: int) -> HttpResponse
                 data=form.cleaned_data,
                 files=request.FILES,
                 application=application,
+                verified_account=account,
             )
             if request.POST.get("submit_action") == "submit":
-                assert account is not None
                 submit_application(application, account)
                 return redirect("registrations:parent-portal")
             return redirect("registrations:edit-registration", application_id=application.id)
@@ -92,7 +118,14 @@ def edit_registration(request: HttpRequest, application_id: int) -> HttpResponse
 def submit_registration(request: HttpRequest, application_id: int) -> HttpResponse:
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     account = _current_parent_account(request)
-    if request.method != "POST" or account is None or not can_edit_application(application, account):
+    if request.method != "POST":
+        raise Http404
+
+    allowed = can_edit_application(application, account)
+    if not allowed:
+        session_key = request.session.get("draft_session_key")
+        allowed = bool(session_key and str(application.draft_session_key) == session_key)
+    if not allowed:
         raise Http404
 
     form = RegistrationApplicationForm(
@@ -106,6 +139,7 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
             data=form.cleaned_data,
             files=request.FILES,
             application=application,
+            verified_account=account,
         )
         submit_application(application, account)
         return redirect("registrations:parent-portal")
@@ -122,9 +156,39 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
     account = _current_parent_account(request)
     if account is None:
         return redirect("accounts:request-magic-link")
-    applications = account.applications.order_by("-created_at")
+    # Only show applications linked to this verified parent (parent_account FK)
+    applications = account.applications.filter(parent_account=account).order_by("-created_at")
+    # Annotate each application with an is_editable flag for the template.
+    for app in applications:
+        app.can_edit = app.is_editable_by(account)
     return render(
         request,
         "registrations/parent_portal.html",
         {"account": account, "applications": applications},
+    )
+
+
+def view_registration_summary(request: HttpRequest, application_id: int) -> HttpResponse:
+    application = get_object_or_404(RegistrationApplication, pk=application_id)
+    account = _current_parent_account(request)
+    if not _parent_can_view_application(application, account):
+        raise Http404
+
+    return render(
+        request,
+        "registrations/view_registration_summary.html",
+        {"application": application},
+    )
+
+
+def view_registration_detail(request: HttpRequest, application_id: int) -> HttpResponse:
+    application = get_object_or_404(RegistrationApplication, pk=application_id)
+    account = _current_parent_account(request)
+    if not _parent_can_view_application(application, account):
+        raise Http404
+
+    return render(
+        request,
+        "registrations/view_registration_detail.html",
+        {"application": application},
     )

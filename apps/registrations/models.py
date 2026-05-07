@@ -1,25 +1,37 @@
 """RegistrationApplication model — parent registration workflow."""
 
+import uuid
+
 from django.db import models
 
 from apps.core.models import TimeStampedModel
 
 
 class RegistrationApplication(TimeStampedModel):
-    """A parent's registration application for a child."""
+    """A parent's registration application for a child.
+
+    Two-layer identity model:
+    - claimed_email: typed email on draft save (a claim, not proof).
+    - parent_account: nullable FK set after email verification.
+    - draft_session_key: opaque token for same-browser draft continuity.
+    """
 
     class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        SUBMITTED = "submitted", "Submitted"
-        FIX_REQUESTED = "fix_requested", "Fix requested"
-        APPROVED = "approved", "Approved"
-        REJECTED = "rejected", "Rejected"
+        DRAFT = "draft", "Melnraksts"
+        SUBMITTED = "submitted", "Iesniegts"
+        FIX_REQUESTED = "fix_requested", "Jālabo"
+        APPROVED = "approved", "Apstiprināts"
+        REJECTED = "rejected", "Noraidīts"
 
     parent_account = models.ForeignKey(
         "accounts.ParentAccount",
         on_delete=models.CASCADE,
         related_name="applications",
+        null=True,
+        blank=True,
     )
+    claimed_email = models.EmailField(blank=True, default="")
+    draft_session_key = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
     guardian_full_name = models.CharField(max_length=255, blank=True)
     guardian_personal_id = models.CharField(max_length=32, blank=True)
