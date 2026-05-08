@@ -1,125 +1,511 @@
 # FK Cēsis MMS Milestones
 
-## Current Execution Snapshot
-- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links), Task 5 (registration application workflow), Task 6 (admin review queue/detail, fix/reject/approve workflow, member and guardian creation on approval)
-- **Next active implementation task:** Visual system + registration form redesign (build-now), parent identity verification security fix, agreement generation/signing module
-- **Current milestone focus:** `M2` registration intake is substantially implemented; `M3` admin review and member creation baseline is now implemented (queue, fix/reject/approve, member+guardian creation); remaining `M1` deliverables still need implementation (background jobs, audit baseline)
-- **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000` — registration workflow is usable for acceptance flow
-- **Task 5 polish:** `/register/` accessible without login; anonymous save-draft creates/links `ParentAccount`; single edit form with save-draft and submit actions; native date picker for child birth date
-- **Technical debt:** registration edit flow does not show existing uploaded identity document state, so unnecessary re-uploads can replace earlier files; Django admin also needs clearer active vs replaced document UX for soft-deleted rows.
-- **New approved direction (2026-05-05):** Whole-app visual system and registration form redesign approved. Parent identity verification security fix approved — typed email in registration draft is a claim, not proof of ownership; two-layer model (unverified browser-session drafts + verified parent identity gate); portal access based on verified identity only. See `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`. Three research spikes launched: ID document extraction vendor, agreement generation/signing module, SMTP/email provider strategy. Hosting stance: self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability. Self-hosted services may live in separate infrastructure/Ansible projects while this repo integrates loosely through adapters and external config. Visual style source of truth is now `style-guide/`, which supersedes `design-template.html`; current canonical tokens are font `Anton`, blue `#0f0851`, red `#ce1c20`. See `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
-- **Future sprint note:** add automatic `.env` loading for management commands and local app startup so env-driven workflows do not require manual `source .env`
-- **Future sprint note:** when starting work from a new worktree, copy project-root `.env` into that worktree and refresh `SITE_URL` / trusted-origin config for the active tunnel URL; current tunnel admin login failure is consistent with missing tunnel-aware CSRF configuration
-- **Future sprint note:** email gateway — automated verification emails (not just debug-mode magic links) with proper SMTP provider integration; social login (Google/Facebook) as alternative verification method for parent identity gate
+## 1. Purpose
 
-## M1 — Foundation and security baseline
-**Priority:** High
-**Status:** In progress
-**Goal:** Create secure project foundation for sensitive youth-member data.
+This file is authoritative forward-looking milestone base for future development tasks.
 
-**Deliverables**
-- Django project scaffold with `uv`
-- PostgreSQL configuration
-- private document storage abstraction
-- background job framework
-- authentication foundations for admin + magic-link parent access
-- baseline audit/event logging
-- `.env.example`, setup docs, local run/test commands
+Use it for:
+- current implemented baseline
+- open gaps
+- milestone ordering
+- acceptance criteria for future work
+- future task planning
 
-**Acceptance criteria**
-- fresh checkout can boot app locally with documented steps
-- tests, lint, and type checks run from documented commands
-- secrets not committed
-- document downloads require authorization path, not public file URLs
-- first usable app slice can be exposed on LAN for early acceptance testing
+Do **not** use archived implementation plans for current planning unless user explicitly asks for historical context.
 
-## M2 — Parent registration intake
-**Priority:** High
-**Status:** Partially complete — draft/submit workflow, parent portal, magic-link resume, and document upload implemented; OCR assist still placeholder; visual redesign and UX improvements planned; **verified identity gating required as follow-up**
-**Goal:** Allow parent to create and submit child registration with secure document upload.
+---
 
-**Security note:** Current draft flow auto-links `ParentAccount` by typed email — a security flaw. Follow-up work must implement the two-layer model (unverified drafts + verified parent identity gate) described in `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`.
+## 2. Current implemented baseline
 
-**Execution rule**
-- Implement this milestone in isolated git worktree branches and merge back only after user approval.
+### Foundation and platform
+- Django project scaffold exists and boots
+- `uv` workflow is in place
+- `.env` autoload works for local commands and app startup
+- acceptance-test baseline available on LAN at `http://192.168.3.245:8000`
 
-**Deliverables**
-- Latvian registration form ✅
-- guardian + child data capture ✅
-- identity document upload ✅
-- OCR assist pipeline with manual correction *(placeholder only)*
-- draft/submitted workflow state ✅
-- parent magic-link access to resume application ✅
+### Accounts and parent access
+- `ParentAccount` and `MagicLinkToken` exist
+- magic-link issue / send / consume services exist
+- request / verify / logout views exist
+- current parent portal exists
 
-**Acceptance criteria**
-- parent can start, save, return, and submit application ✅
-- OCR failure does not block submission ✅ *(no OCR integration yet)*
-- uploaded documents are private *(model exists; access controls now implemented — private storage root + admin-only preview/download endpoints)*
+### Registration workflow
+- `/register/` is accessible without prior login in current implementation
+- current implementation supports draft save and submit
+- current implementation still allows anonymous same-browser draft continuation
+- registration edit page uses one form with **save draft** and **submit application** actions
+- child birth date uses native browser date input
+- `RegistrationApplication` workflow exists with `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
 
-## M3 — Admin review and member creation
-**Priority:** High
-**Status:** Partially complete — admin review queue, detail pages, request-fix / reject / approve actions, and member+guardian creation on approval are implemented; training group assignment and admin activity audit entries are still pending
-**Goal:** Let admins review applications and convert approved ones into official members.
+### Documents
+- `Document` model exists
+- private storage root `PRIVATE_DOCUMENTS_ROOT` / `private-uploads/` exists
+- admin-only protected preview/download endpoints exist
+- anonymous users redirect to admin login
+- authenticated non-admin users receive `404`
+- placeholder OCR status exists on documents
 
-**Deliverables**
-- admin application queue ✅
-- request-fix / reject / approve actions ✅
-- member creation on approval ✅ (creates `Member` and `Guardian`; `training_group` left empty)
-- training group assignment *(pending)*
-- admin activity audit entries *(pending)*
+### Admin review and member creation
+- admin review queue/detail baseline exists
+- review actions exist: request fix, reject, approve
+- approval creates `Guardian` and `Member`
+- `TrainingGroup` model exists, but approval currently leaves assignment empty
 
-**Acceptance criteria**
-- admins can process submitted applications end-to-end ✅
-- parent receives notification for fix request ✅ (reflected in parent portal)
-- approved application creates member exactly once ✅
+---
 
-## M4 — Billing and Invoice Ninja sync
-**Priority:** High
-**Status:** Pending
-**Goal:** Automate recurring membership billing setup and payment-status visibility.
+## 3. Confirmed target direction not yet implemented
 
-**Deliverables**
-- membership plan model
-- sibling discount logic
-- billing start month choice
-- Invoice Ninja customer/contact sync
-- recurring invoice creation
-- payment status sync overview and retry tools
+### Registration entry and identity gate
+- registration must start with guardian email
+- email code is primary entry verification method
+- if guardian exists, verified code should attach to existing guardian account and lead to chooser/dashboard
+- if guardian does not exist, verified code should establish new verified session/account before registration continues
+- verified access must gate both registration continuation and portal access
+- current anonymous draft-start behavior must be replaced
 
-**Acceptance criteria**
-- approved member can be synced to Invoice Ninja
-- recurring billing follows €300 yearly rules and installment schedule
-- sync failures are visible and retryable
+### Field-set review
+- guardian field set is **not final**
+- child/player field set is **not final**
+- finalization of both field sets must happen early before deeper workflow expansion
+- field finalization must include source mapping for each field:
+  - guardian OCR
+  - member OCR
+  - manual-only
+  - derived/system-filled
 
-## M5 — Admin operations and export
-**Priority:** Medium
-**Status:** Pending
-**Goal:** Provide usable day-to-day administration tools.
+### Documents and OCR
+- registration should handle both `guardian_identity` and `member_identity` documents
+- existing verified guardian should reuse active guardian document by default, with optional refresh/replacement
+- OCR should prefill person data from uploaded documents
+- OCR should also store serialized sensitive metadata such as document number, issuer, issuance date, expiry, and similar fields
+- OCR metadata must be protected with same posture as raw identity documents
+- OCR mode must be configurable between real provider and stub/dummy provider
+- preferred OCR direction: **tiny-IDP** first
 
-**Deliverables**
-- member search/filter by status/group
-- invoice/payment overview
+### Agreement handling
+- after approval, generate agreement
+- first slice uses manual signing outside Django app
+- agreement platform is source of truth for agreement artifact and signed state
+- signed state sync comes back to Django through API
+- preferred future richer agreement-processing direction: **DocuSeal self-hosted**
+
+---
+
+## 4. Open gaps and debt
+
+### Security and architecture gaps
+- guardian-email-first verified continuation not implemented yet
+- current typed-email / anonymous-draft behavior still needs replacement
+- audit/event baseline still incomplete
+- OCR extracted metadata storage/security not implemented yet
+
+### Registration UX gaps
+- final guardian/child-player field review not done yet
+- current registration form does not show existing uploaded identity document clearly
+- unnecessary re-upload can replace earlier file and create confusing admin rows
+- visual redesign still pending
+
+### Admin UX gaps
+- admin review should show inline identity-document previews beside applicant data
+- admin document UX should better distinguish active vs replaced documents
+- training-group assignment flow still incomplete
+- review-action audit entries still incomplete
+
+### Business workflow gaps
+- agreement generation / manual-signing flow not implemented yet
+- billing / Invoice Ninja sync not implemented yet
+- admin export and operations polish still pending
+
+---
+
+## 5. Priority order for future development
+
+### P1 — Field-set finalization + guardian-email-first verified registration gate
+**Why first**
+- field contract should drive flow, validation, OCR mapping, and forms
+- closes biggest confirmed security / identity-model gap
+- defines actual entry flow for all later UX work
+
+**Target outcome**
+- guardian and child/player field sets are finalized first
+- verified continuation replaces anonymous draft-start as primary registration path
+
+### P2 — Visual system + registration UX redesign
+**Why second**
+- should be built on final entry-flow model, not current temporary draft model
+- improves parent-facing clarity after identity gate is decided
+
+**Target outcome**
+- parent flow matches style guide and approved visual direction
+
+### P3 — OCR integration + secure extracted metadata
+**Why third**
+- depends on final field model and stable registration flow
+- introduces real extraction and sensitive metadata handling
+
+**Target outcome**
+- tiny-IDP-backed OCR path (if validation holds)
+- editable extracted person data and secure serialized document metadata
+
+### P4 — Approval-to-agreement flow
+**Why fourth**
+- agreement is business basis for billing
+- admin review quality should improve before agreement decisions
+- simpler first slice avoids premature in-app e-sign orchestration
+
+**Target outcome**
+- inline admin document preview in approval flow
+- training-group assignment workflow
+- generate agreement after approval
+- track agreement state from external agreement platform
+
+### P5 — Billing / Invoice Ninja sync
+**Why fifth**
+- should follow agreement flow in business sequence
+
+**Target outcome**
+- membership plan rules
+- sibling discount
+- automatic billing trigger after agreement platform `completed` state
+- Invoice Ninja sync and payment-status visibility
+
+### P6 — Admin operations / export / audit polish
+**Why sixth**
+- builds on earlier workflow completion
+- improves day-to-day operations and controls
+
+**Target outcome**
 - CSV export
-- document deletion controls
+- search/filter polish
+- audit completion
+- document/admin UX polish
 
-**Acceptance criteria**
-- admins can find records quickly
-- CSV export includes agreed MVP fields
-- document actions are audited
+### P7 — Calendar + WhatsApp attendance integration
+**Why last**
+- explicitly future scope
+- likely separate platform/integration boundary
 
-## M6 — Production readiness
-**Priority:** Medium
-**Status:** Pending
-**Goal:** Make MVP deployable and supportable.
+**Target outcome**
+- calendar integration, likely external platform such as Google Calendar
+- automated WhatsApp attendance polling integration
 
-**Deliverables**
+---
+
+## 6. Acceptance criteria by priority block
+
+### P1 acceptance — Field-set finalization + guardian-email-first verified registration gate
+P1 is complete when all of the following are true:
+
+1. Guardian field set is finalized:
+   - required / optional fields decided
+   - validation rules decided
+   - source mapping decided for each field
+2. Child/player field set is finalized:
+   - required / optional fields decided
+   - validation rules decided
+   - source mapping decided for each field
+3. Registration entry starts with guardian email only.
+4. Email code is primary entry verification method:
+   - short-lived
+   - single-use
+   - rate-limited
+   - typed email alone grants nothing
+5. Existing guardian flow works:
+   - verified code attaches to existing guardian account
+   - user lands on chooser/dashboard
+   - if draft exists, **continue draft** is primary action
+   - **start new registration** is available on same screen
+   - past/current registrations list is visible on same screen
+6. New guardian flow works:
+   - verified code creates/establishes verified session/account
+   - user can continue into new registration flow
+7. Same verified gate protects both registration continuation and portal access.
+8. Old insecure ownership path is removed:
+   - typed email can no longer auto-link or expose another guardian’s registrations
+9. Tests prove behavior:
+   - existing guardian code flow
+   - new guardian code flow
+   - chooser behavior
+   - continue-draft priority
+   - start-new option visibility
+   - registrations-list visibility
+   - cross-account exposure regression
+
+### P2 acceptance — Visual system + registration UX redesign
+P2 is complete when all of the following are true:
+
+1. Style guide is applied on parent-facing flow:
+   - canonical tokens used
+   - typography readable on desktop/mobile
+   - public pages reflect FK Cēsis identity
+2. Guardian-email entry page is redesigned:
+   - clear first step
+   - email + code flow feels obvious
+   - calm branded entry experience
+3. Existing-guardian chooser/dashboard is redesigned:
+   - resumable draft is primary if present
+   - **start new registration** on same screen
+   - past/current registrations visible
+   - next action obvious
+4. Registration form is redesigned:
+   - grouped guardian, child/player, and document sections
+   - shared template primitives used
+   - layout supports later designer polish
+5. Document-upload UX is clearer:
+   - guardian and member documents clearly separated
+   - active uploaded document state visible
+   - replace/refresh action understandable
+6. OCR-prefill review UX is clear:
+   - extracted values distinguishable
+   - user can correct without confusion
+   - sensitive metadata shown only where appropriate
+7. Validation UX is improved:
+   - readable field errors
+   - useful top-level summary where needed
+   - invalid submit feels understandable
+8. Parent portal / registration list matches same visual system.
+9. No workflow regression:
+   - verified entry, chooser, continue draft, start new, save draft, submit still work
+   - no insecure ownership regression
+10. Tests cover critical workflow/state behavior without brittle visual-detail assertions.
+11. Public visual implementation remains easy to refine with designer assistance.
+
+### P3 acceptance — OCR integration + secure extracted metadata
+P3 is complete when all of the following are true:
+
+1. Real OCR integration exists for guardian and member documents.
+2. App config can switch OCR mode between:
+   - real OCR provider
+   - stub/dummy OCR provider returning deterministic dummy data
+3. OCR covers both document roles:
+   - guardian identity document
+   - member identity document
+4. Extracted person fields are mapped according to P1 field-finalization decisions.
+5. Extracted document metadata is stored in serialized form where available:
+   - document number
+   - issuer
+   - issuance date
+   - expiry
+   - similar fields
+6. Sensitive OCR data is secured with same posture as raw identity documents.
+7. OCR remains non-blocking:
+   - registration can continue if OCR fails
+8. Manual correction flow works:
+   - user/admin can review and correct OCR-filled values
+   - corrected values override OCR guesses
+9. Basic admin OCR controls exist:
+   - admin can see OCR state
+   - admin can review extracted data
+   - admin can trigger/retrigger OCR where appropriate
+10. Provider boundary is clean and adapter-based.
+11. Tests cover:
+   - real/stub mode selection
+   - success path
+   - failure path
+   - non-blocking behavior
+   - metadata storage
+   - manual correction path
+   - admin retry/review behavior
+   - secure handling expectations where testable
+
+### P4 acceptance — Approval-to-agreement flow
+P4 is complete when all of the following are true:
+
+1. Admin review shows inline document preview:
+   - guardian and member ID docs visible inline beside applicant data
+   - preview remains admin-only
+   - active doc clearly distinguished from replaced doc
+2. Admin review supports approval-ready inspection:
+   - guardian/player data, OCR data, and doc metadata visible together
+3. Training-group assignment flow exists:
+   - assignment during approval is optional
+   - admin can assign during approval or immediately after
+   - assignment state is visible and editable
+4. Approval remains idempotent:
+   - repeated approval does not create duplicate guardian/member/agreement records
+5. Agreement is generated after approval.
+6. Agreement platform integration exists at metadata/API level:
+   - Django can create/register agreement in external agreement platform
+   - Django stores external agreement identifiers and state
+   - preferred direction is **DocuSeal self-hosted**
+   - adapter boundary remains clean
+7. Manual signing flow is tracked:
+   - `generated`
+   - `sent/shared`
+   - `signed`
+8. Supported manual signing paths are explicit:
+   - LV qualified electronic signature
+   - paper signing
+9. Agreement platform is source of truth:
+   - signed documents live in agreement platform, not Django storage
+   - signed state comes back to Django via API sync
+10. Agreement access/security is defined appropriately.
+11. Parent/admin visibility is clear:
+   - admin can see agreement state
+   - parent can see appropriate status/next step if needed
+   - no misleading in-app e-sign UX
+12. Tests cover:
+   - inline preview access control
+   - training-group assignment path
+   - approval idempotency
+   - agreement generation
+   - external-platform linkage/state tracking
+   - signed-state sync behavior
+
+### P5 acceptance — Billing / Invoice Ninja sync
+P5 is complete when all of the following are true:
+
+1. Billing starts only after agreement platform final state is **completed**.
+2. Billing is created automatically after Django sync confirms `completed` state.
+3. Membership billing model exists:
+   - annual fee baseline
+   - payment mode
+   - billing start month
+   - sibling-discount state
+4. Invoice Ninja integration exists:
+   - Django can create/update customer/contact data
+   - Django can create/register recurring billing setup
+   - Django stores external billing identifiers and sync state
+5. Sibling discount logic works:
+   - second child discount determined from guardian identity linkage
+   - full-price opt-out supported
+   - manual exception path remains possible
+6. Installment schedule rules work:
+   - €300 baseline
+   - upfront and installment modes
+   - agreed installment calendar
+   - billing start month respected
+7. Invoice Ninja remains source of truth for invoices and payment state.
+8. Sync state and retries exist:
+   - agreement sync and billing sync failure states visible
+   - retry path exists
+   - admin can see sync health
+9. Payment-status visibility exists:
+   - Django reads invoice/payment state back from Invoice Ninja on scheduled sync
+   - sync runs at least nightly
+   - cadence is configurable
+10. Integration boundaries are clean:
+   - agreement-platform adapter separate from billing adapter
+   - Invoice Ninja logic behind adapter/service boundary
+11. Security/data handling is acceptable:
+   - payer/billing data handled carefully
+   - payload logging redacted
+   - secrets/config externalized
+12. Tests cover:
+   - completed-agreement prerequisite gating
+   - automatic trigger after completed-state sync
+   - sibling discount logic
+   - installment rules
+   - scheduled payment-status sync behavior
+   - retry/failure handling
+   - payment-status sync
+
+### P6 acceptance — Admin operations / export / audit polish
+P6 is complete when all of the following are true:
+
+1. Admin search/filter is useful for registrations, members, agreements, and billing records.
+2. CSV export exists for both:
+   - members
+   - registrations/applications
+3. Agreed MVP export fields are available, with sensitive fields included only where explicitly allowed.
+4. Audit coverage is completed for critical actions:
+   - review actions
+   - document preview/download/delete
+   - agreement/billing sync actions where needed
+5. Document admin UX is clearer:
+   - active vs replaced clearly distinguished
+   - inappropriate preview/download actions hidden or disabled
+6. Sync/admin visibility is polished:
+   - OCR, agreement, and billing sync states clearly visible
+   - failures visible
+   - retry/recovery actions understandable
+7. Operational detail views are usable with enough linked context.
+8. Permissions remain tight and sensitive actions stay staff-only and audited.
+9. Exports and audit are safe:
+   - no accidental public exposure
+   - no sensitive data leakage through logs/export defaults
+10. Tests cover:
+   - search/filter basics
+   - member export
+   - registration/application export
+   - audit event creation
+   - active/replaced document handling
+   - admin visibility for sync/error states
+
+### P7 acceptance — Calendar + WhatsApp attendance integration
+P7 is complete when all of the following are true:
+
+1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
+2. Platform boundary is clean and loosely coupled to Django monolith.
+3. Attendance polling flow exists through WhatsApp.
+4. Event/member/guardian mapping works reliably.
+5. Operational visibility exists for request/send/response state and failures.
+6. Consent / messaging controls are acceptable and configurable.
+7. Security / privacy posture is acceptable:
+   - data sharing minimized
+   - secrets/config externalized
+   - audit/log posture reasonable
+8. Calendar adapter and messaging adapter remain separate and replaceable.
+9. Attendance responses for first slice are limited to:
+   - yes
+   - no
+   - maybe
+10. Tests cover critical mapping/failure behavior where testable.
+
+---
+
+## 7. Milestone map
+
+### M1 — Security and foundation completion
+Remaining focus:
+- guardian-email-first verified continuation
+- background-job baseline where still missing
+- audit baseline
+- OCR metadata security posture
+
+### M2 — Parent intake completion
+Remaining focus:
+- final field sets
+- visual redesign
+- dual-document registration flow
+- OCR-backed prefill
+
+### M3 — Approval-to-membership and agreement completion
+Remaining focus:
+- inline document preview in review flow
+- training-group assignment workflow
+- agreement generation + manual signing tracking
+
+### M4 — Billing completion
+Remaining focus:
+- Invoice Ninja orchestration
+- sibling discount rules
+- payment visibility and retry paths
+
+### M5 — Admin operations completion
+Remaining focus:
+- export
+- filters/search polish
+- document/admin operations polish
+
+### M6 — Production readiness
+Remaining focus:
 - deployment docs
-- backup/restore notes
-- environment setup for OCR + Invoice Ninja
-- error monitoring hooks
+- recovery/backup notes
+- integration configuration docs
 - final security checklist
 
-**Acceptance criteria**
-- documented deployment path exists
-- key integrations configurable without code changes
-- restore and operational recovery steps documented
+### Future / post-MVP
+- calendar integration
+- WhatsApp attendance polling
+
+---
+
+## 8. Explicit non-priorities right now
+- coach portal
+- adult members
+- attendance tracking inside this monolith
+- event / competition / travel planning
+- direct national FA integration
+- multilingual architecture
+- SPA or API-first rewrite

@@ -1,7 +1,7 @@
 """Parent identity gate — security regression tests.
 
 Red-phase: these tests assert the verified identity gate behavior described in
-docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md.
+docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md.
 
 They must FAIL against the current implementation because:
 - parent_account is non-nullable FK (no claimed_email / verified_parent split)

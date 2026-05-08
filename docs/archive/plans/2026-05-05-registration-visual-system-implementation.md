@@ -12,7 +12,7 @@
 
 ## 1. Scope and sequencing
 
-This plan covers only the **build-now** slice from `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`:
+This plan covers only the **build-now** slice from `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`:
 
 1. shared visual tokens and parent/admin shell primitives
 2. parent-facing registration entry and edit flow redesign

@@ -83,8 +83,7 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 
 ### Documentation
 - Already created: `docs/milestones.md`
-- Already created: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
-- Already created: `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`
+- Canonical product spec: `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`
 - Already created: `style-guide/tokens.md`
 - Already created: `style-guide/tokens.css`
 - Create/update during implementation:
@@ -217,8 +216,8 @@ Expose usable app slices on LAN as early as practical so the user can perform ac
 - Verified green after Task 5: `uv run pytest -q && uv run ruff check . && uv run mypy .`.
 - **Current user acceptance-test URL:** `http://192.168.3.245:8000`.
 - **Approved design-system source of truth:** `style-guide/` supersedes `design-template.html`; canonical tokens currently `Anton`, `#0f0851`, and `#ce1c20`.
-- **Approved new design/research spec:** `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
-- **Next active build task:** visual system + registration form redesign from the 2026-05-05 design spec.
+- **Approved canonical product spec:** `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
+- **Next active build task:** visual system + registration form redesign from the canonical product spec.
 - **Security follow-up:** parent identity verification gate must replace typed-email auto-linking before broader rollout.
 - **Future auth/infrastructure roadmap:** add production email gateway integration for verification delivery and evaluate social account login as an alternative verified-identity path.
 - **Task 6 (`Admin review and member creation`) remains next major domain milestone after the approved redesign work.**

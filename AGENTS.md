@@ -42,8 +42,8 @@ Target Django monolith with domain apps:
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 
 ### Task 5 polish (registration workflow UX)
-- `/register/` accessible without prior login — no mandatory magic-link gate.
-- Anonymous save-draft creates/links a `ParentAccount`; same browser session can continue editing.
+- `/register/` accessible without prior login in current implementation.
+- Current implementation still allows anonymous same-browser draft continuation before verified-gate redesign lands.
 - Edit page uses a single form with two actions: **save draft** and **submit application**.
 - Child birth date field uses native browser `<input type="date">` picker.
 - Conflicting birth-date hint text removed from edit form.
@@ -57,21 +57,19 @@ Target Django monolith with domain apps:
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
-- **Security fix — parent identity verification:** typed email in registration draft is a claim, not proof of ownership. Two-layer model: unverified browser-session drafts + verified parent identity gate (email code/link now, social login later). Portal access based on verified identity only. See `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`.
-- **Research spikes:** ID document extraction vendor shortlist + architecture, agreement generation/signing module (post-approval, configurable signing order, club countersign, secure storage/delivery out of box), SMTP/email provider strategy for scale.
+- **Registration entry direction:** registration starts with guardian email; existing guardian gets magic link for verified continuation and prefill, new guardian must verify email before continuing. Guardian and child/player field sets are not final and must be reviewed early. See `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
+- **Security fix — parent identity verification:** typed email in registration draft is a claim, not proof of ownership. Verified access gates registration continuation and portal access; social login may later satisfy same gate. See `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
+- **Research spikes / preferred directions:** OCR vendor shortlist with **tiny-IDP** favored first, agreement generation with manual signing first and **DocuSeal self-hosted** favored for future richer processing, and SMTP/email provider strategy for scale.
 - **Hosting stance:** self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability.
 - **Visual direction:** unified design system, calm centered parent flow, denser admin shell, club logo hero-style on parent entry screens.
 - **Style source of truth:** `style-guide/` supersedes `design-template.html`. Canonical tokens currently: font `Anton`, blue `#0f0851`, red `#ce1c20`.
-- **Agreement signing:** after admin approval, with configurable order, club countersign flow, and both email attachment + secure portal delivery.
+- **Agreement handling, first slice:** after admin approval, generate agreement, allow manual signing outside platform (LV qualified electronic signature or paper), then mark signed and optionally upload signed copy. Richer countersign/order automation may follow later.
 - **GDPR/EU compliance mandatory** for all third-party integrations.
 - **Service boundary:** self-hosted services may live in separate infrastructure/Ansible projects; this repo should integrate loosely via adapters and external config, not own their deployment lifecycle.
-- Spec: `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`.
+- Spec: `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
 
 Reference docs:
-- Design spec: `docs/superpowers/specs/2026-05-04-fk-cesis-mms-mvp-design.md`
-- Registration + integrations design: `docs/superpowers/specs/2026-05-05-registration-design-and-integrations-design.md`
-- Parent identity verification design: `docs/superpowers/specs/2026-05-05-parent-identity-verification-design.md`
-- Implementation plan: `docs/superpowers/plans/2026-05-04-fk-cesis-mms-mvp-implementation.md`
+- Canonical product spec: `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`
 - Milestones: `docs/milestones.md`
 - Style guide assets: `style-guide/`
 - Style guide tokens: `style-guide/tokens.md`, `style-guide/tokens.css`
@@ -85,7 +83,12 @@ Reference docs:
 - `M5` — Admin operations and export
 - `M6` — Production readiness
 
-Use `docs/milestones.md` as authoritative milestone tracker. Keep it updated as scope/status changes.
+Use `docs/milestones.md` as authoritative milestone tracker and base for future development tasks. Keep it updated as scope/status changes.
+
+Archive rule:
+- `docs/archive/` is historical only.
+- Do not use archived docs for planning, execution, or status by default.
+- Read archived docs only when user explicitly asks for history/archive context.
 
 ## Commands
 ```bash
@@ -123,6 +126,7 @@ Rules:
 
 ## Security Rules (PII / Documents)
 - Registration identity documents stored under `PRIVATE_DOCUMENTS_ROOT` (`private-uploads/`), separate from `MEDIA_ROOT`.
+- OCR-extracted document metadata (number, issuer, issuance date, expiry, etc.) is sensitive data and must be protected with same posture as underlying identity documents.
 - No public file URLs for registration documents. Every preview/download passes through admin-only Django views that enforce staff authorization.
 - Identity documents stored in private storage; streamed through authenticated backend views.
 - No public file URLs. Every download checks application/member authorization.
