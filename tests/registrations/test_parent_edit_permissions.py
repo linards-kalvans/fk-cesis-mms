@@ -696,3 +696,223 @@ class TestSameBrowserVsCrossBrowser:
         assert resp.status_code == 302, (
             "Unauthenticated cross-browser must be redirected from portal."
         )
+
+
+# ---------------------------------------------------------------------------
+# fix_requested — parent editability and portal visibility
+# ---------------------------------------------------------------------------
+
+
+class TestFixRequestedEditability:
+    """fix_requested applications must be editable by the owning parent."""
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_fix_requested_app(self, email="fixedit@example.com"):
+        """Create a draft, submit it, then set status to fix_requested."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37111111111",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Fix Edit Guardian",
+                "guardian_personal_id": "010101-11111",
+                "guardian_phone": "+37122222222",
+                "guardian_address": "Riga 1",
+                "child_full_name": "Child FixEdit",
+                "child_personal_id": "010125-11111",
+                "child_birth_date": "2025-01-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("fix_id.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.review_message = "Please correct the personal ID format."
+        app.save(update_fields=["status", "review_message"])
+        return acct, app
+
+    def test_fix_requested_is_editable_by_owning_parent(self):
+        """fix_requested application must be editable by owning parent."""
+        from apps.registrations.services import can_edit_application
+
+        acct, app = self._create_fix_requested_app("fixownedit@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        assert can_edit_application(app, acct) is True, (
+            "fix_requested application must be editable by owning parent."
+        )
+
+    def test_fix_requested_edit_page_accessible(self):
+        """fix_requested application edit page must load (200) for owning parent."""
+        acct, app = self._create_fix_requested_app("fixpageedit@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        resp = self.client.get(f"/applications/{app.pk}/edit/")
+        assert resp.status_code == 200, (
+            f"Expected 200 for fix_requested edit page, got {resp.status_code}."
+        )
+
+    def test_fix_requested_not_editable_by_other_parent(self):
+        """fix_requested application must not be editable by another parent."""
+        from apps.registrations.services import can_edit_application
+
+        acct, app = self._create_fix_requested_app("fixother@example.com")
+
+        other = ParentAccount.objects.create(
+            email="otherfix@example.com",
+            phone="+37133333333",
+        )
+        _login_via_magic_link(self.client, other)
+
+        assert can_edit_application(app, other) is False, (
+            "fix_requested application must not be editable by other parent."
+        )
+
+
+class TestParentPortalFixRequestedVisibility:
+    """Portal must show fix message and edit CTA for fix_requested."""
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_fix_requested_app(self, email="portalfix@example.com"):
+        """Create a draft, submit it, then set status to fix_requested."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37111111111",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Portal Fix Guardian",
+                "guardian_personal_id": "010101-11111",
+                "guardian_phone": "+37122222222",
+                "guardian_address": "Riga 1",
+                "child_full_name": "Child PortalFix",
+                "child_personal_id": "010125-11111",
+                "child_birth_date": "2025-01-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("pf_id.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.review_message = "Please correct the personal ID format."
+        app.save(update_fields=["status", "review_message"])
+        return acct, app
+
+    def test_portal_shows_fix_message_and_edit_cta(self):
+        """Portal must display review message and edit link for fix_requested."""
+        acct, app = self._create_fix_requested_app("fixportalext@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200, (
+            f"Expected 200 on portal, got {resp.status_code}."
+        )
+        content = resp.content.decode()
+        assert "Please correct the personal ID format." in content, (
+            "Portal must show the fix_requested review message."
+        )
+        # Must show an edit/continue link
+        has_edit_link = (
+            "edit" in content.lower()
+            or "turpinat" in content.lower()
+            or "labot" in content.lower()
+            or f"/applications/{app.pk}/edit/" in content
+        )
+        assert has_edit_link, (
+            "Portal must show an edit/continue link for fix_requested application."
+        )
+
+
+class TestParentPortalRejectedVisibility:
+    """Portal must show reject message but no edit CTA for rejected."""
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_rejected_app(self, email="portalreject@example.com"):
+        """Create a draft, submit it, then set status to rejected."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37111111111",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Portal Reject Guardian",
+                "guardian_personal_id": "010101-11111",
+                "guardian_phone": "+37122222222",
+                "guardian_address": "Riga 1",
+                "child_full_name": "Child PortalReject",
+                "child_personal_id": "010125-11111",
+                "child_birth_date": "2025-01-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("pr_id.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.REJECTED
+        app.review_message = "Application does not meet requirements."
+        app.save(update_fields=["status", "review_message"])
+        return acct, app
+
+    def test_portal_shows_reject_message_no_edit_cta(self):
+        """Portal must display reject message and no edit link."""
+        acct, app = self._create_rejected_app("rejectportalext@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Application does not meet requirements." in content, (
+            "Portal must show the reject review message."
+        )
+        # Must NOT show an edit link
+        has_edit_link = (
+            f"/applications/{app.pk}/edit/" in content
+        )
+        assert not has_edit_link, (
+            "Portal must not show an edit link for rejected application."
+        )
+
+    def test_rejected_application_not_editable_by_parent(self):
+        """rejected application must not be editable by the owning parent."""
+        from apps.registrations.services import can_edit_application
+
+        acct, app = self._create_rejected_app("noteditreject@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        assert can_edit_application(app, acct) is False, (
+            "rejected application must not be editable."
+        )
+
+    def test_rejected_edit_page_returns_404(self):
+        """rejected application edit page must return 404 for owning parent."""
+        acct, app = self._create_rejected_app("rejected404@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        resp = self.client.get(f"/applications/{app.pk}/edit/")
+        assert resp.status_code == 404, (
+            f"Expected 404 for rejected edit page, got {resp.status_code}."
+        )

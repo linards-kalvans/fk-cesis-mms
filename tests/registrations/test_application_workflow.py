@@ -759,3 +759,126 @@ class TestInvalidSubmitErrorSummary:
             "Expected an element with class like 'error-summary', 'form-errors', "
             "'validation-summary', or Latvian heading like 'Kļūdas'."
         )
+
+
+# ---------------------------------------------------------------------------
+# Resubmission behavior — fix_requested applications
+# ---------------------------------------------------------------------------
+
+
+class TestResubmissionAcceptsFixRequested:
+    """submit_application must accept applications with status=fix_requested."""
+
+    def test_submit_application_accepts_fix_requested(self):
+        """Calling submit_application on a fix_requested app must succeed."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email="fixsub@example.com",
+            phone="+37133333333",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "fixsub@example.com",
+                "guardian_full_name": "Fix Sub Guardian",
+                "guardian_personal_id": "010101-33333",
+                "guardian_phone": "+37144444444",
+                "guardian_address": "Riga 3",
+                "child_full_name": "Child FixSub",
+                "child_personal_id": "010125-33333",
+                "child_birth_date": "2025-02-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("id2.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.save(update_fields=["status"])
+
+        # submit_application should accept fix_requested
+        result = submit_application(app, acct)
+        assert result.status == RegistrationApplication.Status.SUBMITTED, (
+            f"Expected submitted, got {result.status}."
+        )
+
+
+class TestResubmissionClearsReviewFields:
+    """Resubmission must clear review_message, reviewed_by, reviewed_at."""
+
+    def test_resubmission_clears_review_message(self):
+        """After resubmission, review_message must be cleared."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email="clearmsg@example.com",
+            phone="+37155555555",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "clearmsg@example.com",
+                "guardian_full_name": "Clear Msg Guardian",
+                "guardian_personal_id": "010101-55555",
+                "guardian_phone": "+37166666666",
+                "guardian_address": "Riga 5",
+                "child_full_name": "Child ClearMsg",
+                "child_personal_id": "010125-55555",
+                "child_birth_date": "2025-03-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("id3.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.review_message = "Fix this please."
+        app.save(update_fields=["status", "review_message"])
+
+        # Resubmit
+        submit_application(app, acct)
+        app.refresh_from_db()
+        assert app.status == RegistrationApplication.Status.SUBMITTED
+        assert app.review_message == "", (
+            "review_message must be cleared on resubmission."
+        )
+
+    def test_resubmission_clears_reviewed_at(self):
+        """After resubmission, reviewed_at must be cleared."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        acct = ParentAccount.objects.create(
+            email="clearat@example.com",
+            phone="+37177777777",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "clearat@example.com",
+                "guardian_full_name": "Clear At Guardian",
+                "guardian_personal_id": "010101-77777",
+                "guardian_phone": "+37188888888",
+                "guardian_address": "Riga 7",
+                "child_full_name": "Child ClearAt",
+                "child_personal_id": "010125-77777",
+                "child_birth_date": "2025-04-01",
+            },
+            files={
+                "child_identity_document": _make_child_identity_file("id4.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.reviewed_at = app.updated_at  # Set reviewed_at
+        app.save(update_fields=["status", "reviewed_at"])
+
+        # Resubmit
+        submit_application(app, acct)
+        app.refresh_from_db()
+        assert app.reviewed_at is None, (
+            "reviewed_at must be cleared on resubmission."
+        )

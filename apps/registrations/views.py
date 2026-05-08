@@ -9,9 +9,12 @@ from apps.documents.models import Document
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.services import (
+    approve_application,
     can_edit_application,
     create_or_update_draft,
     get_application_prefill,
+    reject_application,
+    request_application_fix,
     submit_application,
 )
 
@@ -156,8 +159,8 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
     account = _current_parent_account(request)
     if account is None:
         return redirect("accounts:request-magic-link")
-    # Only show applications linked to this verified parent (parent_account FK)
-    applications = account.applications.filter(parent_account=account).order_by("-created_at")
+    # Show all applications linked to this verified parent
+    applications = account.applications.order_by("-created_at")
     # Annotate each application with an is_editable flag for the template.
     for app in applications:
         app.can_edit = app.is_editable_by(account)
@@ -191,4 +194,111 @@ def view_registration_detail(request: HttpRequest, application_id: int) -> HttpR
         request,
         "registrations/view_registration_detail.html",
         {"application": application},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Staff review views
+# ---------------------------------------------------------------------------
+
+
+def _require_staff(request: HttpRequest) -> HttpResponse | None:
+    """Redirect anonymous to admin login; 404 non-staff."""
+    if not request.user.is_authenticated:
+        from django.contrib.auth.views import redirect_to_login
+
+        return redirect_to_login(request.get_full_path(), "admin:login")
+    if not request.user.is_staff:
+        raise Http404
+    return None  # type: ignore[return-value]
+
+
+def admin_review_queue(request: HttpRequest) -> HttpResponse:
+    """Staff-only queue of submitted applications."""
+    result = _require_staff(request)
+    if result is not None:
+        return result
+    applications = RegistrationApplication.objects.filter(
+        status=RegistrationApplication.Status.SUBMITTED
+    ).order_by("-submitted_at")
+    return render(
+        request,
+        "registrations/admin_review_queue.html",
+        {"applications": applications},
+    )
+
+
+def admin_review_detail(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Staff-only detail page with review actions."""
+    result = _require_staff(request)
+    if result is not None:
+        return result
+    application = get_object_or_404(RegistrationApplication, pk=application_id)
+
+    # Determine active identity document for preview link
+    active_doc = application.documents.filter(
+        kind=Document.Kind.CHILD_IDENTITY,
+        deleted_at__isnull=True,
+    ).first()
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        if action == "request_fix":
+            message = request.POST.get("review_message", "").strip()
+            try:
+                request_application_fix(application, request.user, message)
+            except ValueError:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {
+                        "application": application,
+                        "active_doc": active_doc,
+                        "error": "Labojuma ziņojums ir obligāts.",
+                    },
+                    status=400,
+                )
+            return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "reject":
+            message = request.POST.get("review_message", "").strip()
+            try:
+                reject_application(application, request.user, message)
+            except ValueError:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {
+                        "application": application,
+                        "active_doc": active_doc,
+                        "error": "Noraidīšanas ziņojums ir obligāts.",
+                    },
+                    status=400,
+                )
+            return redirect("registrations:admin-review-queue")
+
+        elif action == "approve":
+            try:
+                approve_application(application, request.user)
+            except ValueError:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {
+                        "application": application,
+                        "active_doc": active_doc,
+                        "error": "Var apstiprināt tikai iesniegtus pieteikumus.",
+                    },
+                    status=400,
+                )
+            return redirect("registrations:admin-review-queue")
+
+    return render(
+        request,
+        "registrations/admin_review_detail.html",
+        {
+            "application": application,
+            "active_doc": active_doc,
+        },
     )

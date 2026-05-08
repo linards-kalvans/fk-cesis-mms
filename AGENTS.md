@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–5 complete in current worktree.** Registration workflow is usable for LAN acceptance testing.
+**Tasks 1–6 complete in current worktree.** Registration workflow is usable for LAN acceptance testing; admin review queue and member creation baseline are operational.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -32,14 +32,14 @@ Target Django monolith with domain apps:
 - `apps/accounts/services.py` implements `issue_magic_link`, `send_magic_link`, `consume_magic_link`.
 - `apps/accounts/views.py` implements request, verify, and logout views.
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
-- `apps/registrations/models.py` implements `RegistrationApplication` with draft/submitted states.
-- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, link to parent account.
-- `apps/registrations/views.py` provides start, edit, and parent portal views.
+- `apps/registrations/models.py` implements `RegistrationApplication` with draft/submitted states and fix/reject/approve workflow.
+- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, link to parent account, and admin review actions (request_fix, reject, approve).
+- `apps/registrations/views.py` provides start, edit, parent portal, and admin review queue/detail views.
+- `apps/members/models.py` implements `Member`, `Guardian`, and `TrainingGroup` models; approval creates `Member` + `Guardian` with `training_group` left empty.
 - `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`) and placeholder OCR status.
 - `apps/documents` uses a dedicated private storage root (`private-uploads/`) and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
 - `.env` autoload works for local commands and app startup.
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
-- Full business models for members and billing are **not implemented yet**.
 
 ### Task 5 polish (registration workflow UX)
 - `/register/` accessible without prior login — no mandatory magic-link gate.
@@ -52,6 +52,8 @@ Target Django monolith with domain apps:
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 - Registration edit form does not show that an identity document was already uploaded; users can re-upload unnecessarily, which soft-deletes the earlier document and creates confusing duplicate admin rows.
 - Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
+- Training group assignment on approval (currently left empty).
+- Admin activity audit entries for review actions.
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).

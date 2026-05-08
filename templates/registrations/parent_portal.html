@@ -14,6 +14,9 @@
         <h2>{{ application.child_full_name|default:application.guardian_email }}</h2>
         <p class="fk-status-card__guardian">{{ application.guardian_full_name|default:application.guardian_email }}</p>
         <p>{{ application.get_status_display }}</p>
+        {% if application.review_message %}
+          <p class="fk-review-message">{{ application.review_message }}</p>
+        {% endif %}
         {% if application.can_edit %}
           <a class="fk-button fk-button--secondary" href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
         {% else %}

@@ -3,10 +3,13 @@
 from collections.abc import Mapping
 from typing import Any
 
+from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
 from apps.documents.models import Document
+from apps.members.models import Guardian, Member
 from apps.registrations.models import RegistrationApplication
 
 REQUIRED_SUBMIT_FIELDS = (
@@ -67,7 +70,10 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
 
 
 def can_edit_application(application: RegistrationApplication, actor_account: ParentAccount | None) -> bool:
-    """Return True if the actor may edit the application."""
+    """Return True if the actor may edit the application.
+
+    Allows editing for status `draft` and `fix_requested` only.
+    """
     result: bool = application.is_editable_by(actor_account)
     return result
 
@@ -170,20 +176,27 @@ def submit_application(
     application: RegistrationApplication,
     actor_account: ParentAccount | None,
 ) -> RegistrationApplication:
-    """Submit a draft application. Raises ValueError on validation failure."""
+    """Submit a draft or fix_requested application. Raises ValueError on validation failure."""
     if application.parent_account_id is not None and (
         actor_account is None or application.parent_account_id != actor_account.id
     ):
         raise ValueError("not allowed to submit this application")
-    if application.status != RegistrationApplication.Status.DRAFT:
-        raise ValueError("only draft applications can be submitted")
+    if application.status not in (
+        RegistrationApplication.Status.DRAFT,
+        RegistrationApplication.Status.FIX_REQUESTED,
+    ):
+        raise ValueError("only draft or fix_requested applications can be submitted")
 
     _require_complete_application(application)
     _require_active_child_identity_document(application)
 
     application.status = RegistrationApplication.Status.SUBMITTED
     application.submitted_at = timezone.now()
-    application.save(update_fields=["status", "submitted_at", "updated_at"])
+    # Clear review metadata on resubmission
+    application.review_message = ""
+    application.reviewed_by = None
+    application.reviewed_at = None
+    application.save(update_fields=["status", "submitted_at", "updated_at", "review_message", "reviewed_by_id", "reviewed_at"])
     return application
 
 
@@ -202,3 +215,115 @@ def attach_claimed_email_apps_to_parent(email: str, parent_account: ParentAccoun
         parent_account__isnull=True,
     ).update(parent_account=parent_account)
     return count
+
+
+# ---------------------------------------------------------------------------
+# Review actions
+# ---------------------------------------------------------------------------
+
+
+def request_application_fix(
+    application: RegistrationApplication,
+    reviewer: settings.AUTH_USER_MODEL,
+    message: str,
+) -> RegistrationApplication:
+    """Request fixes from the parent. Only allowed from submitted status."""
+    if application.status != RegistrationApplication.Status.SUBMITTED:
+        raise ValueError("can only request fix on submitted application")
+
+    if not message or not message.strip():
+        raise ValueError("fix message is required")
+
+    application.status = RegistrationApplication.Status.FIX_REQUESTED
+    application.review_message = message.strip()
+    application.reviewed_by = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
+
+    _send_notification(
+        application,
+        subject="Jūsu pieteikums ir jālabo",
+        message=f"Pieteikuma labojuma pieprasījums:\n\n{message.strip()}\n\nLūdzu, labojiet pieteikumu un iesniedziet to vēlreiz.",
+    )
+    return application
+
+
+def reject_application(
+    application: RegistrationApplication,
+    reviewer: settings.AUTH_USER_MODEL,
+    message: str,
+) -> RegistrationApplication:
+    """Reject an application. Only allowed from submitted status."""
+    if application.status != RegistrationApplication.Status.SUBMITTED:
+        raise ValueError("can only reject submitted application")
+
+    if not message or not message.strip():
+        raise ValueError("reject message is required")
+
+    application.status = RegistrationApplication.Status.REJECTED
+    application.review_message = message.strip()
+    application.reviewed_by = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
+
+    _send_notification(
+        application,
+        subject="Jūsu pieteikums ir noraidīts",
+        message=f"Pieteikuma noraidīšanas iemesls:\n\n{message.strip()}",
+    )
+    return application
+
+
+def approve_application(
+    application: RegistrationApplication,
+    reviewer: settings.AUTH_USER_MODEL,
+) -> RegistrationApplication:
+    """Approve an application, creating Guardian + Member. Idempotent."""
+    # Idempotent: if already approved with linked member, return as-is
+    if application.approved_member_id is not None:
+        return application
+
+    if application.status != RegistrationApplication.Status.SUBMITTED:
+        raise ValueError("can only approve submitted application")
+
+    # Create Guardian from application guardian data
+    guardian = Guardian.objects.create(
+        full_name=application.guardian_full_name,
+        personal_id=application.guardian_personal_id,
+        email=application.guardian_email,
+        phone=application.guardian_phone,
+        address=application.guardian_address,
+    )
+
+    # Create Member linked to Guardian, no training_group
+    member = Member.objects.create(
+        full_name=application.child_full_name,
+        personal_id=application.child_personal_id,
+        birth_date=application.child_birth_date,
+        guardian=guardian,
+        training_group=None,
+    )
+
+    application.status = RegistrationApplication.Status.APPROVED
+    application.approved_member = member
+    application.reviewed_by = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "approved_member_id", "reviewed_by_id", "reviewed_at", "updated_at"])
+
+    _send_notification(
+        application,
+        subject="Jūsu pieteikums ir apstiprināts",
+        message=f"Bija veiksmīgi apstiprināts. Jūsu bērns '{application.child_full_name}' ir pievienots kluba dalībnieku reģistram.",
+    )
+    return application
+
+
+def _send_notification(application: RegistrationApplication, subject: str, message: str) -> None:
+    """Send an email notification to the parent's email address."""
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[application.guardian_email],
+        fail_silently=False,
+    )

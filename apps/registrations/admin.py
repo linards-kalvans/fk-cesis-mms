@@ -1,0 +1,40 @@
+"""Django admin for registrations app."""
+
+from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
+
+from apps.registrations.models import RegistrationApplication
+
+
+@admin.register(RegistrationApplication)
+class RegistrationApplicationAdmin(admin.ModelAdmin):
+    list_display = (
+        "child_full_name",
+        "guardian_email",
+        "status",
+        "submitted_at",
+        "review_link",
+    )
+    list_filter = ("status",)
+    search_fields = ("child_full_name", "guardian_email", "guardian_full_name")
+    readonly_fields = (
+        "status",
+        "submitted_at",
+        "review_message",
+        "reviewed_by",
+        "reviewed_at",
+        "approved_member",
+        "created_at",
+        "updated_at",
+    )
+
+    def review_link(self, obj) -> str:  # type: ignore[override]
+        """Link to the custom review detail page."""
+        if obj.pk:
+            url = reverse("registrations:admin-review-detail", args=[obj.pk])
+            return format_html('<a href="{}">Review</a>', url)  # type: ignore[return-value,no-any-return]
+        return "-"
+
+    review_link.short_description = "Review"  # type: ignore[assignment,attr-defined]
+    review_link.admin_order_field = "pk"  # type: ignore[assignment,attr-defined]

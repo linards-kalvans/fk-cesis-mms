@@ -1,9 +1,9 @@
 # FK Cēsis MMS Milestones
 
 ## Current Execution Snapshot
-- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links), Task 5 (registration application workflow)
-- **Next active implementation task:** Visual system + registration form redesign (build-now), followed by Task 6 — Admin review and member creation
-- **Current milestone focus:** `M2` registration intake is substantially implemented (draft/submit, magic-link portal, document upload); private document access controls are now implemented; remaining `M1` deliverables still need implementation (background jobs, audit baseline)
+- **Completed implementation tasks:** Task 1 (project bootstrap), Task 2 (absorbed into Task 1), Task 3 (core app skeleton and `TimeStampedModel`), Task 4 (parent accounts and magic links), Task 5 (registration application workflow), Task 6 (admin review queue/detail, fix/reject/approve workflow, member and guardian creation on approval)
+- **Next active implementation task:** Visual system + registration form redesign (build-now), parent identity verification security fix, agreement generation/signing module
+- **Current milestone focus:** `M2` registration intake is substantially implemented; `M3` admin review and member creation baseline is now implemented (queue, fix/reject/approve, member+guardian creation); remaining `M1` deliverables still need implementation (background jobs, audit baseline)
 - **Current acceptance-test baseline:** LAN URL `http://192.168.3.245:8000` — registration workflow is usable for acceptance flow
 - **Task 5 polish:** `/register/` accessible without login; anonymous save-draft creates/links `ParentAccount`; single edit form with save-draft and submit actions; native date picker for child birth date
 - **Technical debt:** registration edit flow does not show existing uploaded identity document state, so unnecessary re-uploads can replace earlier files; Django admin also needs clearer active vs replaced document UX for soft-deleted rows.
@@ -58,20 +58,20 @@
 
 ## M3 — Admin review and member creation
 **Priority:** High
-**Status:** Pending — depends on M1 security baseline and agreement research outcomes
+**Status:** Partially complete — admin review queue, detail pages, request-fix / reject / approve actions, and member+guardian creation on approval are implemented; training group assignment and admin activity audit entries are still pending
 **Goal:** Let admins review applications and convert approved ones into official members.
 
 **Deliverables**
-- admin application queue
-- request-fix / reject / approve actions
-- member creation on approval
-- training group assignment
-- admin activity audit entries
+- admin application queue ✅
+- request-fix / reject / approve actions ✅
+- member creation on approval ✅ (creates `Member` and `Guardian`; `training_group` left empty)
+- training group assignment *(pending)*
+- admin activity audit entries *(pending)*
 
 **Acceptance criteria**
-- admins can process submitted applications end-to-end
-- parent receives notification for fix request
-- approved application creates member exactly once
+- admins can process submitted applications end-to-end ✅
+- parent receives notification for fix request ✅ (reflected in parent portal)
+- approved application creates member exactly once ✅
 
 ## M4 — Billing and Invoice Ninja sync
 **Priority:** High

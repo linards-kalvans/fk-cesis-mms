@@ -43,12 +43,39 @@ class RegistrationApplication(TimeStampedModel):
     child_birth_date = models.DateField(null=True, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
 
+    # Review metadata
+    review_message = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_applications",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    # Approval link — one-to-one via unique FK
+    approved_member = models.OneToOneField(
+        "members.Member",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_application",
+    )
+
     def is_draft(self) -> bool:
         result: bool = self.status == self.Status.DRAFT
         return result
 
     def is_editable_by(self, parent_account):
-        result: bool = bool(parent_account and self.parent_account_id == parent_account.id and self.is_draft())
+        """Editable when parent owns it AND status is draft or fix_requested."""
+        if not parent_account or self.parent_account_id != parent_account.id:
+            result: bool = False
+            return result
+        if self.status in (self.Status.DRAFT, self.Status.FIX_REQUESTED):
+            result = True
+        else:
+            result = False
         return result
 
     def __str__(self):

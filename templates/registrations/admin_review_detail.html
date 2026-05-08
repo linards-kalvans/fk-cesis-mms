@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <h1>Pieteikuma pārskats — {{ application.child_full_name|default:"—" }}</h1>
+
+    {% if error %}
+      <div class="fk-error-summary">{{ error }}</div>
+    {% endif %}
+
+    <section class="fk-status-card">
+      <h2>Bērna informācija</h2>
+      <p><strong>Vārds, uzvārds:</strong> {{ application.child_full_name }}</p>
+      <p><strong>Personas kods:</strong> {{ application.child_personal_id }}</p>
+      <p><strong>Dzimšanas datums:</strong> {{ application.child_birth_date|date:"d.m.Y" }}</p>
+    </section>
+
+    <section class="fk-status-card">
+      <h2>Vecāka informācija</h2>
+      <p><strong>Vārds, uzvārds:</strong> {{ application.guardian_full_name }}</p>
+      <p><strong>Personas kods:</strong> {{ application.guardian_personal_id }}</p>
+      <p><strong>E-pasts:</strong> {{ application.guardian_email }}</p>
+      <p><strong>Tālrunis:</strong> {{ application.guardian_phone }}</p>
+      <p><strong>Adrese:</strong> {{ application.guardian_address }}</p>
+    </section>
+
+    {% if active_doc %}
+    <section class="fk-status-card">
+      <h2>Dokuments</h2>
+      <p><a href="{% url 'documents:admin-document-preview' active_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
+      <p><a href="{% url 'documents:admin-document-download' active_doc.id %}">Lejupielādēt dokumentu</a></p>
+    </section>
+    {% endif %}
+
+    {% if application.review_message %}
+    <section class="fk-status-card">
+      <h2>Revīzijas ziņojums</h2>
+      <p>{{ application.review_message }}</p>
+      <p>Revidents: {{ application.reviewed_by|default:"—" }} | Datums: {{ application.reviewed_at|date:"d.m.Y H:i" }}</p>
+    </section>
+    {% endif %}
+
+    {% if application.status == "submitted" %}
+    <section class="fk-review-actions">
+      <h2>Revīzijas darbības</h2>
+
+      <form method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" name="action" value="approve">Apstiprināt</button>
+      </form>
+
+      <button type="button" onclick="document.getElementById('fix-form').style.display='block'; document.getElementById('reject-form').style.display='block';">Pieprasīt labojumu / Noraidīt</button>
+
+      <form id="fix-form" method="post" style="display:none; margin-top: 1em;">
+        {% csrf_token %}
+        <h3>Pieprasīt labojumu</h3>
+        <label for="fix_message">Ziņojums:</label>
+        <textarea name="review_message" id="fix_message" rows="3" style="width:100%;"></textarea>
+        <button type="submit" name="action" value="request_fix">Pieprasīt labojumu</button>
+      </form>
+
+      <form id="reject-form" method="post" style="display:none; margin-top: 1em;">
+        {% csrf_token %}
+        <h3>Noraidīt pieteikumu</h3>
+        <label for="reject_message">Ziņojums:</label>
+        <textarea name="review_message" id="reject_message" rows="3" style="width:100%;"></textarea>
+        <button type="submit" name="action" value="reject">Noraidīt</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
