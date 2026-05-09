@@ -7,6 +7,7 @@ from apps.registrations import views
 app_name = "registrations"
 
 urlpatterns = [
+    path("applications/new/", views.new_application, name="new-application"),
     path("register/", views.start_registration, name="start-registration"),
     path("applications/<int:application_id>/edit/", views.edit_registration, name="edit-registration"),
     path("applications/<int:application_id>/submit/", views.submit_registration, name="submit-registration"),

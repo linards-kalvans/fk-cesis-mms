@@ -10,14 +10,14 @@ from apps.registrations.models import RegistrationApplication
 @admin.register(RegistrationApplication)
 class RegistrationApplicationAdmin(admin.ModelAdmin):
     list_display = (
-        "child_full_name",
+        "member_full_name",
         "guardian_email",
         "status",
         "submitted_at",
         "review_link",
     )
     list_filter = ("status",)
-    search_fields = ("child_full_name", "guardian_email", "guardian_full_name")
+    search_fields = ("member_full_name", "guardian_email", "guardian_full_name")
     readonly_fields = (
         "status",
         "submitted_at",

@@ -1,11 +1,12 @@
-"""Views for magic-link auth flow."""
+"""Views for magic-link auth flow and one-time code verification."""
 
 from typing import cast
 
 from django.urls import reverse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.conf import settings
+from django.http import HttpRequest, HttpResponse
 
 from apps.accounts.forms import MagicLinkRequestForm
 from apps.accounts.models import ParentAccount
@@ -15,6 +16,7 @@ from apps.accounts.services import (
     issue_magic_link_for_email,
     send_magic_link,
     send_magic_link_for_claimed_email,
+    verify_one_time_code,
 )
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 
@@ -82,3 +84,52 @@ def logout_view(request):
         pass
     request.session.flush()
     return redirect("registrations:start-registration")
+
+
+@require_http_methods(["GET", "POST"])
+def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
+    """POST /register/verify/ — verify one-time code, log in, redirect to portal."""
+    pending = request.session.get("pending_verification_email")
+
+    if request.method == "POST":
+        if not pending:
+            return render(
+                request,
+                "registrations/verify_code.html",
+                {"error": "Nav gaidoša e-pasta verifikācijas.", "code": ""},
+                status=400,
+            )
+
+        code = request.POST.get("code", "").strip()
+        if not code:
+            return render(
+                request,
+                "registrations/verify_code.html",
+                {"error": "Ievadiet piekļuves kodu.", "code": ""},
+                status=400,
+            )
+
+        try:
+            account = verify_one_time_code(pending, code)
+        except ValueError:
+            return render(
+                request,
+                "registrations/verify_code.html",
+                {"error": "Nederīgs vai noilgušs kods.", "code": code},
+            )
+
+        # Log in
+        request.session[PARENT_ACCOUNT_SESSION_KEY] = account.pk
+        # Clear pending
+        del request.session["pending_verification_email"]
+        return redirect("registrations:parent-portal")
+
+    # GET — show form only if pending email exists
+    if not pending:
+        return redirect("registrations:start-registration")
+
+    return render(
+        request,
+        "registrations/verify_code.html",
+        {"pending_email": pending},
+    )

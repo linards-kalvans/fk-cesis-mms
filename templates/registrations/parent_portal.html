@@ -4,28 +4,45 @@
 {% block content %}
 <div class="fk-parent-shell">
   <div class="fk-parent-shell__inner">
+
+    {% if has_draft %}
     <section class="fk-card fk-portal-summary">
       <h1>Mani pieteikumi</h1>
       <p>Šeit redzams katra pieteikuma statuss un nākamais solis.</p>
+      <form method="post" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" name="action" value="continue_draft" class="fk-button fk-button--primary">Turpināt melnrakstu</button>
+      </form>
+      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--secondary">Sākt jaunu reģistrāciju</a>
     </section>
+    {% else %}
+    <section class="fk-card fk-portal-summary">
+      <h1>Mani pieteikumi</h1>
+      <p>Šeit redzams katra pieteikuma statuss un nākamais solis.</p>
+      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--primary">Sākt jaunu reģistrāciju</a>
+    </section>
+    {% endif %}
 
-    {% for application in applications %}
-      <article class="fk-status-card">
-        <h2>{{ application.child_full_name|default:application.guardian_email }}</h2>
-        <p class="fk-status-card__guardian">{{ application.guardian_full_name|default:application.guardian_email }}</p>
-        <p>{{ application.get_status_display }}</p>
-        {% if application.review_message %}
-          <p class="fk-review-message">{{ application.review_message }}</p>
-        {% endif %}
-        {% if application.can_edit %}
-          <a class="fk-button fk-button--secondary" href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
-        {% else %}
-          <a class="fk-button fk-button--secondary" href="{% url 'registrations:view-registration-summary' application.id %}">Skatīt pieteikumu</a>
-        {% endif %}
-      </article>
-    {% empty %}
-      <p>Nav pieteikumu.</p>
-    {% endfor %}
+    <section class="fk-card fk-registrations-list">
+      <h2>Pieteikumu saraksts</h2>
+      {% for application in applications %}
+        <article class="fk-status-card">
+          <h2>{{ application.member_full_name|default:application.guardian_email }}</h2>
+          <p class="fk-status-card__guardian">{{ application.guardian_full_name|default:application.guardian_email }}</p>
+          <p>{{ application.get_status_display }}</p>
+          {% if application.review_message %}
+            <p class="fk-review-message">{{ application.review_message }}</p>
+          {% endif %}
+          {% if application.can_edit %}
+            <a class="fk-button fk-button--secondary" href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
+          {% else %}
+            <a class="fk-button fk-button--secondary" href="{% url 'registrations:view-registration-summary' application.id %}">Skatīt pieteikumu</a>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p>Nav pieteikumu.</p>
+      {% endfor %}
+    </section>
   </div>
 </div>
 {% endblock %}

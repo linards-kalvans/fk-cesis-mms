@@ -100,6 +100,11 @@ EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "25"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "false").lower() in {"1", "true", "yes"}
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@fkcesis.local")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "30"))
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes"}
+
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "uploads"
@@ -124,3 +129,7 @@ CSRF_COOKIE_SAMESITE = "None" if _SESSION_URL.scheme == "https" else "Lax"
 # Magic-link auth
 MAGIC_LINK_TTL_MINUTES = 60
 MAGIC_LINK_RATE_LIMIT_PER_MINUTE = 5
+
+# One-time code auth (registration entry)
+ONE_TIME_CODE_RATE_LIMIT_PER_MINUTE = 3
+ONE_TIME_CODE_TTL_SECONDS = 300

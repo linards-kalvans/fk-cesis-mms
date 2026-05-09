@@ -12,7 +12,9 @@ class Document(TimeStampedModel):
     """A private document attached to a registration application."""
 
     class Kind(models.TextChoices):
-        CHILD_IDENTITY = "child_identity", "Child identity"
+        GUARDIAN_IDENTITY = "guardian_identity", "Guardian identity"
+        MEMBER_IDENTITY = "member_identity", "Member identity"
+        MEMBER_PORTRAIT = "member_portrait", "Member portrait"
 
     class OcrStatus(models.TextChoices):
         NOT_REQUESTED = "not_requested", "Not requested"
@@ -27,7 +29,7 @@ class Document(TimeStampedModel):
     )
     kind = models.CharField(max_length=32, choices=Kind.choices)
     file = models.FileField(
-        upload_to="private/child-identity/",
+        upload_to="private/documents/",
         storage=private_document_storage,
     )
     original_filename = models.CharField(max_length=255)

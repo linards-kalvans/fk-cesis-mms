@@ -1,4 +1,4 @@
-"""Magic-link service functions."""
+"""Magic-link and one-time-code service functions."""
 
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -8,8 +8,9 @@ from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils import timezone as django_timezone
 
-from apps.accounts.models import MagicLinkToken, ParentAccount
+from apps.accounts.models import EmailVerificationCode, MagicLinkToken, ParentAccount
 
 # ---------------------------------------------------------------------------
 # Rate-limit tracking (in-memory, app-level)
@@ -223,4 +224,97 @@ def consume_magic_link(raw_token: str) -> ParentAccount:
         token.used_at = _now_utc()
         token.save(update_fields=["used_at"])
 
+    return cast(ParentAccount, account)
+
+
+# ---------------------------------------------------------------------------
+# One-time code for registration entry
+# ---------------------------------------------------------------------------
+
+_OTP_RATE_LIMIT_KEY = "ONE_TIME_CODE_RATE_LIMIT_PER_MINUTE"
+_OTP_CODE_LENGTH = 6
+
+
+def _get_otp_rate_limit() -> int:
+    return int(getattr(settings, _OTP_RATE_LIMIT_KEY, 3))
+
+
+def _get_otp_ttl_seconds() -> int:
+    return int(getattr(settings, "ONE_TIME_CODE_TTL_SECONDS", 300))
+
+
+def issue_one_time_code(email: str) -> str:
+    """Issue a 6-digit one-time code for *email*.
+
+    Returns the raw code string.  Respects rate-limit per email.
+    """
+    limit = _get_otp_rate_limit()
+    now = _now_utc().timestamp()
+    window_start = now - 60.0
+    timestamps = _send_timestamps.setdefault(email, [])
+    _send_timestamps[email] = [t for t in timestamps if t > window_start]
+    if len(_send_timestamps[email]) >= limit:
+        raise ValueError("Rate limit exceeded")
+
+    code = str(secrets.randbelow(10**_OTP_CODE_LENGTH)).zfill(_OTP_CODE_LENGTH)
+    ttl = _get_otp_ttl_seconds()
+
+    EmailVerificationCode.objects.create(
+        email=email,
+        code_hash=_hash_token(code),
+        expires_at=django_timezone.now() + timedelta(seconds=ttl),
+    )
+    return code
+
+
+def send_one_time_code_email(email: str, raw_code: str) -> None:
+    """Send the one-time code to *email*."""
+    subject = "Jūsu piekļuves kods — FK Cēsis MMS"
+    body = f"Jūsu piekļuves kods ir: {raw_code}\n\nŠis kods ir spēkā 5 minūtes."
+
+    send_mail(
+        subject=subject,
+        message=body,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@example.com"),
+        recipient_list=[email],
+        fail_silently=False,
+    )
+    _record_send(email)
+
+
+def verify_one_time_code(email: str, code: str) -> ParentAccount:
+    """Verify a one-time code for *email*.
+
+    Returns the ``ParentAccount``.  Creates one for new emails.
+    Raises ``ValueError`` on bad/expired/used code.
+    """
+    record = (
+        EmailVerificationCode.objects.filter(
+            email__iexact=email,
+            code_hash=_hash_token(code),
+            used_at__isnull=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    if record is None:
+        raise ValueError("Invalid code")
+
+    if record.is_expired:
+        raise ValueError("Code expired")
+
+    # Mark used (single-use)
+    record.used_at = django_timezone.now()
+    record.save(update_fields=["used_at"])
+
+    # Get or create parent account (email is unique, case-sensitive lookup)
+    account, _ = ParentAccount.objects.get_or_create(
+        email=email,
+        defaults={"phone": ""},
+    )
+
+    from apps.registrations.services import attach_claimed_email_apps_to_parent
+
+    attach_claimed_email_apps_to_parent(email, cast(ParentAccount, account))
     return cast(ParentAccount, account)

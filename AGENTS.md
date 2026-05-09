@@ -24,29 +24,31 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–6 complete in current worktree.** Registration workflow is usable for LAN acceptance testing; admin review queue and member creation baseline are operational.
+**Tasks 1–6 complete in current worktree, and P1 is complete.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, and guardian-email-first verified registration gate are operational.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
-- `apps/accounts/models.py` implements `ParentAccount` and `MagicLinkToken`.
-- `apps/accounts/services.py` implements `issue_magic_link`, `send_magic_link`, `consume_magic_link`.
-- `apps/accounts/views.py` implements request, verify, and logout views.
+- `apps/accounts/models.py` implements `ParentAccount`, `MagicLinkToken`, and `EmailVerificationCode`.
+- `apps/accounts/services.py` implements `issue_magic_link`, `send_magic_link`, `consume_magic_link`, plus one-time email code issue/send/verify helpers.
+- `apps/accounts/views.py` implements request, verify, logout, and one-time code verification views.
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
-- `apps/registrations/models.py` implements `RegistrationApplication` with draft/submitted states and fix/reject/approve workflow.
-- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, link to parent account, and admin review actions (request_fix, reject, approve).
-- `apps/registrations/views.py` provides start, edit, parent portal, and admin review queue/detail views.
-- `apps/members/models.py` implements `Member`, `Guardian`, and `TrainingGroup` models; approval creates `Member` + `Guardian` with `training_group` left empty.
-- `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`) and placeholder OCR status.
+- `apps/registrations/models.py` implements `RegistrationApplication` with finalized P1 guardian/member/application fields, draft/submitted states, and fix/reject/approve workflow.
+- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, chooser/prefill support, same-address handling, link to parent account, and admin review actions (request_fix, reject, approve).
+- `apps/registrations/views.py` provides guardian email entry, verified registration create/edit, chooser portal, and admin review queue/detail views.
+- `apps/members/models.py` implements `Member`, `Guardian`, `TrainingGroup`, and `KitSizeOption` models; approval creates `Member` + `Guardian` with `training_group` left empty.
+- `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`), P1 document kinds, and placeholder OCR status.
 - `apps/documents` uses a dedicated private storage root (`private-uploads/`) and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
 - `.env` autoload works for local commands and app startup.
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 
-### Task 5 polish (registration workflow UX)
-- `/register/` accessible without prior login in current implementation.
-- Current implementation still allows anonymous same-browser draft continuation before verified-gate redesign lands.
+### P1 delivered registration workflow UX
+- `/register/` is guardian email entry for one-time code verification.
+- `/register/verify/` completes verified parent access before continuation.
+- `/portal/` acts as chooser/dashboard for verified guardians.
+- `/applications/new/` starts a new verified registration with guardian-only prefill.
+- Anonymous same-browser draft continuation was removed; edit/submit now require verified parent ownership.
 - Edit page uses a single form with two actions: **save draft** and **submit application**.
-- Child birth date field uses native browser `<input type="date">` picker.
-- Conflicting birth-date hint text removed from edit form.
+- Member address supports live **Adrese tāda pati kā vecāka** sync and restore behavior.
 
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
@@ -57,8 +59,8 @@ Target Django monolith with domain apps:
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
-- **Registration entry direction:** registration starts with guardian email; existing guardian gets magic link for verified continuation and prefill, new guardian must verify email before continuing. Guardian and child/player field sets are not final and must be reviewed early. See `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
-- **Security fix — parent identity verification:** typed email in registration draft is a claim, not proof of ownership. Verified access gates registration continuation and portal access; social login may later satisfy same gate. See `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`.
+- **Registration entry direction:** implemented in P1 as guardian email entry with one-time email code verification, verified continuation, guardian-only prefill, and chooser/dashboard for existing guardians. See `docs/superpowers/specs/2026-05-08-p1-field-contract-and-verified-registration-gate-design.md`.
+- **Security fix — parent identity verification:** implemented in P1. Typed email in registration draft is a claim, not proof of ownership. Verified access now gates registration continuation and portal access. See `docs/superpowers/specs/2026-05-08-p1-field-contract-and-verified-registration-gate-design.md`.
 - **Research spikes / preferred directions:** OCR vendor shortlist with **tiny-IDP** favored first, agreement generation with manual signing first and **DocuSeal self-hosted** favored for future richer processing, and SMTP/email provider strategy for scale.
 - **Hosting stance:** self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability.
 - **Visual direction:** unified design system, calm centered parent flow, denser admin shell, club logo hero-style on parent entry screens.

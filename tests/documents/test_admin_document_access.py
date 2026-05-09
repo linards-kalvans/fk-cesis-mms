@@ -1,4 +1,4 @@
-"""Task 1 + Task 6 Step 1 — Private registration document access tests (RED phase).
+"""P1 — Private registration document access tests (RED phase).
 
 Covers:
 1. Document files save under PRIVATE_DOCUMENTS_ROOT.
@@ -9,7 +9,7 @@ Covers:
 6. Admin change page shows preview/download links.
 7. Soft-deleted document returns 404.
 8. Admin download streams file without storage redirect.
-9. Saved file name keeps relative path starting with private/child-identity/.
+9. Saved file name keeps relative path starting with private/documents/.
 """
 
 import pytest
@@ -55,7 +55,7 @@ def _make_document():
     )
     return Document.objects.create(
         application=application,
-        kind=Document.Kind.CHILD_IDENTITY,
+        kind=Document.Kind.GUARDIAN_IDENTITY,
         file=SimpleUploadedFile("id.png", b"file-bytes", content_type="image/png"),
         original_filename="id.png",
         content_type="image/png",
@@ -64,7 +64,7 @@ def _make_document():
 
 
 # ---------------------------------------------------------------------------
-# Task 1 — storage root and endpoint auth
+# Storage root and endpoint auth
 # ---------------------------------------------------------------------------
 
 
@@ -79,13 +79,13 @@ class TestPrivateStorageRoot:
 
     @override_settings(PRIVATE_DOCUMENTS_ROOT="/tmp/test-private-uploads")
     def test_document_keeps_relative_name_under_private_storage_root(self):
-        """Saved file name must keep relative path starting with private/child-identity/."""
+        """Saved file name must keep relative path starting with private/documents/."""
         document = _make_document()
-        assert document.file.name.startswith("private/child-identity/")
+        assert document.file.name.startswith("private/documents/")
 
 
 # ---------------------------------------------------------------------------
-# Task 1 — anonymous preview redirect
+# Anonymous preview redirect
 # ---------------------------------------------------------------------------
 
 
@@ -114,7 +114,7 @@ class TestAnonymousPreviewRedirect:
 
 
 # ---------------------------------------------------------------------------
-# Task 1 — non-admin 404
+# Non-admin 404
 # ---------------------------------------------------------------------------
 
 
@@ -145,7 +145,7 @@ class TestNonAdminAccess:
 
 
 # ---------------------------------------------------------------------------
-# Task 6 Step 1 — admin preview success
+# Admin preview success
 # ---------------------------------------------------------------------------
 
 
@@ -169,7 +169,7 @@ class TestAdminPreview:
 
 
 # ---------------------------------------------------------------------------
-# Task 6 Step 1 — admin download success
+# Admin download success
 # ---------------------------------------------------------------------------
 
 
@@ -193,7 +193,7 @@ class TestAdminDownload:
 
 
 # ---------------------------------------------------------------------------
-# Task 6 Step 1 — admin streams file without storage redirect
+# Admin streams file without storage redirect
 # ---------------------------------------------------------------------------
 
 
@@ -224,7 +224,7 @@ class TestAdminDownloadStreamsFile:
 
 
 # ---------------------------------------------------------------------------
-# Task 6 Step 1 — soft-deleted document returns 404
+# Soft-deleted document returns 404
 # ---------------------------------------------------------------------------
 
 
@@ -238,7 +238,7 @@ class TestSoftDeletedDocument:
         client.force_login(admin)
         document = _make_document()
         document.deleted_at = timezone.now()
-        document.save(update_fields=["deleted_at", "updated_at"])
+        document.save(update_fields=["deleted_at"])
 
         response = client.get(
             reverse("documents:admin-document-preview", args=[document.pk])
@@ -253,7 +253,7 @@ class TestSoftDeletedDocument:
         client.force_login(admin)
         document = _make_document()
         document.deleted_at = timezone.now()
-        document.save(update_fields=["deleted_at", "updated_at"])
+        document.save(update_fields=["deleted_at"])
 
         response = client.get(
             reverse("documents:admin-document-download", args=[document.pk])
@@ -305,7 +305,7 @@ class TestMissingStorageFileReturns404:
 
 
 # ---------------------------------------------------------------------------
-# Task 6 Step 1 — Django admin change page shows preview/download links
+# Django admin change page shows preview/download links
 # ---------------------------------------------------------------------------
 
 

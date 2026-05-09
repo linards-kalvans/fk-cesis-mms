@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from apps.members.models import Guardian, Member, TrainingGroup
+from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
 
 
 @admin.register(Guardian)
@@ -22,3 +22,10 @@ class MemberAdmin(admin.ModelAdmin):
     list_display = ("full_name", "guardian", "birth_date", "training_group")
     list_filter = ("training_group",)
     search_fields = ("full_name", "personal_id")
+
+
+@admin.register(KitSizeOption)
+class KitSizeOptionAdmin(admin.ModelAdmin):
+    list_display = ("kind", "label", "is_active")
+    list_filter = ("kind", "is_active")
+    search_fields = ("label",)

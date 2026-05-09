@@ -17,7 +17,7 @@
       <tbody>
         {% for application in applications %}
         <tr>
-          <td><a href="{% url 'registrations:admin-review-detail' application.id %}">{{ application.child_full_name|default:"—" }}</a></td>
+          <td><a href="{% url 'registrations:admin-review-detail' application.id %}">{{ application.member_full_name|default:"—" }}</a></td>
           <td>{{ application.guardian_full_name|default:"—" }}</td>
           <td>{{ application.get_status_display }}</td>
           <td>{{ application.submitted_at|date:"d.m.Y H:i" }}</td>

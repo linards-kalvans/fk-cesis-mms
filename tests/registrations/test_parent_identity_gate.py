@@ -1,14 +1,12 @@
 """Parent identity gate — security regression tests.
 
-Red-phase: these tests assert the verified identity gate behavior described in
-docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md.
-
-They must FAIL against the current implementation because:
-- parent_account is non-nullable FK (no claimed_email / verified_parent split)
-- draft save auto-creates ParentAccount by typed email
-- magic-link request requires ParentAccount to exist
-- portal queries by parent_account which = auto-linked email
-- no draft_session_key for same-browser continuity
+P1-aligned. Covers:
+- Typed email must NOT expose another parent's registrations.
+- Cross-browser draft protection.
+- Magic-link request works for claimed-email without pre-existing ParentAccount.
+- After verification, matching claimed-email apps become visible.
+- Portal queries by verified parent ownership.
+- Submitted applications remain read-only.
 """
 
 import pytest
@@ -30,7 +28,25 @@ def _login_via_magic_link(client, account):
     client.get(f"/accounts/verify/{raw}/")
 
 
-def _make_child_identity_file(name="id.png"):
+def _make_member_identity_file(name="id.png"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _make_guardian_identity_file(name="guardian_id.png"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _make_member_portrait_file(name="portrait.png"):
     from django.core.files.uploadedfile import SimpleUploadedFile
     return SimpleUploadedFile(
         name=name,
@@ -64,10 +80,10 @@ class TestNoCrossRegistrationExposure:
                 "guardian_full_name": "Parent A",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Child A",
-                "child_personal_id": "010125-11111",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child A",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-01-01",
             },
             files={},
         )
@@ -81,10 +97,10 @@ class TestNoCrossRegistrationExposure:
                 "guardian_full_name": "Parent B Impostor",
                 "guardian_personal_id": "010101-22222",
                 "guardian_phone": "+37133333333",
-                "guardian_address": "Riga 2",
-                "child_full_name": "Child B",
-                "child_personal_id": "010125-22222",
-                "child_birth_date": "2025-02-01",
+                "guardian_declared_address": "Riga 2",
+                "member_full_name": "Child B",
+                "member_personal_id": "010125-22222",
+                "member_birth_date": "2025-02-01",
             },
             files={},
         )
@@ -111,10 +127,10 @@ class TestNoCrossRegistrationExposure:
                 "guardian_full_name": "Secure Parent",
                 "guardian_personal_id": "010101-44444",
                 "guardian_phone": "+37155555555",
-                "guardian_address": "Riga 4",
-                "child_full_name": "Child Secure",
-                "child_personal_id": "010125-44444",
-                "child_birth_date": "2025-03-01",
+                "guardian_declared_address": "Riga 4",
+                "member_full_name": "Child Secure",
+                "member_personal_id": "010125-44444",
+                "member_birth_date": "2025-03-01",
             },
             files={},
             verified_account=parent_a,
@@ -134,85 +150,7 @@ class TestNoCrossRegistrationExposure:
 
 
 # ---------------------------------------------------------------------------
-# 2. Anonymous user can save and resume a draft in the same browser session.
-# ---------------------------------------------------------------------------
-
-class TestAnonymousDraftContinuity:
-    """Anonymous draft save + resume must work in same browser session."""
-
-    def test_anonymous_user_can_save_and_resume_draft(self):
-        """Anonymous user saves draft → closes session → reopens → can edit."""
-        from apps.registrations.services import create_or_update_draft
-
-        # Save draft anonymously (no login)
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "anonymous@example.com",
-                "guardian_full_name": "Anonymous Parent",
-                "guardian_personal_id": "010101-99999",
-                "guardian_phone": "+37166666666",
-                "guardian_address": "Riga 6",
-                "child_full_name": "Child Anon",
-                "child_personal_id": "010125-99999",
-                "child_birth_date": "2025-04-01",
-            },
-            files={},
-        )
-
-        # The draft should have a draft_session_key for same-browser access
-        # This field must exist on the model
-        assert hasattr(app, "draft_session_key"), (
-            "RegistrationApplication must have draft_session_key field."
-        )
-        assert app.draft_session_key is not None, (
-            "draft_session_key must be set when draft is saved."
-        )
-
-    def test_same_browser_can_resume_draft_without_verification(self):
-        """Same browser can reopen draft via session without magic-link verification."""
-        client = Client()
-        from apps.registrations.services import create_or_update_draft
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "resume@example.com",
-                "guardian_full_name": "Resume Parent",
-                "guardian_personal_id": "010101-77777",
-                "guardian_phone": "+37188888888",
-                "guardian_address": "Riga 7",
-                "child_full_name": "Child Resume",
-                "child_personal_id": "010125-77777",
-                "child_birth_date": "2025-05-01",
-            },
-            files={},
-        )
-
-        # Start page POST creates draft and stores session info
-        resp = client.post(
-            "/register/",
-            data={
-                "guardian_email": "resume@example.com",
-                "guardian_full_name": "Resume Parent 2",
-                "guardian_personal_id": "010101-77778",
-                "guardian_phone": "+37188888889",
-                "guardian_address": "Riga 7b",
-                "child_full_name": "Child Resume 2",
-                "child_personal_id": "010125-77778",
-                "child_birth_date": "2025-05-02",
-            },
-            follow=False,
-        )
-        assert resp.status_code == 302
-
-        # Edit page should be accessible without login
-        edit_resp = client.get(resp.url, follow=False)
-        assert edit_resp.status_code == 200, (
-            "Same browser must be able to resume draft without verification."
-        )
-
-
-# ---------------------------------------------------------------------------
-# 3. Different browser cannot access a draft by application ID alone.
+# 2. Different browser cannot access a draft by application ID alone.
 # ---------------------------------------------------------------------------
 
 class TestCrossBrowserDraftProtection:
@@ -229,10 +167,10 @@ class TestCrossBrowserDraftProtection:
                 "guardian_full_name": "Cross Browser",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37144444444",
-                "guardian_address": "Riga 3",
-                "child_full_name": "Child Cross",
-                "child_personal_id": "010125-33333",
-                "child_birth_date": "2025-06-01",
+                "guardian_declared_address": "Riga 3",
+                "member_full_name": "Child Cross",
+                "member_personal_id": "010125-33333",
+                "member_birth_date": "2025-06-01",
             },
             files={},
         )
@@ -246,7 +184,7 @@ class TestCrossBrowserDraftProtection:
 
 
 # ---------------------------------------------------------------------------
-# 4. Magic-link request should work for a claimed-email draft even when
+# 3. Magic-link request should work for a claimed-email draft even when
 #    no ParentAccount existed beforehand.
 # ---------------------------------------------------------------------------
 
@@ -262,8 +200,7 @@ class TestMagicLinkForClaimedEmail:
         from apps.registrations.services import create_or_update_draft
 
         # Create a draft (which stores claimed_email) but no ParentAccount
-        # exists yet. In the current code, _get_or_create_parent_account
-        # creates one — in the target model, the draft has claimed_email
+        # exists yet. In the target model, the draft has claimed_email
         # but no parent_account.
         app = create_or_update_draft(
             data={
@@ -271,10 +208,10 @@ class TestMagicLinkForClaimedEmail:
                 "guardian_full_name": "No Account",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37166666666",
-                "guardian_address": "Riga 5",
-                "child_full_name": "Child NoAcct",
-                "child_personal_id": "010125-55555",
-                "child_birth_date": "2025-07-01",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child NoAcct",
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-07-01",
             },
             files={},
         )
@@ -302,7 +239,7 @@ class TestMagicLinkForClaimedEmail:
 
 
 # ---------------------------------------------------------------------------
-# 5. After successful magic-link verification, matching claimed-email
+# 4. After successful magic-link verification, matching claimed-email
 #    applications become visible in the portal for the verified parent.
 # ---------------------------------------------------------------------------
 
@@ -322,10 +259,10 @@ class TestPostVerificationPortalVisibility:
                 "guardian_full_name": "Verify Portal",
                 "guardian_personal_id": "010101-12121",
                 "guardian_phone": "+37123232323",
-                "guardian_address": "Riga 12",
-                "child_full_name": "Child VP",
-                "child_personal_id": "010125-12121",
-                "child_birth_date": "2025-08-01",
+                "guardian_declared_address": "Riga 12",
+                "member_full_name": "Child VP",
+                "member_personal_id": "010125-12121",
+                "member_birth_date": "2025-08-01",
             },
             files={},
         )
@@ -366,7 +303,7 @@ class TestPostVerificationPortalVisibility:
 
 
 # ---------------------------------------------------------------------------
-# 6. Portal must query by verified parent ownership, not just typed email.
+# 5. Portal must query by verified parent ownership, not just typed email.
 # ---------------------------------------------------------------------------
 
 class TestPortalQueriesByVerifiedParent:
@@ -391,10 +328,10 @@ class TestPortalQueriesByVerifiedParent:
                 "guardian_full_name": "Portal Query A",
                 "guardian_personal_id": "010101-34343",
                 "guardian_phone": "+37145454545",
-                "guardian_address": "Riga 34",
-                "child_full_name": "Child PQ A",
-                "child_personal_id": "010125-34343",
-                "child_birth_date": "2025-09-01",
+                "guardian_declared_address": "Riga 34",
+                "member_full_name": "Child PQ A",
+                "member_personal_id": "010125-34343",
+                "member_birth_date": "2025-09-01",
             },
             files={},
             verified_account=parent_a,
@@ -410,11 +347,9 @@ class TestPortalQueriesByVerifiedParent:
             "Portal must show verified parent's own applications."
         )
 
-    def test_portal_model_has_verified_parent_field(self):
-        """RegistrationApplication must have both claimed_email and
-        verified_parent (or nullable parent_account) for the identity gate.
-        Per the approved design spec the model uses claimed_email +
-        verified_parent FK.
+    def test_portal_model_has_claimed_email_and_nullable_parent_account(self):
+        """RegistrationApplication must have claimed_email and
+        a nullable parent_account for the identity gate.
         """
         from apps.registrations.models import RegistrationApplication
 
@@ -422,24 +357,20 @@ class TestPortalQueriesByVerifiedParent:
         assert "claimed_email" in field_names, (
             "RegistrationApplication must have claimed_email field."
         )
-        # The design spec calls for verified_parent; if the implementation
-        # instead reuses a nullable parent_account, that also satisfies the
-        # gate — but the field must exist and be nullable.
-        has_verified_parent = "verified_parent" in field_names
+        # parent_account must exist and be nullable
         has_nullable_parent_account = False
         if "parent_account" in field_names:
             for f in RegistrationApplication._meta.get_fields():
                 if f.name == "parent_account" and getattr(f, "null", False):
                     has_nullable_parent_account = True
                     break
-        assert has_verified_parent or has_nullable_parent_account, (
-            "RegistrationApplication must have verified_parent field "
-            "or a nullable parent_account field."
+        assert has_nullable_parent_account, (
+            "RegistrationApplication must have a nullable parent_account field."
         )
 
 
 # ---------------------------------------------------------------------------
-# 7. Submitted applications remain read-only.
+# 6. Submitted applications remain read-only.
 # ---------------------------------------------------------------------------
 
 class TestSubmittedApplicationsReadOnly:
@@ -447,7 +378,9 @@ class TestSubmittedApplicationsReadOnly:
 
     def test_submitted_application_not_editable_after_verification(self):
         """Even after magic-link verification, submitted apps remain read-only."""
-        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft
+        from django.utils import timezone
 
         acct = ParentAccount.objects.create(
             email="readonly@example.com",
@@ -459,16 +392,22 @@ class TestSubmittedApplicationsReadOnly:
                 "guardian_full_name": "Read Only",
                 "guardian_personal_id": "010101-56565",
                 "guardian_phone": "+37167676767",
-                "guardian_address": "Riga 56",
-                "child_full_name": "Child RO",
-                "child_personal_id": "010125-56565",
-                "child_birth_date": "2025-10-01",
+                "guardian_declared_address": "Riga 56",
+                "member_full_name": "Child RO",
+                "member_personal_id": "010125-56565",
+                "member_birth_date": "2025-10-01",
             },
             files={
-                "child_identity_document": _make_child_identity_file("ro_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("ro_guardian.png"),
+                "member_identity_document": _make_member_identity_file("ro_member.png"),
+                "member_portrait_document": _make_member_portrait_file("ro_portrait.png"),
             },
         )
-        submit_application(app, acct)
+        # Set status directly to submitted (service-layer submit requires kit sizes
+        # which are not created in this test — the gate test only checks editability).
+        app.status = RegistrationApplication.Status.SUBMITTED
+        app.submitted_at = timezone.now()
+        app.save(update_fields=["status", "submitted_at"])
 
         # Login via magic link
         client = Client()
@@ -482,7 +421,9 @@ class TestSubmittedApplicationsReadOnly:
 
     def test_portal_shows_submitted_but_not_editable(self):
         """Submitted application appears in portal with view-only indicator."""
-        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft
+        from django.utils import timezone
 
         acct = ParentAccount.objects.create(
             email="portalro@example.com",
@@ -494,17 +435,22 @@ class TestSubmittedApplicationsReadOnly:
                 "guardian_full_name": "Portal RO",
                 "guardian_personal_id": "010101-78787",
                 "guardian_phone": "+37189898989",
-                "guardian_address": "Riga 78",
-                "child_full_name": "Child PRO",
-                "child_personal_id": "010125-78787",
-                "child_birth_date": "2025-11-01",
+                "guardian_declared_address": "Riga 78",
+                "member_full_name": "Child PRO",
+                "member_personal_id": "010125-78787",
+                "member_birth_date": "2025-11-01",
             },
             files={
-                "child_identity_document": _make_child_identity_file("pro_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("pro_guardian.png"),
+                "member_identity_document": _make_member_identity_file("pro_member.png"),
+                "member_portrait_document": _make_member_portrait_file("pro_portrait.png"),
             },
             verified_account=acct,
         )
-        submit_application(app, acct)
+        # Set status directly to submitted (gate test only checks visibility/editability).
+        app.status = RegistrationApplication.Status.SUBMITTED
+        app.submitted_at = timezone.now()
+        app.save(update_fields=["status", "submitted_at"])
 
         client = Client()
         _login_via_magic_link(client, acct)

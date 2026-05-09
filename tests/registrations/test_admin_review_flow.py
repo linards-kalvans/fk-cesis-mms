@@ -11,9 +11,9 @@ Covers:
 - Django admin changelist shows link to custom review detail page
 - Email sent on fix/reject/approve actions
 
-Parent-account setup: all drafts are created with verified_account=acct
-so submit_application(app, acct) is valid (the app's parent_account FK
-matches the acct passed to submit).
+All fixtures use P1 field names (member_*, guardian_declared_address,
+guardian_identity_document, member_identity_document, member_portrait,
+kit sizes).
 """
 
 import pytest
@@ -23,14 +23,56 @@ from unittest.mock import patch
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import issue_magic_link
+from apps.members.models import KitSizeOption, Guardian, Member
 from apps.registrations.models import RegistrationApplication
+from apps.registrations.services import (
+    create_or_update_draft,
+    submit_application,
+    request_application_fix,
+    reject_application,
+    approve_application,
+)
 
 pytestmark = pytest.mark.django_db
 
 
 # ---------------------------------------------------------------------------
+# Module-level fixture: kit size options required for submit
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def kit_sizes():
+    """Ensure KitSizeOption records exist before any test runs."""
+    KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT,
+        label="S",
+        defaults={"is_active": True},
+    )
+    KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT,
+        label="M",
+        defaults={"is_active": True},
+    )
+    KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS,
+        label="S",
+        defaults={"is_active": True},
+    )
+    KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS,
+        label="M",
+        defaults={"is_active": True},
+    )
+    return {
+        "shirt": KitSizeOption.objects.get(kind=KitSizeOption.Kind.SHIRT, label="S"),
+        "shorts": KitSizeOption.objects.get(kind=KitSizeOption.Kind.SHORTS, label="S"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _login_via_magic_link(client, account):
     """Convenience: issue magic link and GET verify to establish session."""
@@ -38,7 +80,7 @@ def _login_via_magic_link(client, account):
     client.get(f"/accounts/verify/{raw}/")
 
 
-def _make_child_identity_file(name="id.png"):
+def _make_png(name="doc.png"):
     from django.core.files.uploadedfile import SimpleUploadedFile
     return SimpleUploadedFile(
         name=name,
@@ -59,28 +101,50 @@ def _create_staff_user():
 def _create_submitted_app(email="review@example.com"):
     """Create and submit a RegistrationApplication with verified_account.
 
-    Pattern: create ParentAccount first, then pass verified_account=acct
-    into create_or_update_draft, then call submit_application(app, acct).
+    Uses P1 field names and all required documents/kit sizes for a valid
+    submit.
     """
-    from apps.registrations.services import create_or_update_draft, submit_application
+    shirt, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT,
+        label="S",
+        defaults={"is_active": True},
+    )
+    shorts, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS,
+        label="S",
+        defaults={"is_active": True},
+    )
 
     acct = ParentAccount.objects.create(
         email=email,
         phone="+37111111111",
     )
+
+    guardian_doc = _make_png("guardian_id.png")
+    member_doc = _make_png("member_id.png")
+    portrait_doc = _make_png("portrait.png")
+
     app = create_or_update_draft(
         data={
             "guardian_email": email,
             "guardian_full_name": "Review Guardian",
             "guardian_personal_id": "010101-11111",
             "guardian_phone": "+37122222222",
-            "guardian_address": "Riga 1",
-            "child_full_name": "Child Review",
-            "child_personal_id": "010125-11111",
-            "child_birth_date": "2025-01-01",
+            "guardian_declared_address": "Riga 1",
+            "member_full_name": "Child Review",
+            "member_personal_id": "010125-11111",
+            "member_birth_date": "2025-01-01",
+            "member_actual_address": "Riga 1",
+            "member_same_address_as_guardian": True,
+            "member_kit_size_shirt": shirt.pk,
+            "member_kit_size_shorts": shorts.pk,
+            "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+            "support_club_instead_of_multi_child_discount": False,
         },
         files={
-            "child_identity_document": _make_child_identity_file("id.jpg"),
+            "guardian_identity_document": guardian_doc,
+            "member_identity_document": member_doc,
+            "member_portrait_document": portrait_doc,
         },
         verified_account=acct,
     )
@@ -169,9 +233,7 @@ class TestStaffReviewQueue:
 
     def test_queue_lists_only_submitted_applications(self):
         """Queue must only show applications with status=submitted."""
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        # Create a submitted app (verified_account pattern)
+        # Submitted app
         submitted_acct = ParentAccount.objects.create(
             email="queued@example.com",
             phone="+37111111111",
@@ -182,19 +244,31 @@ class TestStaffReviewQueue:
                 "guardian_full_name": "Queue Guardian",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Child Review",
-                "child_personal_id": "010125-11111",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child Review",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-01-01",
+                "member_actual_address": "Riga 1",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="S",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="S",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id.jpg"),
+                "guardian_identity_document": _make_png("sub_g.png"),
+                "member_identity_document": _make_png("sub_m.png"),
+                "member_portrait_document": _make_png("sub_p.png"),
             },
             verified_account=submitted_acct,
         )
         submit_application(submitted_app, submitted_acct)
 
-        # Create a draft app (should NOT appear in queue)
+        # Draft app (should NOT appear in queue)
         draft_acct = ParentAccount.objects.create(
             email="queuedraft@example.com",
             phone="+37133333333",
@@ -205,16 +279,26 @@ class TestStaffReviewQueue:
                 "guardian_full_name": "Queue Draft",
                 "guardian_personal_id": "010101-22222",
                 "guardian_phone": "+37144444444",
-                "guardian_address": "Riga 2",
-                "child_full_name": "Child QueueDraft",
-                "child_personal_id": "010125-22222",
-                "child_birth_date": "2025-02-01",
+                "guardian_declared_address": "Riga 2",
+                "member_full_name": "Child QueueDraft",
+                "member_personal_id": "010125-22222",
+                "member_birth_date": "2025-02-01",
+                "member_actual_address": "Riga 2",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="M",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="M",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={},
             verified_account=draft_acct,
         )
 
-        # Create a fix_requested app (should NOT appear in queue)
+        # Fix-requested app (should NOT appear in queue)
         fix_acct = ParentAccount.objects.create(
             email="queuefix@example.com",
             phone="+37155555555",
@@ -225,13 +309,25 @@ class TestStaffReviewQueue:
                 "guardian_full_name": "Queue Fix",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37166666666",
-                "guardian_address": "Riga 3",
-                "child_full_name": "Child QueueFix",
-                "child_personal_id": "010125-33333",
-                "child_birth_date": "2025-03-01",
+                "guardian_declared_address": "Riga 3",
+                "member_full_name": "Child QueueFix",
+                "member_personal_id": "010125-33333",
+                "member_birth_date": "2025-03-01",
+                "member_actual_address": "Riga 3",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="S",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="S",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id2.jpg"),
+                "guardian_identity_document": _make_png("fix_g.png"),
+                "member_identity_document": _make_png("fix_m.png"),
+                "member_portrait_document": _make_png("fix_p.png"),
             },
             verified_account=fix_acct,
         )
@@ -515,8 +611,6 @@ class TestApproveAction:
 
     def test_approve_changes_status_and_creates_member(self):
         """Approve must set status=approved and link approved_member."""
-        from apps.members.models import Guardian, Member
-
         app = _create_submitted_app("approveaction@example.com")
         staff_user = _create_staff_user()
         client = Client()
@@ -551,8 +645,6 @@ class TestReviewActionsFromSubmittedOnly:
 
     def test_request_fix_on_fix_requested_application_fails(self):
         """Cannot request fix on an already fix_requested application."""
-        from apps.registrations.services import create_or_update_draft, submit_application
-
         fix_acct = ParentAccount.objects.create(
             email="fixonfix@example.com",
             phone="+37144444444",
@@ -563,13 +655,25 @@ class TestReviewActionsFromSubmittedOnly:
                 "guardian_full_name": "Fix On Fix",
                 "guardian_personal_id": "010101-44444",
                 "guardian_phone": "+37155555555",
-                "guardian_address": "Riga 4",
-                "child_full_name": "Child FixOnFix",
-                "child_personal_id": "010125-44444",
-                "child_birth_date": "2025-04-01",
+                "guardian_declared_address": "Riga 4",
+                "member_full_name": "Child FixOnFix",
+                "member_personal_id": "010125-44444",
+                "member_birth_date": "2025-04-01",
+                "member_actual_address": "Riga 4",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="S",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="S",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id4.jpg"),
+                "guardian_identity_document": _make_png("ff_g.png"),
+                "member_identity_document": _make_png("ff_m.png"),
+                "member_portrait_document": _make_png("ff_p.png"),
             },
             verified_account=fix_acct,
         )
@@ -599,12 +703,6 @@ class TestReviewActionsFromSubmittedOnly:
 
     def test_reject_on_approved_application_fails(self):
         """Cannot reject an already approved application."""
-        from apps.registrations.services import (
-            create_or_update_draft,
-            submit_application,
-            approve_application,
-        )
-
         acct = ParentAccount.objects.create(
             email="rejectapproved@example.com",
             phone="+37166666666",
@@ -615,13 +713,25 @@ class TestReviewActionsFromSubmittedOnly:
                 "guardian_full_name": "Reject Approved",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37177777777",
-                "guardian_address": "Riga 5",
-                "child_full_name": "Child RejectApproved",
-                "child_personal_id": "010125-55555",
-                "child_birth_date": "2025-05-01",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child RejectApproved",
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-05-01",
+                "member_actual_address": "Riga 5",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="M",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="M",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id5.jpg"),
+                "guardian_identity_document": _make_png("ra_g.png"),
+                "member_identity_document": _make_png("ra_m.png"),
+                "member_portrait_document": _make_png("ra_p.png"),
             },
             verified_account=acct,
         )
@@ -687,8 +797,6 @@ class TestEmailOnReviewActions:
 
     def test_request_fix_sends_email(self):
         """request_application_fix must send an email to the parent."""
-        from apps.registrations.services import create_or_update_draft, submit_application
-
         acct = ParentAccount.objects.create(
             email="fixemail@example.com",
             phone="+37134343434",
@@ -699,13 +807,25 @@ class TestEmailOnReviewActions:
                 "guardian_full_name": "Fix Email Guardian",
                 "guardian_personal_id": "010101-34343",
                 "guardian_phone": "+37145454545",
-                "guardian_address": "Riga 34",
-                "child_full_name": "Child FixEmail",
-                "child_personal_id": "010125-34343",
-                "child_birth_date": "2025-07-01",
+                "guardian_declared_address": "Riga 34",
+                "member_full_name": "Child FixEmail",
+                "member_personal_id": "010125-34343",
+                "member_birth_date": "2025-07-01",
+                "member_actual_address": "Riga 34",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="S",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="S",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id8.jpg"),
+                "guardian_identity_document": _make_png("fe_g.png"),
+                "member_identity_document": _make_png("fe_m.png"),
+                "member_portrait_document": _make_png("fe_p.png"),
             },
             verified_account=acct,
         )
@@ -717,16 +837,12 @@ class TestEmailOnReviewActions:
             password="fixstaffpass",
         )
 
-        from apps.registrations.services import request_application_fix
-
         with patch("apps.registrations.services.send_mail") as mock_send:
             request_application_fix(app, staff_user, "Please fix the address.")
             assert mock_send.call_count >= 1
 
     def test_reject_sends_email(self):
         """reject_application must send an email to the parent."""
-        from apps.registrations.services import create_or_update_draft, submit_application
-
         acct = ParentAccount.objects.create(
             email="rejectemail@example.com",
             phone="+37156565656",
@@ -737,13 +853,25 @@ class TestEmailOnReviewActions:
                 "guardian_full_name": "Reject Email Guardian",
                 "guardian_personal_id": "010101-56565",
                 "guardian_phone": "+37167676767",
-                "guardian_address": "Riga 56",
-                "child_full_name": "Child RejectEmail",
-                "child_personal_id": "010125-56565",
-                "child_birth_date": "2025-08-01",
+                "guardian_declared_address": "Riga 56",
+                "member_full_name": "Child RejectEmail",
+                "member_personal_id": "010125-56565",
+                "member_birth_date": "2025-08-01",
+                "member_actual_address": "Riga 56",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="M",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="M",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id9.jpg"),
+                "guardian_identity_document": _make_png("re_g.png"),
+                "member_identity_document": _make_png("re_m.png"),
+                "member_portrait_document": _make_png("re_p.png"),
             },
             verified_account=acct,
         )
@@ -755,16 +883,12 @@ class TestEmailOnReviewActions:
             password="rejectstaffpass",
         )
 
-        from apps.registrations.services import reject_application
-
         with patch("apps.registrations.services.send_mail") as mock_send:
             reject_application(app, staff_user, "Does not meet requirements.")
             assert mock_send.call_count >= 1
 
     def test_approve_sends_email(self):
         """approve_application must send an approval email to the parent."""
-        from apps.registrations.services import create_or_update_draft, submit_application
-
         acct = ParentAccount.objects.create(
             email="approveemail@example.com",
             phone="+37178787878",
@@ -775,13 +899,25 @@ class TestEmailOnReviewActions:
                 "guardian_full_name": "Approve Email Guardian",
                 "guardian_personal_id": "010101-78787",
                 "guardian_phone": "+37189898989",
-                "guardian_address": "Riga 78",
-                "child_full_name": "Child ApproveEmail",
-                "child_personal_id": "010125-78787",
-                "child_birth_date": "2025-09-01",
+                "guardian_declared_address": "Riga 78",
+                "member_full_name": "Child ApproveEmail",
+                "member_personal_id": "010125-78787",
+                "member_birth_date": "2025-09-01",
+                "member_actual_address": "Riga 78",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHIRT, label="S",
+                ).pk,
+                "member_kit_size_shorts": KitSizeOption.objects.get(
+                    kind=KitSizeOption.Kind.SHORTS, label="S",
+                ).pk,
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "support_club_instead_of_multi_child_discount": False,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id10.jpg"),
+                "guardian_identity_document": _make_png("ae_g.png"),
+                "member_identity_document": _make_png("ae_m.png"),
+                "member_portrait_document": _make_png("ae_p.png"),
             },
             verified_account=acct,
         )
@@ -792,8 +928,6 @@ class TestEmailOnReviewActions:
             email="approvestaff@example.com",
             password="approvestaffpass",
         )
-
-        from apps.registrations.services import approve_application
 
         with patch("apps.registrations.services.send_mail") as mock_send:
             approve_application(app, staff_user)

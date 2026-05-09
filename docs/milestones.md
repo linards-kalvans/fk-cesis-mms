@@ -121,14 +121,15 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 5. Priority order for future development
 
 ### P1 — Field-set finalization + guardian-email-first verified registration gate
-**Why first**
-- field contract should drive flow, validation, OCR mapping, and forms
-- closes biggest confirmed security / identity-model gap
-- defines actual entry flow for all later UX work
+**Status:** completed
 
-**Target outcome**
-- guardian and child/player field sets are finalized first
-- verified continuation replaces anonymous draft-start as primary registration path
+**Delivered outcome**
+- guardian, member, and application field sets are finalized in code and tests
+- one-time email code verification gates registration continuation and portal access
+- verified continuation replaced anonymous draft-start as primary registration path
+- `/portal/` now acts as chooser/dashboard for verified guardians
+- `/applications/new/` starts a new verified registration with guardian-only prefill
+- same-browser anonymous draft edit/submit fallback removed
 
 ### P2 — Visual system + registration UX redesign
 **Why second**
@@ -194,6 +195,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 6. Acceptance criteria by priority block
 
 ### P1 acceptance — Field-set finalization + guardian-email-first verified registration gate
+**Status:** complete
+
 P1 is complete when all of the following are true:
 
 1. Guardian field set is finalized:
@@ -230,6 +233,12 @@ P1 is complete when all of the following are true:
    - start-new option visibility
    - registrations-list visibility
    - cross-account exposure regression
+
+Verification evidence captured in current codebase:
+- full suite green: `349 passed`
+- registration suite green: `229 passed`
+- lint green: `ruff check .`
+- types green: `mypy .`
 
 ### P2 acceptance — Visual system + registration UX redesign
 P2 is complete when all of the following are true:

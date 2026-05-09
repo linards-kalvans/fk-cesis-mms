@@ -7,8 +7,8 @@
     <section class="fk-card fk-hero-card">
       {% include "includes/site_logo.html" with variant="hero" %}
       <p class="fk-eyebrow">FK Cēsis</p>
-      <h1>Bērna reģistrācija</h1>
-      <p>Ievadiet savu e-pasta adresi, lai sāktu reģistrāciju.</p>
+      <h1>Pievienojieties FK Cēsis MMS</h1>
+      <p>E-pasts ar piekļuves kodu ir nosūtīts uz <strong>{{ pending_email|default:"jūsu e-pastu" }}</strong>.</p>
     </section>
 
     <section class="fk-card">
@@ -16,12 +16,12 @@
         {% csrf_token %}
         <div class="fk-form-section">
           <p>
-            <label for="email">E-pasta adrese</label>
-            <input type="email" id="email" name="email" autofocus required>
+            <label for="code">Piekļuves kods</label>
+            <input type="text" id="code" name="code" maxlength="6" inputmode="numeric" pattern="[0-9]*" autofocus {% if error %}value="{{ code|default:'' }}"{% endif %}>
           </p>
           {% if error %}<p class="fk-error-summary">{{ error }}</p>{% endif %}
         </div>
-        <button type="submit" class="fk-button fk-button--primary">Turpināt</button>
+        <button type="submit" class="fk-button fk-button--primary">Apstiprināt</button>
       </form>
     </section>
   </div>

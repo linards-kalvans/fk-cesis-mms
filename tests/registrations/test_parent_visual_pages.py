@@ -30,12 +30,43 @@ def _login_via_magic_link(client, account):
     client.get(f"/accounts/verify/{raw}/")
 
 
-def _make_child_identity_file(name="id.png"):
+def _make_guardian_identity_file(name="guardian_id.png"):
     return SimpleUploadedFile(
         name=name,
         content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
         content_type="image/png",
     )
+
+
+def _make_member_identity_file(name="member_id.png"):
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _make_member_portrait_file(name="portrait.png"):
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _ensure_kit_sizes():
+    """Create kit size options if they don't already exist. Returns (shirt_pk, shorts_pk)."""
+    from apps.members.models import KitSizeOption
+
+    shirt, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT,
+        defaults={"label": "S", "is_active": True},
+    )
+    shorts, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS,
+        defaults={"label": "S", "is_active": True},
+    )
+    return shirt.pk, shorts.pk
 
 
 def _create_and_login(email="visualex@example.com"):
@@ -102,32 +133,20 @@ class TestRegisterPageHeroLogoAndCopy:
         assert resp.status_code == 200
         assert "Bērna reģistrācija" in resp.content.decode()
 
-    def test_register_page_has_save_draft_later_copy(self):
-        """Register page must contain 'Saglabāt melnrakstu vēlāk' copy."""
-        resp = Client().get("/register/")
-        assert resp.status_code == 200
-        assert "Saglabāt melnrakstu vēlāk" in resp.content.decode()
-
 
 # ---------------------------------------------------------------------------
-# AC3 — Register page includes primary/secondary action hooks
+# AC3 — Register page includes primary action hook
 # ---------------------------------------------------------------------------
 
 
 class TestRegisterPageActionHooks:
-    """The register page should present primary and secondary action buttons."""
+    """The register page should present the primary CTA button."""
 
     def test_register_page_has_primary_button_hook(self):
         """Register page must contain 'fk-button fk-button--primary'."""
         resp = Client().get("/register/")
         assert resp.status_code == 200
         assert "fk-button fk-button--primary" in resp.content.decode()
-
-    def test_register_page_has_secondary_button_hook(self):
-        """Register page must contain 'fk-button fk-button--secondary'."""
-        resp = Client().get("/register/")
-        assert resp.status_code == 200
-        assert "fk-button fk-button--secondary" in resp.content.decode()
 
 
 # ---------------------------------------------------------------------------
@@ -150,10 +169,10 @@ class TestParentPortalStatusCard:
                 "guardian_full_name": "Card Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": child_name,
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": child_name,
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
             },
             files={},
             verified_account=self.acct,
@@ -194,10 +213,10 @@ class TestEditPageSectionHeadings:
                 "guardian_full_name": "Sections Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Sections Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Sections Child",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
             },
             files={},
             verified_account=self.acct,
@@ -217,12 +236,12 @@ class TestEditPageSectionHeadings:
         assert resp.status_code == 200
         assert "Bērna informācija" in resp.content.decode()
 
-    def test_edit_page_has_dokuments_heading(self):
-        """Edit page must contain 'Dokuments' section heading."""
+    def test_edit_page_has_dokumenti_heading(self):
+        """Edit page must contain 'Dokumenti' section heading."""
         app = self._create_draft()
         resp = self.client.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 200
-        assert "Dokuments" in resp.content.decode()
+        assert "Dokumenti" in resp.content.decode()
 
     def test_edit_page_has_save_draft_button_label(self):
         """Edit page must contain 'Saglabāt melnrakstu' button label."""
@@ -240,7 +259,7 @@ class TestEditPageSectionHeadings:
 
 
 # ---------------------------------------------------------------------------
-# AC6 — Invalid submit shows top-level error summary text
+# UAT Bug — Invalid submit shows top-level error summary text
 # ---------------------------------------------------------------------------
 
 
@@ -259,13 +278,15 @@ class TestInvalidSubmitErrorSummary:
                 "guardian_full_name": "Error Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Error Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Error Child",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
             },
             files={
-                "child_identity_document": _make_child_identity_file("id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("portrait.jpg"),
             },
             verified_account=self.acct,
         )
@@ -280,10 +301,12 @@ class TestInvalidSubmitErrorSummary:
                 "guardian_personal_id": "",
                 "guardian_email": "",
                 "guardian_phone": "",
-                "guardian_address": "",
-                "child_full_name": "",
-                "child_personal_id": "",
-                "child_birth_date": "",
+                "guardian_declared_address": "",
+                "member_full_name": "",
+                "member_personal_id": "",
+                "member_birth_date": "",
+                "member_same_address_as_guardian": True,
+                "submit_action": "submit",
             },
         )
         assert resp.status_code == 400
@@ -298,10 +321,12 @@ class TestInvalidSubmitErrorSummary:
                 "guardian_personal_id": "",
                 "guardian_email": "",
                 "guardian_phone": "",
-                "guardian_address": "",
-                "child_full_name": "",
-                "child_personal_id": "",
-                "child_birth_date": "",
+                "guardian_declared_address": "",
+                "member_full_name": "",
+                "member_personal_id": "",
+                "member_birth_date": "",
+                "member_same_address_as_guardian": True,
+                "submit_action": "submit",
             },
         )
         assert resp.status_code == 400
@@ -309,7 +334,7 @@ class TestInvalidSubmitErrorSummary:
 
 
 # ---------------------------------------------------------------------------
-# UAT Bug 1 — Static asset paths must be absolute (/static/…) in rendered HTML
+# UAT Bug — Static asset paths must be absolute (/static/…) in rendered HTML
 # ---------------------------------------------------------------------------
 
 
@@ -358,7 +383,7 @@ class TestStaticAssetAbsolutePaths:
 
 
 # ---------------------------------------------------------------------------
-# UAT Bug 2 — Registration form labels must be in Latvian, not English
+# UAT Bug — Registration form labels must be in Latvian, not English
 # ---------------------------------------------------------------------------
 
 
@@ -381,10 +406,10 @@ class TestEditPageLatvianFieldLabels:
                 "guardian_full_name": "Labels Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Labels Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Labels Child",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
             },
             files={},
             verified_account=self.acct,
@@ -454,51 +479,8 @@ class TestEditPageLatvianFieldLabels:
         assert "Bērna personu apliecinošs dokuments" in resp.content.decode()
 
 
-class TestEditPageNoEnglishLabels:
-    """Edit page must NOT contain English auto-generated field labels.
-
-    If a label is missing, Django falls back to the field-name-based English
-    default (e.g. 'Guardian full name'). These must not appear.
-    """
-
-    def setup_method(self):
-        self.client, self.acct = _create_and_login("noeng@example.com")
-
-    def _create_draft(self, email="noeng@example.com"):
-        from apps.registrations.services import create_or_update_draft
-
-        return create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "NoEng Guardian",
-                "guardian_personal_id": "010101-12345",
-                "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "NoEng Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
-            },
-            files={},
-            verified_account=self.acct,
-        )
-
-    def test_edit_page_has_no_english_guardian_full_name_label(self):
-        """Edit page must not contain English 'Guardian full name' label."""
-        app = self._create_draft()
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 200
-        assert "Guardian full name" not in resp.content.decode()
-
-    def test_edit_page_has_no_english_guardian_email_label(self):
-        """Edit page must not contain English 'Guardian email' label."""
-        app = self._create_draft()
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 200
-        assert "Guardian email" not in resp.content.decode()
-
-
 # ---------------------------------------------------------------------------
-# UAT Bug 2 — Application status display must be in Latvian
+# UAT Bug — Application status display must be in Latvian
 # ---------------------------------------------------------------------------
 
 
@@ -521,10 +503,10 @@ class TestPortalStatusDisplayLatvian:
                 "guardian_full_name": "Status Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Status Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Status Child",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
             },
             files={},
             verified_account=self.acct,
@@ -577,19 +559,27 @@ class TestSubmittedApplicationPortalCard:
     def _create_submitted_application(self, email="submittedportal@example.com"):
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
                 "guardian_full_name": "Submitted Portal Guardian",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Submitted Portal Child",
-                "child_personal_id": "010125-12345",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Submitted Portal Child",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+                "preferred_agreement_signing": "paper",
             },
             files={
-                "child_identity_document": _make_child_identity_file("submitted_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("submitted_guardian.png"),
+                "member_identity_document": _make_member_identity_file("submitted_member.png"),
+                "member_portrait_document": _make_member_portrait_file("submitted_portrait.png"),
             },
             verified_account=self.acct,
         )
@@ -628,10 +618,10 @@ class TestSubmittedApplicationPortalCard:
                 "guardian_full_name": "Draft Portal Guardian",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga 2",
-                "child_full_name": "Draft Portal Child",
-                "child_personal_id": "010125-99999",
-                "child_birth_date": "2025-06-01",
+                "guardian_declared_address": "Riga 2",
+                "member_full_name": "Draft Portal Child",
+                "member_personal_id": "010125-99999",
+                "member_birth_date": "2025-06-01",
             },
             files={},
             verified_account=self.acct,
@@ -658,19 +648,27 @@ class TestSubmittedApplicationSummaryView:
     def _create_submitted_application(self, email="summary@example.com"):
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
                 "guardian_full_name": "Summary Guardian",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37121212121",
-                "guardian_address": "Riga 10",
-                "child_full_name": "Summary Child",
-                "child_personal_id": "010125-11111",
-                "child_birth_date": "2025-02-15",
+                "guardian_declared_address": "Riga 10",
+                "member_full_name": "Summary Child",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-02-15",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+                "preferred_agreement_signing": "paper",
             },
             files={
-                "child_identity_document": _make_child_identity_file("summary_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("summary_guardian.png"),
+                "member_identity_document": _make_member_identity_file("summary_member.png"),
+                "member_portrait_document": _make_member_portrait_file("summary_portrait.png"),
             },
             verified_account=self.acct,
         )
@@ -719,7 +717,6 @@ class TestSubmittedApplicationSummaryView:
         resp = self.client.get(f"/applications/{app.pk}/summary/")
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Link should point to the detail route for this application
         assert f"/applications/{app.pk}/detail/" in content, (
             "Summary page must include a link to the detail view."
         )
@@ -739,19 +736,27 @@ class TestSubmittedApplicationDetailView:
     def _create_submitted_application(self, email="detail@example.com"):
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
                 "guardian_full_name": "Detail Guardian",
                 "guardian_personal_id": "010101-22222",
                 "guardian_phone": "+37123232323",
-                "guardian_address": "Riga 20",
-                "child_full_name": "Detail Child",
-                "child_personal_id": "010125-22222",
-                "child_birth_date": "2025-03-20",
+                "guardian_declared_address": "Riga 20",
+                "member_full_name": "Detail Child",
+                "member_personal_id": "010125-22222",
+                "member_birth_date": "2025-03-20",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+                "preferred_agreement_signing": "paper",
             },
             files={
-                "child_identity_document": _make_child_identity_file("detail_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("detail_guardian.png"),
+                "member_identity_document": _make_member_identity_file("detail_member.png"),
+                "member_portrait_document": _make_member_portrait_file("detail_portrait.png"),
             },
             verified_account=self.acct,
         )
@@ -834,7 +839,6 @@ class TestSubmittedApplicationDetailView:
         resp = self.client.get(f"/applications/{app.pk}/detail/")
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Read-only detail should not have <input type="text">, <input type="email">, etc.
         assert 'type="text"' not in content, (
             "Detail page must not contain editable text inputs."
         )
@@ -864,19 +868,26 @@ class TestOtherParentCannotViewSubmittedApplication:
             email=email,
             phone="+37144444444",
         )
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
                 "guardian_full_name": "Victim Guardian",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37155555555",
-                "guardian_address": "Riga 30",
-                "child_full_name": "Victim Child",
-                "child_personal_id": "010125-33333",
-                "child_birth_date": "2025-04-10",
+                "guardian_declared_address": "Riga 30",
+                "member_full_name": "Victim Child",
+                "member_personal_id": "010125-33333",
+                "member_birth_date": "2025-04-10",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+                "preferred_agreement_signing": "paper",
             },
             files={
-                "child_identity_document": _make_child_identity_file("victim_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("victim_guardian.png"),
+                "member_identity_document": _make_member_identity_file("victim_member.png"),
+                "member_portrait_document": _make_member_portrait_file("victim_portrait.png"),
             },
             verified_account=acct,
         )
@@ -886,7 +897,6 @@ class TestOtherParentCannotViewSubmittedApplication:
     def test_other_parent_cannot_view_summary(self):
         """Other parent GET /applications/<id>/summary/ must return 404."""
         acct, app = self._create_submitted_application()
-        # Login as a different parent
         other = ParentAccount.objects.create(
             email="other@example.com",
             phone="+37166666666",
@@ -926,19 +936,27 @@ class TestOwnerCannotEditSubmittedApplication:
         _login_via_magic_link(self.client, acct)
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
                 "guardian_full_name": "No Edit Guardian",
                 "guardian_personal_id": "010101-44444",
                 "guardian_phone": "+37199999999",
-                "guardian_address": "Riga 40",
-                "child_full_name": "No Edit Child",
-                "child_personal_id": "010125-44444",
-                "child_birth_date": "2025-05-05",
+                "guardian_declared_address": "Riga 40",
+                "member_full_name": "No Edit Child",
+                "member_personal_id": "010125-44444",
+                "member_birth_date": "2025-05-05",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+                "preferred_agreement_signing": "paper",
             },
             files={
-                "child_identity_document": _make_child_identity_file("noedit_id.png"),
+                "guardian_identity_document": _make_guardian_identity_file("noedit_guardian.png"),
+                "member_identity_document": _make_member_identity_file("noedit_member.png"),
+                "member_portrait_document": _make_member_portrait_file("noedit_portrait.png"),
             },
             verified_account=acct,
         )

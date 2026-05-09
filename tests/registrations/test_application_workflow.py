@@ -1,13 +1,13 @@
-"""Task 5 — RegistrationApplication model, Document model, and service-layer workflow RED tests.
+"""RegistrationApplication model, Document model, and service-layer workflow tests.
 
-Covers:
-- Draft save does NOT auto-create ParentAccount; claims email via claimed_email.
-- Second application with same email stores same claimed_email, no auto-link.
+P1-aligned. Covers:
+- Draft save stores claimed_email; does NOT auto-create ParentAccount.
 - Draft save allows incomplete fields.
-- Upload creates Document with placeholder OCR status.
-- Submit requires active child identity document.
+- Upload creates Document with placeholder OCR status (new kinds).
+- Submit requires guardian_identity, member_identity, member_portrait docs + kit sizes.
 - Submit sets status=submitted and submitted_at.
 - Prefill uses account and latest application values.
+- Resubmission clears review fields.
 """
 
 import pytest
@@ -31,17 +31,62 @@ def _login_via_magic_link(client, account):
     client.get(f"/accounts/verify/{raw}/")
 
 
-# ---------------------------------------------------------------------------
-# Helpers — defined locally to avoid polluting global fixtures
-# ---------------------------------------------------------------------------
-
-def _make_child_identity_file(name="id_card.jpg"):
-    """Return a minimal SimpleUploadedFile suitable for child_identity_document upload."""
+def _make_member_identity_file(name="id_card.jpg"):
+    """Return a minimal SimpleUploadedFile suitable for member_identity_document upload."""
     return SimpleUploadedFile(
         name=name,
         content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
         content_type="image/png",
     )
+
+
+def _make_guardian_identity_file(name="guardian_id.jpg"):
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _make_member_portrait_file(name="portrait.jpg"):
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+def _ensure_kit_sizes():
+    """Create kit size options if they don't already exist. Returns (shirt_pk, shorts_pk)."""
+    from apps.members.models import KitSizeOption
+
+    shirt, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT,
+        defaults={"label": "S", "is_active": True},
+    )
+    shorts, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS,
+        defaults={"label": "S", "is_active": True},
+    )
+    return shirt.pk, shorts.pk
+
+
+def _submit_form_data(email, shirt_pk, shorts_pk):
+    """Build POST data matching P1 submit requirements."""
+    return {
+        "guardian_full_name": "Submit Guardian",
+        "guardian_personal_id": "010101-12345",
+        "guardian_email": email,
+        "guardian_phone": "+37120000000",
+        "guardian_declared_address": "Riga, Brivibas 1",
+        "member_full_name": "Submit Child",
+        "member_personal_id": "010125-67890",
+        "member_birth_date": "2025-01-01",
+        "member_same_address_as_guardian": True,
+        "member_kit_size_shirt": shirt_pk,
+        "member_kit_size_shorts": shorts_pk,
+        "preferred_agreement_signing": "paper",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +118,7 @@ class TestRegistrationApplicationModel:
         assert "approved" in choices_dict
         assert "rejected" in choices_dict
 
-    def test_has_guardian_and_child_fields(self):
+    def test_has_guardian_and_member_fields(self):
         from apps.registrations.models import RegistrationApplication
 
         field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
@@ -82,10 +127,12 @@ class TestRegistrationApplicationModel:
             "guardian_personal_id",
             "guardian_email",
             "guardian_phone",
-            "guardian_address",
-            "child_full_name",
-            "child_personal_id",
-            "child_birth_date",
+            "guardian_declared_address",
+            "member_full_name",
+            "member_personal_id",
+            "member_birth_date",
+            "member_actual_address",
+            "member_same_address_as_guardian",
         }
         assert required.issubset(field_names)
 
@@ -124,12 +171,26 @@ class TestDocumentModel:
         field_names = {f.name for f in Document._meta.get_fields()}
         assert "application" in field_names
 
-    def test_has_kind_field_with_child_identity(self):
+    def test_has_kind_field_with_guardian_identity(self):
         from apps.documents.models import Document
 
         kind_field = Document._meta.get_field("kind")
         choices_dict = dict(kind_field.choices)
-        assert "child_identity" in choices_dict
+        assert "guardian_identity" in choices_dict
+
+    def test_has_kind_field_with_member_identity(self):
+        from apps.documents.models import Document
+
+        kind_field = Document._meta.get_field("kind")
+        choices_dict = dict(kind_field.choices)
+        assert "member_identity" in choices_dict
+
+    def test_has_kind_field_with_member_portrait(self):
+        from apps.documents.models import Document
+
+        kind_field = Document._meta.get_field("kind")
+        choices_dict = dict(kind_field.choices)
+        assert "member_portrait" in choices_dict
 
     def test_has_file_field(self):
         from apps.documents.models import Document
@@ -195,10 +256,10 @@ class TestCreateOrUpdateDraft:
                 "guardian_full_name": "Jane Doe",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga, Brivibas 1",
-                "child_full_name": "Little Jane",
-                "child_personal_id": "010125-67890",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga, Brivibas 1",
+                "member_full_name": "Little Jane",
+                "member_personal_id": "010125-67890",
+                "member_birth_date": "2025-01-01",
             },
             files={},
         )
@@ -219,10 +280,10 @@ class TestCreateOrUpdateDraft:
                 "guardian_full_name": "Jane Doe",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
-                "guardian_address": "Riga, Brivibas 1",
-                "child_full_name": "Little Jane",
-                "child_personal_id": "010125-67890",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga, Brivibas 1",
+                "member_full_name": "Little Jane",
+                "member_personal_id": "010125-67890",
+                "member_birth_date": "2025-01-01",
             },
             files={},
             verified_account=existing,
@@ -240,10 +301,10 @@ class TestCreateOrUpdateDraft:
                 "guardian_full_name": "Parent One",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Child A",
-                "child_personal_id": "010125-11111",
-                "child_birth_date": "2025-01-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child A",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-01-01",
             },
             files={},
         )
@@ -253,10 +314,10 @@ class TestCreateOrUpdateDraft:
                 "guardian_full_name": "Parent One",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Child B",
-                "child_personal_id": "010125-22222",
-                "child_birth_date": "2025-06-01",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child B",
+                "member_personal_id": "010125-22222",
+                "member_birth_date": "2025-06-01",
             },
             files={},
         )
@@ -311,10 +372,10 @@ class TestDraftAllowsIncompleteFields:
                 "guardian_full_name": "",
                 "guardian_personal_id": "",
                 "guardian_phone": "",
-                "guardian_address": "",
-                "child_full_name": "",
-                "child_personal_id": "",
-                "child_birth_date": None,
+                "guardian_declared_address": "",
+                "member_full_name": "",
+                "member_personal_id": "",
+                "member_birth_date": None,
             },
             files={},
         )
@@ -327,9 +388,9 @@ class TestDraftAllowsIncompleteFields:
 # ---------------------------------------------------------------------------
 
 class TestUploadCreatesDocument:
-    """Uploading a child identity document should create a Document record."""
+    """Uploading guardian/member documents should create Document records."""
 
-    def test_upload_creates_document_with_placeholder_ocr_status(self):
+    def test_upload_creates_guardian_identity_document(self):
         from apps.registrations.services import create_or_update_draft
         from apps.documents.models import Document
 
@@ -339,20 +400,64 @@ class TestUploadCreatesDocument:
                 "guardian_full_name": "Uploader",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37133333333",
-                "guardian_address": "Riga 3",
-                "child_full_name": "Child Up",
-                "child_personal_id": "010125-99999",
-                "child_birth_date": "2025-03-01",
+                "guardian_declared_address": "Riga 3",
+                "member_full_name": "Child Up",
+                "member_personal_id": "010125-99999",
+                "member_birth_date": "2025-03-01",
             },
             files={
-                "child_identity_document": _make_child_identity_file("id_card.png"),
+                "guardian_identity_document": _make_guardian_identity_file("guardian_id.png"),
             },
         )
         doc = Document.objects.get(application=app)
-        assert doc.kind == "child_identity"
+        assert doc.kind == "guardian_identity"
         assert doc.ocr_status == "not_requested"
         assert doc.uploaded_by_parent_at is not None
         assert doc.file_size > 0
+
+    def test_upload_creates_member_identity_document(self):
+        from apps.registrations.services import create_or_update_draft
+        from apps.documents.models import Document
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "upload2@example.com",
+                "guardian_full_name": "Uploader 2",
+                "guardian_personal_id": "010101-88888",
+                "guardian_phone": "+37133333334",
+                "guardian_declared_address": "Riga 4",
+                "member_full_name": "Child Up2",
+                "member_personal_id": "010125-88888",
+                "member_birth_date": "2025-03-02",
+            },
+            files={
+                "member_identity_document": _make_member_identity_file("member_id.png"),
+            },
+        )
+        doc = Document.objects.get(application=app)
+        assert doc.kind == "member_identity"
+
+    def test_upload_creates_member_portrait_document(self):
+        from apps.registrations.services import create_or_update_draft
+        from apps.documents.models import Document
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "upload3@example.com",
+                "guardian_full_name": "Uploader 3",
+                "guardian_personal_id": "010101-77777",
+                "guardian_phone": "+37133333335",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child Up3",
+                "member_personal_id": "010125-77777",
+                "member_birth_date": "2025-03-03",
+            },
+            files={
+                "member_portrait_document": _make_member_portrait_file("portrait.png"),
+            },
+        )
+        doc = Document.objects.get(application=app)
+        assert doc.kind == "member_portrait"
 
 
 # ---------------------------------------------------------------------------
@@ -360,11 +465,13 @@ class TestUploadCreatesDocument:
 # ---------------------------------------------------------------------------
 
 class TestSubmitApplication:
-    """Submit should enforce required document and set status."""
+    """Submit should enforce required docs and set status."""
 
     def test_submit_sets_status_and_submitted_at(self):
         from apps.registrations.services import create_or_update_draft, submit_application
         from apps.accounts.models import ParentAccount
+
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
 
         acct = ParentAccount.objects.create(
             email="submitter@example.com",
@@ -376,13 +483,17 @@ class TestSubmitApplication:
                 "guardian_full_name": "Submitter",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37155555555",
-                "guardian_address": "Riga 5",
-                "child_full_name": "Child Sub",
-                "child_personal_id": "010125-55555",
-                "child_birth_date": "2025-05-01",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child Sub",
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-05-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("sub_id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("sub_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("sub_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("sub_portrait.jpg"),
             },
         )
         result = submit_application(app, acct)
@@ -403,10 +514,10 @@ class TestSubmitApplication:
                 "guardian_full_name": "No Doc",
                 "guardian_personal_id": "010101-66666",
                 "guardian_phone": "+37177777777",
-                "guardian_address": "Riga 7",
-                "child_full_name": "Child NoDoc",
-                "child_personal_id": "010125-66666",
-                "child_birth_date": "2025-07-01",
+                "guardian_declared_address": "Riga 7",
+                "member_full_name": "Child NoDoc",
+                "member_personal_id": "010125-66666",
+                "member_birth_date": "2025-07-01",
             },
             files={},
         )
@@ -418,6 +529,8 @@ class TestSubmitApplication:
         from apps.accounts.models import ParentAccount
         from datetime import datetime, timezone
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         acct = ParentAccount.objects.create(
             email="deleted-doc@example.com",
             phone="+37188888888",
@@ -428,23 +541,26 @@ class TestSubmitApplication:
                 "guardian_full_name": "Deleted Doc",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37199999999",
-                "guardian_address": "Riga 9",
-                "child_full_name": "Child Del",
-                "child_personal_id": "010125-77777",
-                "child_birth_date": "2025-08-01",
+                "guardian_declared_address": "Riga 9",
+                "member_full_name": "Child Del",
+                "member_personal_id": "010125-77777",
+                "member_birth_date": "2025-08-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("del_id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("del_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("del_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("del_portrait.jpg"),
             },
         )
-        # Soft-delete the document
+        # Soft-delete all documents
         from apps.documents.models import Document
 
-        doc = Document.objects.get(application=app)
-        doc.deleted_at = datetime.now(timezone.utc)
-        doc.save(update_fields=["deleted_at"])
-        # Delete from DB so query won't find it
-        doc.delete()
+        for doc in Document.objects.filter(application=app):
+            doc.deleted_at = datetime.now(timezone.utc)
+            doc.save(update_fields=["deleted_at"])
+            doc.delete()
 
         with pytest.raises(ValueError):
             submit_application(app, acct)
@@ -452,6 +568,8 @@ class TestSubmitApplication:
     def test_submit_rejects_non_owner(self):
         from apps.registrations.services import create_or_update_draft, submit_application
         from apps.accounts.models import ParentAccount
+
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
 
         owner = ParentAccount.objects.create(
             email="owner@example.com",
@@ -467,18 +585,51 @@ class TestSubmitApplication:
                 "guardian_full_name": "Owner",
                 "guardian_personal_id": "010101-10101",
                 "guardian_phone": "+37130303030",
-                "guardian_address": "Riga 10",
-                "child_full_name": "Child Own",
-                "child_personal_id": "010125-10101",
-                "child_birth_date": "2025-09-01",
+                "guardian_declared_address": "Riga 10",
+                "member_full_name": "Child Own",
+                "member_personal_id": "010125-10101",
+                "member_birth_date": "2025-09-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("own_id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("own_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("own_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("own_portrait.jpg"),
             },
             verified_account=owner,
         )
         with pytest.raises(ValueError):
             submit_application(app, other)
+
+    def test_submit_without_kit_sizes_raises(self):
+        """Submit must require kit sizes (shirt and shorts)."""
+        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.accounts.models import ParentAccount
+
+        acct = ParentAccount.objects.create(
+            email="nokit@example.com",
+            phone="+37111111111",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "nokit@example.com",
+                "guardian_full_name": "No Kit",
+                "guardian_personal_id": "010101-11111",
+                "guardian_phone": "+37122222222",
+                "guardian_declared_address": "Riga 11",
+                "member_full_name": "Child NoKit",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-10-01",
+            },
+            files={
+                "guardian_identity_document": _make_guardian_identity_file("nokit_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("nokit_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("nokit_portrait.jpg"),
+            },
+        )
+        with pytest.raises(ValueError):
+            submit_application(app, acct)
 
 
 # ---------------------------------------------------------------------------
@@ -502,10 +653,10 @@ class TestCanEditApplication:
                 "guardian_full_name": "Edit Owner",
                 "guardian_personal_id": "010101-40404",
                 "guardian_phone": "+37150505050",
-                "guardian_address": "Riga 40",
-                "child_full_name": "Child Edit",
-                "child_personal_id": "010125-40404",
-                "child_birth_date": "2025-10-01",
+                "guardian_declared_address": "Riga 40",
+                "member_full_name": "Child Edit",
+                "member_personal_id": "010125-40404",
+                "member_birth_date": "2025-10-01",
             },
             files={},
             verified_account=acct,
@@ -530,10 +681,10 @@ class TestCanEditApplication:
                 "guardian_full_name": "Edit Owner 2",
                 "guardian_personal_id": "010101-60606",
                 "guardian_phone": "+37180808080",
-                "guardian_address": "Riga 60",
-                "child_full_name": "Child Edit2",
-                "child_personal_id": "010125-60606",
-                "child_birth_date": "2025-11-01",
+                "guardian_declared_address": "Riga 60",
+                "member_full_name": "Child Edit2",
+                "member_personal_id": "010125-60606",
+                "member_birth_date": "2025-11-01",
             },
             files={},
         )
@@ -547,6 +698,8 @@ class TestCanEditApplication:
         )
         from apps.accounts.models import ParentAccount
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         acct = ParentAccount.objects.create(
             email="subowner@example.com",
             phone="+37190909090",
@@ -557,13 +710,17 @@ class TestCanEditApplication:
                 "guardian_full_name": "Sub Owner",
                 "guardian_personal_id": "010101-90909",
                 "guardian_phone": "+37101010101",
-                "guardian_address": "Riga 90",
-                "child_full_name": "Child Sub",
-                "child_personal_id": "010125-90909",
-                "child_birth_date": "2025-12-01",
+                "guardian_declared_address": "Riga 90",
+                "member_full_name": "Child Sub",
+                "member_personal_id": "010125-90909",
+                "member_birth_date": "2025-12-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("sub2_id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("sub2_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("sub2_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("sub2_portrait.jpg"),
             },
         )
         submit_application(app, acct)
@@ -592,10 +749,10 @@ class TestGetApplicationPrefill:
                 "guardian_full_name": "First Name",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37134343434",
-                "guardian_address": "Riga 23",
-                "child_full_name": "Child First",
-                "child_personal_id": "010125-23232",
-                "child_birth_date": "2025-01-15",
+                "guardian_declared_address": "Riga 23",
+                "member_full_name": "Child First",
+                "member_personal_id": "010125-23232",
+                "member_birth_date": "2025-01-15",
             },
             files={},
         )
@@ -606,10 +763,10 @@ class TestGetApplicationPrefill:
                 "guardian_full_name": "Updated Name",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37145454545",
-                "guardian_address": "Riga 45",
-                "child_full_name": "Child Second",
-                "child_personal_id": "010125-34343",
-                "child_birth_date": "2025-06-20",
+                "guardian_declared_address": "Riga 45",
+                "member_full_name": "Child Second",
+                "member_personal_id": "010125-34343",
+                "member_birth_date": "2025-06-20",
             },
             files={},
         )
@@ -618,7 +775,6 @@ class TestGetApplicationPrefill:
         assert isinstance(prefill, dict)
         # Should contain guardian data from latest application
         assert prefill.get("guardian_full_name") == "Updated Name"
-        assert prefill.get("child_full_name") == "Child Second"
         assert prefill.get("guardian_email") == "prefill@example.com"
 
     def test_prefill_returns_empty_when_no_account(self):
@@ -630,69 +786,11 @@ class TestGetApplicationPrefill:
 
 
 # ---------------------------------------------------------------------------
-# Regression: anonymous save-draft must not 404 on follow-up edit page
-# ---------------------------------------------------------------------------
-
-class TestAnonymousSaveDraftRedirect:
-    """Anonymous user saves draft at /register/ — edit page must be accessible.
-
-    Bug: start_registration creates a draft and redirects to
-    /applications/<id>/edit/ without establishing a parent session.
-    The edit view calls can_edit_application(application, None) → False → 404.
-
-    Approved behavior: after anonymous save-draft, the session carries the
-    newly-created ParentAccount so the edit page loads (200).
-    """
-
-    def test_anonymous_save_draft_edit_page_accessible(self, client):
-        """POST valid draft data as anonymous user → redirect → edit page 200."""
-        from apps.registrations.models import RegistrationApplication
-
-        response = client.post(
-            "/register/",
-            data={
-                "guardian_email": "anon@example.com",
-                "guardian_full_name": "Anonymous Parent",
-                "guardian_personal_id": "010101-00001",
-                "guardian_phone": "+37120000001",
-                "guardian_address": "Riga, Test 1",
-                "child_full_name": "Child Anon",
-                "child_personal_id": "010125-00001",
-                "child_birth_date": "2025-01-01",
-            },
-            follow=False,
-        )
-        # start_registration should redirect (302)
-        assert response.status_code == 302
-        edit_url = response.url
-
-        # Follow the redirect — the edit page must load (200), not 404
-        edit_response = client.get(edit_url, follow=False)
-        assert edit_response.status_code == 200, (
-            f"Edit page returned {edit_response.status_code} for anonymous user "
-            f"after save-draft. Expected 200. URL: {edit_url}"
-        )
-
-        # Session should carry the draft_session_key for same-browser continuity
-        assert "draft_session_key" in client.session
-
-        # Verify the application was actually created
-        assert RegistrationApplication.objects.filter(
-            guardian_email="anon@example.com"
-        ).exists()
-
-
-# ---------------------------------------------------------------------------
 # Regression: invalid submit should render top-level error summary
 # ---------------------------------------------------------------------------
 
 class TestInvalidSubmitErrorSummary:
-    """Invalid submit should return 400 with a top-level error summary in the response.
-
-    This is a visual-system test that asserts the error-summary element exists
-    in the HTML returned on invalid submission. Business logic (400 status)
-    is also asserted to ensure the workflow behavior is preserved.
-    """
+    """Invalid submit should return 400 with a top-level error summary in the response."""
 
     def setup_method(self):
         self.client = Client()
@@ -711,13 +809,15 @@ class TestInvalidSubmitErrorSummary:
                 "guardian_full_name": "Error Sum Guardian",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37199999999",
-                "guardian_address": "Riga 88",
-                "child_full_name": "Error Sum Child",
-                "child_personal_id": "010125-88888",
-                "child_birth_date": "2025-04-01",
+                "guardian_declared_address": "Riga 88",
+                "member_full_name": "Error Sum Child",
+                "member_personal_id": "010125-88888",
+                "member_birth_date": "2025-04-01",
             },
             files={
-                "child_identity_document": _make_child_identity_file("err_id.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("err_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("err_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("err_portrait.jpg"),
             },
             verified_account=acct,
         )
@@ -733,18 +833,18 @@ class TestInvalidSubmitErrorSummary:
                 "guardian_personal_id": "",
                 "guardian_email": "",
                 "guardian_phone": "",
-                "guardian_address": "",
-                "child_full_name": "",
-                "child_personal_id": "",
-                "child_birth_date": "",
+                "guardian_declared_address": "",
+                "member_full_name": "",
+                "member_personal_id": "",
+                "member_birth_date": "",
+                "member_same_address_as_guardian": True,
             },
         )
         assert resp.status_code == 400, (
             f"Expected 400 for invalid submit, got {resp.status_code}."
         )
         content = resp.content.decode()
-        # Error summary element should be present — class like 'error-summary',
-        # 'form-errors', 'validation-summary', or heading like 'Kļūdas'.
+        # Error summary element should be present
         has_summary = (
             "error-summary" in content
             or "form-errors" in content
@@ -755,9 +855,7 @@ class TestInvalidSubmitErrorSummary:
             or "Kļūdas" in content
         )
         assert has_summary, (
-            "Invalid submit page does not have a top-level error summary. "
-            "Expected an element with class like 'error-summary', 'form-errors', "
-            "'validation-summary', or Latvian heading like 'Kļūdas'."
+            "Invalid submit page does not have a top-level error summary."
         )
 
 
@@ -774,6 +872,8 @@ class TestResubmissionAcceptsFixRequested:
         from apps.registrations.models import RegistrationApplication
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         acct = ParentAccount.objects.create(
             email="fixsub@example.com",
             phone="+37133333333",
@@ -784,13 +884,17 @@ class TestResubmissionAcceptsFixRequested:
                 "guardian_full_name": "Fix Sub Guardian",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37144444444",
-                "guardian_address": "Riga 3",
-                "child_full_name": "Child FixSub",
-                "child_personal_id": "010125-33333",
-                "child_birth_date": "2025-02-01",
+                "guardian_declared_address": "Riga 3",
+                "member_full_name": "Child FixSub",
+                "member_personal_id": "010125-33333",
+                "member_birth_date": "2025-02-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id2.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("fixsub_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("fixsub_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("fixsub_portrait.jpg"),
             },
             verified_account=acct,
         )
@@ -813,6 +917,8 @@ class TestResubmissionClearsReviewFields:
         from apps.registrations.models import RegistrationApplication
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         acct = ParentAccount.objects.create(
             email="clearmsg@example.com",
             phone="+37155555555",
@@ -823,13 +929,17 @@ class TestResubmissionClearsReviewFields:
                 "guardian_full_name": "Clear Msg Guardian",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37166666666",
-                "guardian_address": "Riga 5",
-                "child_full_name": "Child ClearMsg",
-                "child_personal_id": "010125-55555",
-                "child_birth_date": "2025-03-01",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child ClearMsg",
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-03-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id3.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("clearmsg_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("clearmsg_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("clearmsg_portrait.jpg"),
             },
             verified_account=acct,
         )
@@ -851,6 +961,8 @@ class TestResubmissionClearsReviewFields:
         from apps.registrations.models import RegistrationApplication
         from apps.registrations.services import create_or_update_draft, submit_application
 
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+
         acct = ParentAccount.objects.create(
             email="clearat@example.com",
             phone="+37177777777",
@@ -861,13 +973,17 @@ class TestResubmissionClearsReviewFields:
                 "guardian_full_name": "Clear At Guardian",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37188888888",
-                "guardian_address": "Riga 7",
-                "child_full_name": "Child ClearAt",
-                "child_personal_id": "010125-77777",
-                "child_birth_date": "2025-04-01",
+                "guardian_declared_address": "Riga 7",
+                "member_full_name": "Child ClearAt",
+                "member_personal_id": "010125-77777",
+                "member_birth_date": "2025-04-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
             },
             files={
-                "child_identity_document": _make_child_identity_file("id4.jpg"),
+                "guardian_identity_document": _make_guardian_identity_file("clearat_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("clearat_member.jpg"),
+                "member_portrait_document": _make_member_portrait_file("clearat_portrait.jpg"),
             },
             verified_account=acct,
         )

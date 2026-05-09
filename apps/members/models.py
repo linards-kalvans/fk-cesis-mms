@@ -1,6 +1,24 @@
-"""Member-domain models: Guardian, TrainingGroup, Member."""
+"""Member-domain models: Guardian, TrainingGroup, Member, KitSizeOption."""
 
 from django.db import models
+
+
+class KitSizeOption(models.Model):
+    """Admin-managed kit size lookup model."""
+
+    class Kind(models.TextChoices):
+        SHIRT = "shirt", "Shirt"
+        SHORTS = "shorts", "Shorts"
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    label = models.CharField(max_length=64)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.kind}: {self.label}"
+
+    class Meta:
+        ordering = ["kind", "label"]
 
 
 class Guardian(models.Model):

@@ -86,36 +86,37 @@ docs/               # Design docs, milestones
 
 ## Status
 
-**Tasks 1–6 complete, with visual redesign and guardian-email-first security follow-up work in progress.** Registration workflow is usable for LAN acceptance testing.
+**Tasks 1–6 complete, and P1 (field contract + guardian-email-first verified registration gate) is now complete.** Registration workflow is usable for LAN acceptance testing.
 
 - `apps/` contains `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, and `integrations`
 - `apps/core/models.py` defines the abstract `TimeStampedModel` base model
-- `apps/accounts/models.py` defines `ParentAccount` and `MagicLinkToken`
-- `apps/accounts/services.py` provides `issue_magic_link`, `send_magic_link`, `consume_magic_link`
-- `apps/accounts/views.py` provides request, verify, and logout views
+- `apps/accounts/models.py` defines `ParentAccount`, `MagicLinkToken`, and `EmailVerificationCode`
+- `apps/accounts/services.py` provides magic-link helpers plus one-time code issue/send/verify services
+- `apps/accounts/views.py` provides request, verify, logout, and one-time code verification views
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation
-- `apps/registrations/models.py` defines `RegistrationApplication` with draft/submitted states plus admin review workflow metadata
-- `apps/registrations/services.py` implements application lifecycle and admin review actions
-- `apps/registrations/views.py` provides start, edit, parent portal, and admin review views
-- `apps/members/models.py` defines `Member`, `Guardian`, and `TrainingGroup`
-- `apps/documents/models.py` defines `Document` with private storage (`PRIVATE_DOCUMENTS_ROOT`) and placeholder OCR status
+- `apps/registrations/models.py` defines `RegistrationApplication` with finalized P1 guardian/member/application snapshot fields plus admin review workflow metadata
+- `apps/registrations/services.py` implements P1 application lifecycle, same-address handling, chooser/prefill support, and admin review actions
+- `apps/registrations/views.py` provides guardian email entry, new/edit registration, parent chooser portal, and admin review views
+- `apps/members/models.py` defines `Member`, `Guardian`, `TrainingGroup`, and `KitSizeOption`
+- `apps/documents/models.py` defines `Document` with private storage (`PRIVATE_DOCUMENTS_ROOT`), P1 document kinds, and placeholder OCR status
 - `apps/documents` exposes admin-only protected preview/download endpoints; anonymous users are redirected to admin login, non-admin users receive `404`
 - `.env` autoload works for management commands and app startup
 - current acceptance-test URL: `http://192.168.3.245:8000`
 - Billing domain and Invoice Ninja sync remain follow-up work
 
 ### Registration workflow UX
-- `/register/` accessible without prior login in current implementation
-- Current implementation still allows anonymous same-browser draft continuity before guardian-email-first verified continuation lands
-- Single edit form with two actions: **save draft** and **submit application**
-- Child birth date uses native browser `<input type="date">` picker
-- Approved target direction: registration starts with guardian email, verified continuation happens before full registration flow, and guardian/child-player field sets will be finalized early
+- `/register/` is guardian email entry for one-time code verification
+- `/register/verify/` completes verified parent access before continuation
+- `/portal/` acts as existing-guardian chooser/dashboard with draft continuation and start-new actions
+- `/applications/new/` starts a new verified registration with guardian-only prefill
+- Single edit form still uses **save draft** and **submit application**
+- Member address supports **Adrese tāda pati kā vecāka** live sync and restore behavior
 
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 
 ### Next task
-Guardian-email-first registration redesign, parent identity verification hardening, production email delivery setup, and agreement-handling first slice remain active follow-up work.
+P2 visual system + registration UX redesign, production email delivery setup, and agreement-handling first slice remain active follow-up work.
 
 ## Development Workflow
 

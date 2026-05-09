@@ -33,14 +33,56 @@ class RegistrationApplication(TimeStampedModel):
     claimed_email = models.EmailField(blank=True, default="")
     draft_session_key = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
+
+    # Guardian snapshot fields (P1 names)
     guardian_full_name = models.CharField(max_length=255, blank=True)
     guardian_personal_id = models.CharField(max_length=32, blank=True)
     guardian_email = models.EmailField()
     guardian_phone = models.CharField(max_length=32, blank=True)
-    guardian_address = models.CharField(max_length=255, blank=True)
-    child_full_name = models.CharField(max_length=255, blank=True)
-    child_personal_id = models.CharField(max_length=32, blank=True)
-    child_birth_date = models.DateField(null=True, blank=True)
+    guardian_declared_address = models.CharField(max_length=255, blank=True)
+
+    # Member (child/player) snapshot fields (P1 names)
+    member_full_name = models.CharField(max_length=255, blank=True)
+    member_personal_id = models.CharField(max_length=32, blank=True)
+    member_birth_date = models.DateField(null=True, blank=True)
+    member_actual_address = models.CharField(max_length=255, blank=True)
+    member_same_address_as_guardian = models.BooleanField(default=False)
+
+    # Kit sizes — FK to KitSizeOption
+    member_kit_size_shirt = models.ForeignKey(
+        "members.KitSizeOption",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shirt_applications",
+    )
+    member_kit_size_shorts = models.ForeignKey(
+        "members.KitSizeOption",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shorts_applications",
+    )
+
+    class AgreementSigning(models.TextChoices):
+        ELECTRONIC = "electronic", "Elektroniski"
+        PAPER = "paper", "Ar roku, papīra dokuments"
+
+    # Application-level fields
+    preferred_agreement_signing = models.CharField(
+        max_length=16,
+        choices=AgreementSigning.choices,
+        blank=True,
+    )
+    support_club_instead_of_multi_child_discount = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+    )
+
+    # Field source classification (JSON)
+    field_sources = models.JSONField(default=dict, blank=True)
+
     submitted_at = models.DateTimeField(null=True, blank=True)
 
     # Review metadata
@@ -79,4 +121,4 @@ class RegistrationApplication(TimeStampedModel):
         return result
 
     def __str__(self):
-        return f"{self.guardian_email} — {self.child_full_name or 'draft'}"
+        return f"{self.guardian_email} — {self.member_full_name or 'draft'}"

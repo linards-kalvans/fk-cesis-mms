@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
 from apps.documents.models import Document
-from apps.members.models import Guardian, Member
+from apps.members.models import Guardian, KitSizeOption, Member
 from apps.registrations.models import RegistrationApplication
 
 REQUIRED_SUBMIT_FIELDS = (
@@ -17,10 +17,28 @@ REQUIRED_SUBMIT_FIELDS = (
     "guardian_personal_id",
     "guardian_email",
     "guardian_phone",
-    "guardian_address",
-    "child_full_name",
-    "child_personal_id",
-    "child_birth_date",
+    "guardian_declared_address",
+    "member_full_name",
+    "member_personal_id",
+    "member_birth_date",
+    "member_actual_address",
+    "member_same_address_as_guardian",
+    "preferred_agreement_signing",
+)
+
+# All manual P1 form fields that map to model columns (excl. guardian_email = derived)
+MANUAL_P1_FIELDS = (
+    "guardian_full_name",
+    "guardian_personal_id",
+    "guardian_phone",
+    "guardian_declared_address",
+    "member_full_name",
+    "member_personal_id",
+    "member_birth_date",
+    "member_actual_address",
+    "member_same_address_as_guardian",
+    "preferred_agreement_signing",
+    "support_club_instead_of_multi_child_discount",
 )
 
 
@@ -46,7 +64,12 @@ def _latest_application(account: ParentAccount) -> RegistrationApplication | Non
 
 
 def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
-    """Return prefilled field values for a new registration form."""
+    """Return prefilled field values for a new registration form.
+
+    Guardian fields are prefilled from the verified account / latest
+    application. Member/child fields are NOT prefilled — the user
+    enters a new child each time.
+    """
     if account is None:
         return {}
 
@@ -60,10 +83,7 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
             {
                 "guardian_full_name": latest.guardian_full_name,
                 "guardian_personal_id": latest.guardian_personal_id,
-                "guardian_address": latest.guardian_address,
-                "child_full_name": latest.child_full_name,
-                "child_personal_id": latest.child_personal_id,
-                "child_birth_date": latest.child_birth_date,
+                "guardian_declared_address": latest.guardian_declared_address,
             }
         )
     return prefill
@@ -83,9 +103,10 @@ def can_edit_application(application: RegistrationApplication, actor_account: Pa
 # ---------------------------------------------------------------------------
 
 
-def _replace_child_identity_document(application: RegistrationApplication, upload) -> None:
+def _handle_document_upload(application: RegistrationApplication, upload, kind: str) -> None:
+    """Soft-delete existing active docs of the same kind, then create new one."""
     existing = application.documents.filter(
-        kind=Document.Kind.CHILD_IDENTITY,
+        kind=kind,
         deleted_at__isnull=True,
     ).first()
     if existing is not None:
@@ -94,13 +115,40 @@ def _replace_child_identity_document(application: RegistrationApplication, uploa
 
     Document.objects.create(
         application=application,
-        kind=Document.Kind.CHILD_IDENTITY,
+        kind=kind,
         file=upload,
         original_filename=upload.name,
         content_type=getattr(upload, "content_type", "application/octet-stream"),
         file_size=upload.size,
         ocr_status=Document.OcrStatus.NOT_REQUESTED,
     )
+
+
+def _apply_same_address_logic(application: RegistrationApplication, data: Mapping[str, Any]) -> None:
+    """Apply same-address toggle: copy guardian address to member address."""
+    same_address = data.get("member_same_address_as_guardian", False)
+    sources = dict(application.field_sources) if application.field_sources else {}
+    if same_address:
+        application.member_actual_address = str(data.get("guardian_declared_address", "")).strip()
+        sources["member_actual_address"] = "derived_system_filled"
+    else:
+        member_addr = str(data.get("member_actual_address", "")).strip()
+        if not member_addr:
+            member_addr = str(data.get("guardian_declared_address", "")).strip()
+        application.member_actual_address = member_addr
+        sources["member_actual_address"] = "manual_only"
+    application.field_sources = sources
+
+
+def _apply_field_sources_for_guardian_email(application: RegistrationApplication) -> None:
+    """Mark guardian_email as derived_system_filled and all other manual P1
+    fields as manual_only."""
+    sources = dict(application.field_sources) if application.field_sources else {}
+    sources["guardian_email"] = "derived_system_filled"
+    for field_name in MANUAL_P1_FIELDS:
+        if field_name not in sources:
+            sources[field_name] = "manual_only"
+    application.field_sources = sources
 
 
 def create_or_update_draft(
@@ -134,20 +182,78 @@ def create_or_update_draft(
             raise ValueError("verified account email must match claimed email")
         application.parent_account = verified_account
 
+    # Backward-compat aliases for old field names
+    _alias = {
+        "guardian_address": "guardian_declared_address",
+        "child_full_name": "member_full_name",
+        "child_personal_id": "member_personal_id",
+        "child_birth_date": "member_birth_date",
+    }
+    for old, new in _alias.items():
+        if old in data and new not in data:
+            data = dict(data)
+            data[new] = data[old]
+
     application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
     application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
     application.guardian_email = email
     application.guardian_phone = str(data.get("guardian_phone", "")).strip()
-    application.guardian_address = str(data.get("guardian_address", "")).strip()
-    application.child_full_name = str(data.get("child_full_name", "")).strip()
-    application.child_personal_id = str(data.get("child_personal_id", "")).strip()
-    application.child_birth_date = data.get("child_birth_date") or None
+    application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
+    application.member_full_name = str(data.get("member_full_name", "")).strip()
+    application.member_personal_id = str(data.get("member_personal_id", "")).strip()
+    application.member_birth_date = data.get("member_birth_date") or None
+    application.member_same_address_as_guardian = bool(data.get("member_same_address_as_guardian", False))
+    preferred = str(data.get("preferred_agreement_signing", "")).strip()
+    if not preferred:
+        preferred = "paper"
+    application.preferred_agreement_signing = preferred
+    if "support_club_instead_of_multi_child_discount" in data:
+        raw = data["support_club_instead_of_multi_child_discount"]
+        application.support_club_instead_of_multi_child_discount = bool(raw) if raw is not None else None
+    else:
+        application.support_club_instead_of_multi_child_discount = None
+
+    # Kit sizes — FK to KitSizeOption
+    shirt_id = data.get("member_kit_size_shirt")
+    if shirt_id is not None:
+        try:
+            application.member_kit_size_shirt = KitSizeOption.objects.get(pk=shirt_id)
+        except (KitSizeOption.DoesNotExist, ValueError, TypeError):
+            application.member_kit_size_shirt = None
+    else:
+        application.member_kit_size_shirt = None
+
+    shorts_id = data.get("member_kit_size_shorts")
+    if shorts_id is not None:
+        try:
+            application.member_kit_size_shorts = KitSizeOption.objects.get(pk=shorts_id)
+        except (KitSizeOption.DoesNotExist, ValueError, TypeError):
+            application.member_kit_size_shorts = None
+    else:
+        application.member_kit_size_shorts = None
+
+    # Same-address logic
+    _apply_same_address_logic(application, data)
+
+    # Field source for guardian_email
+    _apply_field_sources_for_guardian_email(application)
+
     application.status = RegistrationApplication.Status.DRAFT
     application.save()
 
-    upload = files.get("child_identity_document")
-    if upload is not None:
-        _replace_child_identity_document(application, upload)
+    # Handle document uploads
+    guardian_doc = files.get("guardian_identity_document")
+    if guardian_doc is not None:
+        _handle_document_upload(application, guardian_doc, "guardian_identity")
+
+    # Backward-compat: child_identity_document → member_identity_document
+    member_doc = files.get("member_identity_document") or files.get("child_identity_document")
+    if member_doc is not None:
+        _handle_document_upload(application, member_doc, "member_identity")
+
+    portrait_doc = files.get("member_portrait_document")
+    if portrait_doc is not None:
+        _handle_document_upload(application, portrait_doc, "member_portrait")
 
     return application
 
@@ -157,19 +263,83 @@ def create_or_update_draft(
 # ---------------------------------------------------------------------------
 
 
+def _has_prior_non_rejected_application(application: RegistrationApplication) -> bool:
+    """Return True when the guardian has a prior non-rejected application."""
+    acct = application.parent_account
+    if acct is not None:
+        has = RegistrationApplication.objects.filter(
+            parent_account=acct,
+        ).exclude(
+            status=RegistrationApplication.Status.REJECTED,
+        ).exclude(
+            pk=application.pk,
+        ).exists()
+        return bool(has)
+
+    email = application.claimed_email
+    if email:
+        has = RegistrationApplication.objects.filter(
+            claimed_email__iexact=email,
+            parent_account__isnull=True,
+        ).exclude(
+            status=RegistrationApplication.Status.REJECTED,
+        ).exclude(
+            pk=application.pk,
+        ).exists()
+        return bool(has)
+
+    return False
+
+
 def _require_complete_application(application: RegistrationApplication) -> None:
-    missing = [field for field in REQUIRED_SUBMIT_FIELDS if not getattr(application, field)]
+    boolean_fields = {
+        "member_same_address_as_guardian",
+        "support_club_instead_of_multi_child_discount",
+    }
+    missing = []
+    for field in REQUIRED_SUBMIT_FIELDS:
+        val = getattr(application, field)
+        if field in boolean_fields:
+            if val is None:
+                missing.append(field)
+        elif not val:
+            missing.append(field)
     if missing:
         raise ValueError(f"missing required fields: {', '.join(missing)}")
 
 
-def _require_active_child_identity_document(application: RegistrationApplication) -> None:
+def _require_active_guardian_identity_document(application: RegistrationApplication) -> None:
     exists = application.documents.filter(
-        kind=Document.Kind.CHILD_IDENTITY,
+        kind=Document.Kind.GUARDIAN_IDENTITY,
         deleted_at__isnull=True,
     ).exists()
     if not exists:
-        raise ValueError("child identity document is required before submit")
+        raise ValueError("guardian identity document is required before submit")
+
+
+def _require_active_member_identity_document(application: RegistrationApplication) -> None:
+    exists = application.documents.filter(
+        kind=Document.Kind.MEMBER_IDENTITY,
+        deleted_at__isnull=True,
+    ).exists()
+    if not exists:
+        raise ValueError("member identity document is required before submit")
+
+
+def _require_active_member_portrait_document(application: RegistrationApplication) -> None:
+    exists = application.documents.filter(
+        kind=Document.Kind.MEMBER_PORTRAIT,
+        deleted_at__isnull=True,
+    ).exists()
+    if not exists:
+        raise ValueError("member portrait document is required before submit")
+
+
+def _require_valid_kit_sizes(application: RegistrationApplication) -> None:
+    if application.member_kit_size_shirt_id is None:
+        raise ValueError("member kit size shirt is required before submit")
+    if application.member_kit_size_shorts_id is None:
+        raise ValueError("member kit size shorts is required before submit")
 
 
 def submit_application(
@@ -188,7 +358,19 @@ def submit_application(
         raise ValueError("only draft or fix_requested applications can be submitted")
 
     _require_complete_application(application)
-    _require_active_child_identity_document(application)
+
+    if _has_prior_non_rejected_application(application):
+        val = application.support_club_instead_of_multi_child_discount
+        if val is None:
+            raise ValueError(
+                "support_club_instead_of_multi_child_discount is required "
+                "when guardian has prior non-rejected applications"
+            )
+
+    _require_active_guardian_identity_document(application)
+    _require_active_member_identity_document(application)
+    _require_active_member_portrait_document(application)
+    _require_valid_kit_sizes(application)
 
     application.status = RegistrationApplication.Status.SUBMITTED
     application.submitted_at = timezone.now()
@@ -292,14 +474,14 @@ def approve_application(
         personal_id=application.guardian_personal_id,
         email=application.guardian_email,
         phone=application.guardian_phone,
-        address=application.guardian_address,
+        address=application.guardian_declared_address,
     )
 
     # Create Member linked to Guardian, no training_group
     member = Member.objects.create(
-        full_name=application.child_full_name,
-        personal_id=application.child_personal_id,
-        birth_date=application.child_birth_date,
+        full_name=application.member_full_name,
+        personal_id=application.member_personal_id,
+        birth_date=application.member_birth_date,
         guardian=guardian,
         training_group=None,
     )
@@ -313,7 +495,7 @@ def approve_application(
     _send_notification(
         application,
         subject="Jūsu pieteikums ir apstiprināts",
-        message=f"Bija veiksmīgi apstiprināts. Jūsu bērns '{application.child_full_name}' ir pievienots kluba dalībnieku reģistram.",
+        message=f"Bija veiksmīgi apstiprināts. Jūsu bērns '{application.member_full_name}' ir pievienots kluba dalībnieku reģistram.",
     )
     return application
 

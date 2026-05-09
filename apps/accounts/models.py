@@ -1,4 +1,4 @@
-"""ParentAccount and MagicLinkToken models."""
+"""ParentAccount, MagicLinkToken, and EmailVerificationCode models."""
 
 from django.db import models
 
@@ -46,3 +46,24 @@ class MagicLinkToken(TimeStampedModel):
 
     class Meta:
         verbose_name = "magic link token"
+
+
+class EmailVerificationCode(TimeStampedModel):
+    """One-time 6-digit code for registration entry verification."""
+
+    email = models.EmailField()
+    code_hash = models.CharField(max_length=256)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Code for {self.email}"
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone
+
+        return timezone.now() > self.expires_at
+
+    class Meta:
+        verbose_name = "email verification code"

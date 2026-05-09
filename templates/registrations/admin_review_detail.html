@@ -3,7 +3,7 @@
 {% block content %}
 <div class="fk-parent-shell">
   <div class="fk-parent-shell__inner">
-    <h1>Pieteikuma pārskats — {{ application.child_full_name|default:"—" }}</h1>
+    <h1>Pieteikuma pārskats — {{ application.member_full_name|default:"—" }}</h1>
 
     {% if error %}
       <div class="fk-error-summary">{{ error }}</div>
@@ -11,9 +11,9 @@
 
     <section class="fk-status-card">
       <h2>Bērna informācija</h2>
-      <p><strong>Vārds, uzvārds:</strong> {{ application.child_full_name }}</p>
-      <p><strong>Personas kods:</strong> {{ application.child_personal_id }}</p>
-      <p><strong>Dzimšanas datums:</strong> {{ application.child_birth_date|date:"d.m.Y" }}</p>
+      <p><strong>Vārds, uzvārds:</strong> {{ application.member_full_name }}</p>
+       <p><strong>Personas kods:</strong> {{ application.member_personal_id }}</p>
+       <p><strong>Dzimšanas datums:</strong> {{ application.member_birth_date|date:"d.m.Y" }}</p>
     </section>
 
     <section class="fk-status-card">
@@ -22,7 +22,7 @@
       <p><strong>Personas kods:</strong> {{ application.guardian_personal_id }}</p>
       <p><strong>E-pasts:</strong> {{ application.guardian_email }}</p>
       <p><strong>Tālrunis:</strong> {{ application.guardian_phone }}</p>
-      <p><strong>Adrese:</strong> {{ application.guardian_address }}</p>
+      <p><strong>Adrese:</strong> {{ application.guardian_declared_address }}</p>
     </section>
 
     {% if active_doc %}

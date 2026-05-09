@@ -1,4 +1,10 @@
-"""Task 4 — magic-link request, verify, logout views + session RED tests."""
+"""Task 4 — magic-link request, verify, logout views + session RED tests.
+
+P1 update: registration entry uses one-time code, not magic-link.
+These tests assert that the magic-link verify flow still works for
+direct login (/accounts/verify/<token>/) but is NOT the registration
+entry path.
+"""
 
 import pytest
 from django.core import mail
@@ -67,11 +73,14 @@ class TestRequestMagicLinkView:
         resp = self.client.post(
             "/accounts/request-magic-link/",
             {"email": "lanpreview@example.com"},
-            HTTP_HOST="192.168.3.245:8000",
         )
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert "http://192.168.3.245:8000/accounts/verify/" in content
+        # The debug preview URL is built via request.build_absolute_uri(),
+        # which uses the current request host (test client → "testserver").
+        # Assert the verify path appears inside an absolute http:// URL
+        # rather than a brittle hardcoded LAN address.
+        assert "http://testserver/accounts/verify/" in content
 
     def test_get_uses_parent_shell_and_latvian_copy(self):
         resp = self.client.get("/accounts/request-magic-link/")
@@ -238,4 +247,48 @@ class TestMagicLinkForClaimedEmail:
         assert verify_resp.status_code == 302
         assert "portal" in verify_resp.url.lower(), (
             f"Verify redirect should go to portal. Got: {verify_resp.url}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# P1: Registration entry uses code verification, not magic-link
+# ---------------------------------------------------------------------------
+
+class TestRegistrationEntryNotMagicLink:
+    """P1: POST /register/ must use one-time code, not magic-link.
+
+    These tests confirm that the registration entry flow does NOT
+    create or use MagicLinkToken records.
+    """
+
+    def test_post_register_does_not_create_magic_link_token(self):
+        """POST /register/ must not create a MagicLinkToken record."""
+        from apps.accounts.models import MagicLinkToken
+
+        client = Client()
+        client.post(
+            "/register/",
+            {"email": "nolink@example.com"},
+        )
+        count = MagicLinkToken.objects.filter(
+            claimed_email="nolink@example.com",
+            used_at__isnull=True,
+        ).count()
+        assert count == 0, (
+            "POST /register/ must not create MagicLinkToken records. "
+            "Registration uses one-time code, not magic-link."
+        )
+
+    def test_register_entry_email_not_sent_as_magic_link(self):
+        """Email sent from POST /register/ must contain a numeric code,
+        not a magic-link URL.
+        """
+        client = Client()
+        client.post(
+            "/register/",
+            {"email": "nolink2@example.com"},
+        )
+        body = mail.outbox[-1].body
+        assert "/accounts/verify/" not in body, (
+            "Registration entry email must not contain magic-link URL."
         )

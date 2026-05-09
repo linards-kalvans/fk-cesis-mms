@@ -9,7 +9,7 @@
     </section>
 
     <section class="fk-status-card">
-      <h2>{{ application.child_full_name }}</h2>
+      <h2>{{ application.member_full_name }}</h2>
       <p><strong>Vecāks:</strong> {{ application.guardian_full_name }}</p>
       <p><strong>Statuss:</strong> {{ application.get_status_display }}</p>
       {% if application.submitted_at %}
