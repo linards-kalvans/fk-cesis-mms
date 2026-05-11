@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FK Cēsis — Bērna reģistrācija</title>
+  <style>
+    :root {
+      --navy: #0f0851;
+      --navy-2: #0f0851;
+      --red: #ce1c20;
+      --red-dark: #a9161a;
+      --ink: #111044;
+      --muted: #636986;
+      --line: #dfe3ef;
+      --line-strong: #c9cfdf;
+      --soft: #f5f7fb;
+      --soft-blue: #eef2ff;
+      --white: #ffffff;
+      --success: #16a34a;
+      --shadow: 0 18px 45px rgba(7, 12, 55, 0.10);
+      --shadow-soft: 0 10px 28px rgba(7, 12, 55, 0.07);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(215, 25, 32, 0.08), transparent 28rem),
+        linear-gradient(180deg, #f9fafc 0%, #f2f4f9 100%);
+      min-height: 100vh;
+    }
+
+    a { color: inherit; }
+
+    .site-header {
+      background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+      color: var(--white);
+      border-bottom: 5px solid var(--red);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: 0 10px 28px rgba(7, 12, 55, 0.18);
+    }
+
+    .header-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 16px 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .logo {
+      width: 78px;
+      height: 78px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 14px rgba(0,0,0,.25));
+      flex: 0 0 auto;
+    }
+
+    .brand-title {
+      font-size: 26px;
+      font-weight: 850;
+      letter-spacing: .02em;
+      line-height: 1;
+    }
+
+    .brand-subtitle {
+      margin-top: 4px;
+      color: rgba(255,255,255,.82);
+      font-size: 15px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 15px;
+      color: rgba(255,255,255,.88);
+    }
+
+    .help-link, .user-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .user-pill {
+      border-left: 1px solid rgba(255,255,255,.28);
+      padding-left: 16px;
+    }
+
+    .icon-circle {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.12);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+    }
+
+    .mobile-menu {
+      display: none;
+      background: transparent;
+      border: 0;
+      color: white;
+      font-size: 32px;
+      cursor: pointer;
+    }
+
+    main {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 34px 22px 56px;
+    }
+
+    .hero-card {
+      background: var(--white);
+      border: 1px solid rgba(201,207,223,.8);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius-xl);
+      padding: 34px;
+      display: grid;
+      grid-template-columns: 1.25fr .9fr;
+      gap: 32px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      right: -90px;
+      top: -110px;
+      border-radius: 50%;
+      background: rgba(215, 25, 32, 0.08);
+    }
+
+    .eyebrow {
+      color: var(--red);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-weight: 800;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-family: "Anton", Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+      font-weight: 400;
+      text-transform: uppercase;
+      font-size: clamp(38px, 5vw, 62px);
+      margin: 0 0 12px;
+      line-height: 1.03;
+      color: var(--navy);
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.6;
+      margin: 0;
+      max-width: 720px;
+    }
+
+    .stepper {
+      align-self: center;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step {
+      text-align: center;
+      color: var(--muted);
+      position: relative;
+      min-width: 72px;
+    }
+
+    .step:not(:first-child)::before {
+      content: "";
+      position: absolute;
+      height: 2px;
+      left: -50%;
+      right: 50%;
+      top: 18px;
+      background: var(--line);
+      z-index: -1;
+    }
+
+    .step-number {
+      width: 38px;
+      height: 38px;
+      margin: 0 auto 10px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: #eef0f6;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .step.active { color: var(--red); }
+    .step.active .step-number {
+      color: var(--white);
+      background: var(--red);
+      border-color: var(--red);
+      box-shadow: 0 10px 18px rgba(215,25,32,.24);
+    }
+
+    .step-label {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .form-shell {
+      margin-top: 24px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .section-card {
+      background: var(--white);
+      border: 1px solid rgba(201,207,223,.9);
+      box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 28px 32px 8px;
+    }
+
+    .section-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .section-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--soft-blue);
+      color: var(--navy);
+      flex: 0 0 auto;
+      font-size: 22px;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--navy);
+      font-family: "Anton", Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+      font-weight: 400;
+      text-transform: uppercase;
+      font-size: 26px;
+      letter-spacing: 0.01em;
+    }
+
+    .section-note {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .collapse-btn {
+      border: 0;
+      background: transparent;
+      color: var(--navy);
+      font-size: 28px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .section-body {
+      padding: 18px 32px 30px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px 22px;
+      align-items: start;
+    }
+
+    .field { grid-column: span 6; }
+    .field.third { grid-column: span 4; }
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 750;
+      color: #272759;
+      margin-bottom: 7px;
+    }
+
+    .required { color: var(--red); margin-left: 3px; }
+
+    input, select {
+      width: 100%;
+      height: 46px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 0 14px;
+      color: var(--ink);
+      background: var(--white);
+      font: inherit;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--navy-2);
+      box-shadow: 0 0 0 4px rgba(18,10,99,.08);
+    }
+
+    input::placeholder { color: #9298ad; }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #26275a;
+      font-weight: 650;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .checkbox-row input {
+      width: 19px;
+      height: 19px;
+      accent-color: var(--navy-2);
+      flex: 0 0 auto;
+    }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .upload-grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .upload-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      background: #fff;
+    }
+
+    .dropzone {
+      min-height: 142px;
+      border: 2px dashed #b8bfd3;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 20px;
+      color: var(--navy);
+      background: linear-gradient(180deg, #fff 0%, #fafbff 100%);
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+
+    .dropzone:hover {
+      border-color: var(--navy-2);
+      background: #f7f8ff;
+      transform: translateY(-1px);
+    }
+
+    .dropzone input { display: none; }
+
+    .upload-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .upload-title {
+      font-weight: 850;
+      margin-bottom: 5px;
+    }
+
+    .upload-meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .info-box {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 13px 16px;
+      margin-top: 18px;
+      background: #eef4ff;
+      color: #3a4670;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .requirements {
+      background: #f1f5ff;
+      border-radius: 12px;
+      padding: 18px;
+      color: #303762;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .requirements strong { color: var(--navy); }
+    .requirements ul { margin: 8px 0 0; padding-left: 18px; }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .actions.end { justify-content: flex-end; }
+
+    .btn {
+      appearance: none;
+      border: 1px solid transparent;
+      min-height: 48px;
+      padding: 0 28px;
+      border-radius: 9px;
+      font-weight: 850;
+      font-size: 15px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+      text-decoration: none;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .btn-primary {
+      color: var(--white);
+      background: linear-gradient(135deg, var(--navy-2), var(--navy));
+      box-shadow: 0 12px 22px rgba(9,6,74,.20);
+    }
+
+    .btn-red {
+      color: var(--white);
+      background: linear-gradient(135deg, var(--red), var(--red-dark));
+      box-shadow: 0 12px 22px rgba(215,25,32,.20);
+    }
+
+    .btn-secondary {
+      color: var(--navy);
+      background: var(--white);
+      border-color: var(--navy-2);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .summary-item {
+      background: #fafbff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .summary-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .summary-item strong {
+      color: var(--navy);
+      font-size: 16px;
+    }
+
+    .mobile-progress {
+      display: none;
+      margin-top: 22px;
+    }
+
+    .progress-line {
+      height: 4px;
+      background: #eef0f6;
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 8px 0 8px;
+    }
+
+    .progress-line span {
+      display: block;
+      height: 100%;
+      width: 16.66%;
+      background: var(--red);
+    }
+
+    .fine-print {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .hero-card {
+        grid-template-columns: 1fr;
+      }
+
+      .stepper {
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+
+      .field.third { grid-column: span 6; }
+      .upload-grid.three { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .site-header {
+        position: static;
+      }
+
+      .header-inner {
+        padding: 12px 16px;
+      }
+
+      .logo {
+        width: 64px;
+        height: 64px;
+      }
+
+      .brand-title { font-size: 21px; }
+      .brand-subtitle { font-size: 13px; }
+      .header-actions { display: none; }
+      .mobile-menu { display: block; }
+
+      main {
+        padding: 20px 12px 34px;
+      }
+
+      .hero-card {
+        border-radius: 20px;
+        padding: 24px 20px;
+        gap: 18px;
+      }
+
+      .hero-card .stepper { display: none; }
+      .mobile-progress { display: block; }
+
+      h1 { font-size: 36px; }
+      .lead { font-size: 16px; }
+
+      .section-card {
+        border-radius: 18px;
+      }
+
+      .section-header {
+        padding: 22px 20px 4px;
+      }
+
+      .section-body {
+        padding: 16px 20px 22px;
+      }
+
+      .section-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 19px;
+      }
+
+      h2 { font-size: 21px; }
+      .grid { gap: 15px; }
+      .field, .field.third { grid-column: 1 / -1; }
+      .upload-grid { grid-template-columns: 1fr; }
+
+      .dropzone { min-height: 124px; }
+
+      .actions, .actions.end {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-top: 22px;
+      }
+
+      .actions.end { grid-template-columns: 1fr; }
+      .btn { width: 100%; padding: 0 16px; }
+    }
+
+    @media (max-width: 420px) {
+      .brand-title { font-size: 18px; }
+      .brand-subtitle { display: none; }
+      .logo { width: 56px; height: 56px; }
+      h1 { font-size: 31px; }
+      .hero-card { padding: 22px 18px; }
+      .section-header { padding: 20px 16px 4px; }
+      .section-body { padding: 14px 16px 20px; }
+      .actions { gap: 10px; }
+      .btn { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <img class="logo" src="https://fkcesis.lv/cdn/shop/files/FK_Cesis_2.png?v=1741252753&width=160" alt="FK Cēsis logo" />
+        <div>
+          <div class="brand-title">FK CĒSIS</div>
+          <div class="brand-subtitle">Futbola klubs</div>
+        </div>
+      </div>
+
+      <nav class="header-actions" aria-label="Galvenā navigācija">
+        <a class="help-link" href="#">ⓘ Palīdzība</a>
+        <span class="user-pill"><span class="icon-circle">👤</span> Linards Kalvāns</span>
+      </nav>
+
+      <button class="mobile-menu" aria-label="Atvērt izvēlni">☰</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-card" aria-labelledby="page-title">
+      <div>
+        <div class="eyebrow">FK Cēsis</div>
+        <h1 id="page-title">Bērna reģistrācija</h1>
+        <p class="lead">Reģistrējiet savu bērnu treniņiem FK Cēsis. Sākumā augšupielādējiet ID dokumentu, lai mēs varētu nolasīt datus un automātiski aizpildīt daļu no pieteikuma.</p>
+
+        <div class="mobile-progress" aria-label="Reģistrācijas progress">
+          <strong>1 / 6</strong>
+          <div class="progress-line"><span></span></div>
+          <span>ID dokuments</span>
+        </div>
+      </div>
+
+      <div class="stepper" aria-label="Reģistrācijas soļi">
+        <div class="step active"><div class="step-number">1</div><div class="step-label">ID dokuments</div></div>
+        <div class="step"><div class="step-number">2</div><div class="step-label">Vecāka informācija</div></div>
+        <div class="step"><div class="step-number">3</div><div class="step-label">Bērna informācija</div></div>
+        <div class="step"><div class="step-number">4</div><div class="step-label">Bērna foto</div></div>
+        <div class="step"><div class="step-number">5</div><div class="step-label">Piekrišana</div></div>
+        <div class="step"><div class="step-number">6</div><div class="step-label">Pārskats</div></div>
+      </div>
+    </section>
+
+    <form class="form-shell">
+      <section class="section-card" aria-labelledby="documents-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">▣</div>
+            <div>
+              <h2 id="documents-title">1. ID dokuments</h2>
+              <p class="section-note">Augšupielādējiet vecāka personas apliecinoša dokumenta foto. Dati tiks izmantoti OCR priekš-aizpildei nākamajā solī.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="upload-grid">
+            <div class="upload-card">
+              <label>Vecāka personas dokuments — priekšpuse <span class="required">*</span></label>
+              <label class="dropzone">
+                <input type="file" accept="image/png,image/jpeg,application/pdf" />
+                <span>
+                  <div class="upload-icon">⇧</div>
+                  <div class="upload-title">Augšupielādēt priekšpusi</div>
+                  <div class="upload-meta">JPG, PNG vai PDF līdz 10MB</div>
+                </span>
+              </label>
+            </div>
+
+            <div class="upload-card">
+              <label>Vecāka personas dokuments — aizmugure</label>
+              <label class="dropzone">
+                <input type="file" accept="image/png,image/jpeg,application/pdf" />
+                <span>
+                  <div class="upload-icon">⇧</div>
+                  <div class="upload-title">Augšupielādēt aizmuguri</div>
+                  <div class="upload-meta">JPG, PNG vai PDF līdz 10MB</div>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="info-box">ⓘ Atbalstām Latvijas personas apliecību un pasi. Pēc augšupielādes varēsiet pārbaudīt un labot automātiski nolasītos datus.</div>
+
+          <div class="actions end">
+            <button class="btn btn-primary" type="button">Turpināt →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card" aria-labelledby="parent-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">👤</div>
+            <div>
+              <h2 id="parent-title">2. Vecāka informācija</h2>
+              <p class="section-note">Pārbaudiet un papildiniet informāciju, kas nolasīta no dokumenta.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="grid">
+            <div class="field"><label for="parent-name">Vārds <span class="required">*</span></label><input id="parent-name" value="Linards" /></div>
+            <div class="field"><label for="parent-surname">Uzvārds <span class="required">*</span></label><input id="parent-surname" value="Kalvāns" /></div>
+            <div class="field"><label for="parent-code">Personas kods <span class="required">*</span></label><input id="parent-code" value="260111-10333" /></div>
+            <div class="field"><label for="parent-email">E-pasts <span class="required">*</span></label><input id="parent-email" type="email" value="linards.kalvans@gmail.com" /></div>
+            <div class="field"><label for="parent-phone">Tālrunis <span class="required">*</span></label><input id="parent-phone" value="26011103" /></div>
+            <div class="field"><label for="parent-address">Adrese</label><input id="parent-address" value="Piebalgas iela 17, Cēsis, LV-4101" /></div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Atpakaļ</button>
+            <button class="btn btn-primary" type="button">Turpināt →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card" aria-labelledby="child-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">⚽</div>
+            <div>
+              <h2 id="child-title">3. Bērna informācija</h2>
+              <p class="section-note">Ievadiet bērna datus un izvēlieties ekipējuma izmērus.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="grid">
+            <div class="field"><label for="child-name">Vārds <span class="required">*</span></label><input id="child-name" placeholder="Ievadiet vārdu" /></div>
+            <div class="field"><label for="child-surname">Uzvārds <span class="required">*</span></label><input id="child-surname" placeholder="Ievadiet uzvārdu" /></div>
+            <div class="field"><label for="child-code">Personas kods <span class="required">*</span></label><input id="child-code" placeholder="Ievadiet personas kodu" /></div>
+            <div class="field"><label for="child-birthdate">Dzimšanas datums <span class="required">*</span></label><input id="child-birthdate" type="date" /></div>
+            <div class="field"><label for="child-address">Faktiskā adrese</label><input id="child-address" placeholder="Ievadiet adresi" /></div>
+            <div class="field checkbox-row" style="padding-top: 29px;"><input id="same-address" type="checkbox" checked /><label for="same-address" style="margin:0;">Adrese tāda pati kā vecākam</label></div>
+            <div class="field"><label for="shirt-size">Krekla izmērs <span class="required">*</span></label><select id="shirt-size"><option>Izvēlieties</option><option>116</option><option>128</option><option>140</option><option>152</option></select></div>
+            <div class="field"><label for="short-size">Šortu izmērs <span class="required">*</span></label><select id="short-size"><option>Izvēlieties</option><option>116</option><option>128</option><option>140</option><option>152</option></select></div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Atpakaļ</button>
+            <button class="btn btn-primary" type="button">Turpināt →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card" aria-labelledby="photo-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">📷</div>
+            <div>
+              <h2 id="photo-title">4. Bērna foto</h2>
+              <p class="section-note">Augšupielādējiet bērna portreta foto pieteikuma dokumentiem.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="grid">
+            <div class="field">
+              <label>Bērna foto portrets</label>
+              <label class="dropzone">
+                <input type="file" accept="image/png,image/jpeg" />
+                <span>
+                  <div class="upload-icon">⇧</div>
+                  <div class="upload-title">Augšupielādēt foto</div>
+                  <div class="upload-meta">JPG vai PNG līdz 10MB</div>
+                </span>
+              </label>
+            </div>
+            <div class="field">
+              <div class="requirements">
+                <strong>Prasības:</strong>
+                <ul>
+                  <li>Skaidrs portrets</li>
+                  <li>Seja redzama pilnībā</li>
+                  <li>Ne vecāks par 6 mēnešiem</li>
+                  <li>Bez cepures un brillēm</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Atpakaļ</button>
+            <button class="btn btn-primary" type="button">Turpināt →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card" aria-labelledby="consent-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">✓</div>
+            <div>
+              <h2 id="consent-title">5. Piekrišana</h2>
+              <p class="section-note">Izvēlieties līguma parakstīšanas veidu un apstipriniet nosacījumus.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="grid">
+            <div class="field"><label for="signing-type">Līguma parakstīšanas veids <span class="required">*</span></label><select id="signing-type"><option>Elektroniski</option><option>Klātienē</option></select></div>
+            <div class="field checkbox-row" style="padding-top: 29px;"><input id="support-club" type="checkbox" /><label for="support-club" style="margin:0;">Nepiemērot Līgumā noteiktās atlaides — vēlos atbalstīt klubu</label></div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Atpakaļ</button>
+            <button class="btn btn-primary" type="button">Turpināt →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card" aria-labelledby="review-title">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-icon">▤</div>
+            <div>
+              <h2 id="review-title">6. Pārskats</h2>
+              <p class="section-note">Pārbaudiet pieteikuma kopsavilkumu pirms iesniegšanas.</p>
+            </div>
+          </div>
+          <button class="collapse-btn" type="button" aria-label="Sakļaut sadaļu">⌄</button>
+        </div>
+        <div class="section-body">
+          <div class="summary-grid">
+            <div class="summary-item"><span>Vecāks</span><strong>Linards Kalvāns</strong></div>
+            <div class="summary-item"><span>Bērns</span><strong>Nav aizpildīts</strong></div>
+            <div class="summary-item"><span>Statuss</span><strong>Melnraksts</strong></div>
+          </div>
+
+          <p class="fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Saglabāt melnrakstu</button>
+            <button class="btn btn-red" type="submit">Iesniegt pieteikumu</button>
+          </div>
+        </div>
+      </section>
+    </form>
+  </main>
+</body>
+</html>

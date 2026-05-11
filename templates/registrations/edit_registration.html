@@ -13,6 +13,12 @@
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
 
+      <h2 class="fk-section-heading">ID / pases foto</h2>
+      <div class="fk-form-section">
+        <p><label for="{{ form.guardian_identity_document.id_for_label }}">{{ form.guardian_identity_document.label }}</label>{{ form.guardian_identity_document }}</p>
+        <p><label for="{{ form.member_identity_document.id_for_label }}">{{ form.member_identity_document.label }}</label>{{ form.member_identity_document }}</p>
+      </div>
+
       <h2 class="fk-section-heading">Vecāka informācija</h2>
       <div class="fk-form-section">
         <p><label for="{{ form.guardian_full_name.id_for_label }}">{{ form.guardian_full_name.label }}</label>{{ form.guardian_full_name }}</p>
@@ -20,7 +26,6 @@
         <p><label for="{{ form.guardian_email.id_for_label }}">{{ form.guardian_email.label }}</label>{{ form.guardian_email }}</p>
         <p><label for="{{ form.guardian_phone.id_for_label }}">{{ form.guardian_phone.label }}</label>{{ form.guardian_phone }}</p>
         <p><label for="{{ form.guardian_declared_address.id_for_label }}">{{ form.guardian_declared_address.label }}</label>{{ form.guardian_declared_address }}</p>
-        <p><label for="{{ form.guardian_identity_document.id_for_label }}">{{ form.guardian_identity_document.label }}</label>{{ form.guardian_identity_document }}</p>
       </div>
 
       <h2 class="fk-section-heading">Bērna informācija</h2>
@@ -67,9 +72,8 @@
         <p><label for="{{ form.member_kit_size_shorts.id_for_label }}">{{ form.member_kit_size_shorts.label }}</label>{{ form.member_kit_size_shorts }}</p>
       </div>
 
-      <h2 class="fk-section-heading">Dokumenti</h2>
+      <h2 class="fk-section-heading">Bērna foto</h2>
       <div class="fk-form-section">
-        <p><label for="{{ form.member_identity_document.id_for_label }}">{{ form.member_identity_document.label }}</label>{{ form.member_identity_document }}</p>
         <p><label for="{{ form.member_portrait_document.id_for_label }}">{{ form.member_portrait_document.label }}</label>{{ form.member_portrait_document }}</p>
       </div>
 
