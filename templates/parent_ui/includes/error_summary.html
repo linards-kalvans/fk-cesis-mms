@@ -1,0 +1,17 @@
+{% if form.errors %}
+  <div class="fk-error-summary">
+    <p>Sekojošas kļūdas ir jāizlabo:</p>
+    <ul>
+      {% for field, errors in form.errors.items %}
+        {% for error in errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+{% if error %}
+  <div class="fk-error-summary">
+    <p>{{ error }}</p>
+  </div>
+{% endif %}

@@ -1,5 +1,7 @@
 """Views for parent registration workflow."""
 
+from typing import cast
+
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -83,6 +85,84 @@ def new_application(request: HttpRequest) -> HttpResponse:
         "registrations/new_registration.html",
         {"form": form},
     )
+
+
+# ---------------------------------------------------------------------------
+# Canonical application workspace
+# ---------------------------------------------------------------------------
+
+
+def application_workspace(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Unified application workspace — editable for draft/fix, read-only otherwise."""
+    application = get_object_or_404(RegistrationApplication, pk=application_id)
+    account = _current_parent_account(request)
+    if not _parent_can_view_application(application, account):
+        raise Http404
+
+    editable = application.is_editable_by(account)
+
+    if request.method == "POST":
+        if not editable:
+            raise Http404
+        form = RegistrationApplicationForm(
+            request.POST,
+            request.FILES,
+            is_submit=request.POST.get("submit_action") == "submit",
+            has_existing_document=_active_guardian_identity_exists(application),
+        )
+        if form.is_valid():
+            application = create_or_update_draft(
+                data=form.cleaned_data,
+                files=request.FILES,
+                application=application,
+                verified_account=account,
+            )
+            if request.POST.get("submit_action") == "submit":
+                submit_application(application, account)
+                return redirect("registrations:parent-portal")
+            return redirect("registrations:application-workspace", application_id=application.id)
+    else:
+        form = RegistrationApplicationForm(
+            initial={
+                "guardian_full_name": application.guardian_full_name,
+                "guardian_personal_id": application.guardian_personal_id,
+                "guardian_email": application.guardian_email,
+                "guardian_phone": application.guardian_phone,
+                "guardian_declared_address": application.guardian_declared_address,
+                "member_full_name": application.member_full_name,
+                "member_personal_id": application.member_personal_id,
+                "member_birth_date": application.member_birth_date,
+                "member_actual_address": application.member_actual_address,
+                "member_same_address_as_guardian": application.member_same_address_as_guardian,
+                "member_kit_size_shirt": application.member_kit_size_shirt_id,
+                "member_kit_size_shorts": application.member_kit_size_shorts_id,
+                "preferred_agreement_signing": application.preferred_agreement_signing,
+                "support_club_instead_of_multi_child_discount": application.support_club_instead_of_multi_child_discount,
+            }
+        )
+
+    return render(
+        request,
+        "registrations/application_workspace.html",
+        {
+            "application": application,
+            "form": form,
+            "workspace_mode": "editable" if editable else "read_only",
+        },
+    )
+
+
+def redirect_to_workspace(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Redirect legacy routes to canonical workspace.
+
+    Non-owners get 404. All authorised owners are redirected to the
+    canonical workspace regardless of application editability.
+    """
+    application = get_object_or_404(RegistrationApplication, pk=application_id)
+    account = _current_parent_account(request)
+    if not _parent_can_view_application(application, account):
+        raise Http404
+    return redirect("registrations:application-workspace", application_id=application.id)
 
 
 def start_registration(request: HttpRequest) -> HttpResponse:
@@ -207,6 +287,20 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
     )
 
 
+def _portal_primary_application(account: ParentAccount) -> RegistrationApplication | None:
+    application = (
+        account.applications.filter(
+            status__in=(
+                RegistrationApplication.Status.DRAFT,
+                RegistrationApplication.Status.FIX_REQUESTED,
+            )
+        )
+        .order_by("-updated_at", "-created_at")
+        .first()
+    )
+    return cast(RegistrationApplication | None, application)
+
+
 def parent_portal(request: HttpRequest) -> HttpResponse:
     account = _current_parent_account(request)
     if account is None:
@@ -214,13 +308,9 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
 
     # Handle continue-draft POST action
     if request.method == "POST" and request.POST.get("action") == "continue_draft":
-        draft = (
-            account.applications.filter(status=RegistrationApplication.Status.DRAFT)
-            .order_by("-created_at")
-            .first()
-        )
+        draft = _portal_primary_application(account)
         if draft:
-            return redirect("registrations:edit-registration", application_id=draft.id)
+            return redirect("registrations:application-workspace", application_id=draft.id)
 
     # Show all applications linked to this verified parent
     applications = account.applications.order_by("-created_at")
@@ -240,6 +330,7 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "account": account,
             "applications": applications,
             "has_draft": has_draft,
+            "primary_application": _portal_primary_application(account),
         },
     )
 

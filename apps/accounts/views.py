@@ -96,7 +96,7 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
             return render(
                 request,
                 "registrations/verify_code.html",
-                {"error": "Nav gaidoša e-pasta verifikācijas.", "code": ""},
+                {"error": "Nav gaidoša e-pasta verifikācijas.", "code": "", "pending_email": pending},
                 status=400,
             )
 
@@ -105,7 +105,7 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
             return render(
                 request,
                 "registrations/verify_code.html",
-                {"error": "Ievadiet piekļuves kodu.", "code": ""},
+                {"error": "Ievadiet piekļuves kodu.", "code": "", "pending_email": pending},
                 status=400,
             )
 
@@ -115,7 +115,7 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
             return render(
                 request,
                 "registrations/verify_code.html",
-                {"error": "Nederīgs vai noilgušs kods.", "code": code},
+                {"error": "Nederīgs vai noilgušs kods.", "code": code, "pending_email": pending},
             )
 
         # Log in

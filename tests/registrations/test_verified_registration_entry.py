@@ -480,3 +480,285 @@ class TestCodeLifecycle:
         assert len(mail.outbox) == 1, (
             "Rate-limited code request must not send a second email."
         )
+
+
+# ===========================================================================
+# Task 2 — Register/verify workflow stays functional after redesign
+# ===========================================================================
+
+
+class TestTask2RegisterPageRedesign:
+    """Register page must render with new Task 2 shell and assets."""
+
+    def test_get_register_returns_200(self):
+        """GET /register/ must return 200."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+
+    def test_register_page_has_fk_parent_page_shell(self):
+        """Register page must use fk-parent-page shell wrapper."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+        assert "fk-parent-page" in resp.content.decode()
+
+    def test_register_page_has_fk_site_header(self):
+        """Register page must include fk-site-header component."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+        assert "fk-site-header" in resp.content.decode()
+
+    def test_register_page_links_google_fonts(self):
+        """Register page must include Google font links."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "fonts.googleapis.com" in content
+        assert "Anton" in content
+        assert "Inter" in content
+
+    def test_register_page_links_parent_theme_css(self):
+        """Register page must link parent_theme.css."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+        assert "parent_theme.css" in resp.content.decode()
+
+    def test_register_page_links_parent_pages_css(self):
+        """Register page must link parent_pages.css."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert resp.status_code == 200
+        assert "parent_pages.css" in resp.content.decode()
+
+    def test_register_page_still_has_email_input(self):
+        """Register page must still render an email input."""
+        resp = Client().get(REGISTER_ROUTE)
+        content = resp.content.decode()
+        assert "email" in content.lower()
+
+    def test_register_page_still_has_drosa_piekluve_text(self):
+        """Register page must still show 'Droša piekļuve' guidance."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert "Droša piekļuve" in resp.content.decode()
+
+    def test_register_page_still_has_epasts_label(self):
+        """Register page must still show 'E-pasts' label."""
+        resp = Client().get(REGISTER_ROUTE)
+        assert "E-pasts" in resp.content.decode()
+
+
+class TestTask2VerifyPageRedesign:
+    """Verify page must render with new Task 2 shell and content."""
+
+    def test_verify_page_requires_pending_email(self):
+        """GET /register/verify/ without pending email must not return 200."""
+        client = Client()
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code != 200
+
+    def test_verify_page_has_fk_parent_page_shell(self):
+        """Verify page must use fk-parent-page shell wrapper."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "fk-parent-page" in resp.content.decode()
+
+    def test_verify_page_has_fk_site_header(self):
+        """Verify page must include fk-site-header component."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify2@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "fk-site-header" in resp.content.decode()
+
+    def test_verify_page_has_secure_verification_framing(self):
+        """Verify page must show 'Droša piekļuve' framing text."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify3@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "Droša piekļuve" in resp.content.decode()
+
+    def test_verify_page_shows_pending_email(self):
+        """Verify page must display the pending verification email."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "pendingtask2@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "pendingtask2@example.com" in resp.content.decode()
+
+    def test_verify_page_has_code_form_label(self):
+        """Verify page must have 'Piekļuves kods' label."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify4@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "Piekļuves kods" in resp.content.decode()
+
+    def test_verify_page_has_submit_button(self):
+        """Verify page must have 'Apstiprināt' submit button."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify5@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "Apstiprināt" in resp.content.decode()
+
+    def test_verify_page_links_google_fonts(self):
+        """Verify page must include Google font links."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify6@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "fonts.googleapis.com" in content
+        assert "Anton" in content
+        assert "Inter" in content
+
+    def test_verify_page_links_parent_theme_css(self):
+        """Verify page must link parent_theme.css."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify7@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "parent_theme.css" in resp.content.decode()
+
+    def test_verify_page_links_parent_pages_css(self):
+        """Verify page must link parent_pages.css."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "task2verify8@example.com"})
+        resp = client.get(VERIFY_ROUTE)
+        assert resp.status_code == 200
+        assert "parent_pages.css" in resp.content.decode()
+
+
+class TestTask2VerifiedEntryStillWorks:
+    """The full register→verify→portal flow must still work after Task 2."""
+
+    def test_full_flow_register_verify_portal(self):
+        """Full register→verify→portal flow must succeed."""
+        client = Client()
+        # Step 1: POST /register/
+        resp = client.post(REGISTER_ROUTE, {"email": "flowtest@example.com"})
+        assert resp.status_code == 302
+        assert VERIFY_ROUTE in resp.url
+
+        # Step 2: Extract code and POST /register/verify/
+        code = _extract_code_from_email()
+        resp = client.post(VERIFY_ROUTE, {"code": code})
+        assert resp.status_code == 302
+        assert "portal" in resp.url.lower()
+
+        # Step 3: Verify portal is accessible
+        resp = client.get("/portal/")
+        assert resp.status_code == 200
+
+    def test_verify_page_still_accepts_code(self):
+        """Verify page POST must still accept correct code."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "codetest@example.com"})
+        code = _extract_code_from_email()
+        resp = client.post(VERIFY_ROUTE, {"code": code})
+        assert resp.status_code == 302
+
+    def test_verify_page_still_rejects_wrong_code(self):
+        """Verify page POST must still reject wrong code."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "wrongcodetest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": "000000"})
+        assert resp.status_code in (200, 400)
+        assert not ParentAccount.objects.filter(
+            email="wrongcodetest@example.com"
+        ).exists()
+
+    def test_verify_page_still_rejects_empty_code(self):
+        """Verify page POST must still reject empty code."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "emptycodetest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": ""})
+        assert resp.status_code in (200, 400)
+
+    def test_session_established_after_verify(self):
+        """After verify, session must contain PARENT_ACCOUNT_SESSION_KEY."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "sessiontest2@example.com"})
+        code = _extract_code_from_email()
+        client.post(VERIFY_ROUTE, {"code": code})
+        assert PARENT_ACCOUNT_SESSION_KEY in client.session
+
+
+# ===========================================================================
+# Critical review follow-up: error state rendering in parent entry/verify flow
+# ===========================================================================
+
+
+class TestRegisterPageErrorStateRendering:
+    """Register page must render visible error feedback on POST errors."""
+
+    def test_empty_email_post_shows_error_text(self):
+        """POST /register/ with empty email must render visible error feedback."""
+        resp = Client().post(REGISTER_ROUTE, {"email": ""})
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Ievadiet e-pasta adresi" in content, (
+            "Register page must render visible error text when email is empty."
+        )
+
+    def test_invalid_request_path_returns_error_context(self):
+        """Register page must render error context when request is invalid."""
+        resp = Client().post(REGISTER_ROUTE, {})
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Ievadiet e-pasta adresi" in content, (
+            "Register page must render visible error text when email key is missing."
+        )
+
+
+class TestVerifyPageErrorStateRendering:
+    """Verify page must render visible error feedback on POST errors."""
+
+    def test_empty_code_post_shows_error_text(self):
+        """POST /register/verify/ with empty code must render visible error feedback."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "errortest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": ""})
+        assert resp.status_code in (200, 400)
+        content = resp.content.decode()
+        assert "Ievadiet piekļuves kodu" in content, (
+            "Verify page must render visible error text when code is empty."
+        )
+
+    def test_wrong_code_post_shows_error_text(self):
+        """POST /register/verify/ with wrong code must render visible error feedback."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "wrongerrortest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": "000000"})
+        assert resp.status_code in (200, 400)
+        content = resp.content.decode()
+        assert "Nederīgs vai noilgušs kods" in content, (
+            "Verify page must render visible error text when code is wrong."
+        )
+
+
+class TestVerifyPagePOSTErrorShowsPendingEmail:
+    """Verify page POST error renders must still show pending_email."""
+
+    def test_empty_code_post_shows_pending_email(self):
+        """POST /register/verify/ with empty code must still display pending email."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "pendingerrortest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": ""})
+        assert resp.status_code in (200, 400)
+        content = resp.content.decode()
+        assert "pendingerrortest@example.com" in content, (
+            "Verify page POST error must still show the pending verification email."
+        )
+
+    def test_wrong_code_post_shows_pending_email(self):
+        """POST /register/verify/ with wrong code must still display pending email."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "pendingwrongtest@example.com"})
+        resp = client.post(VERIFY_ROUTE, {"code": "000000"})
+        assert resp.status_code in (200, 400)
+        content = resp.content.decode()
+        assert "pendingwrongtest@example.com" in content, (
+            "Verify page POST error must still show the pending verification email."
+        )

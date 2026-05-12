@@ -1,0 +1,91 @@
+/* Parent-page layout helpers */
+
+.fk-page-wrapper {
+  min-height: calc(100vh - 80px);
+  padding-bottom: 40px;
+}
+
+.fk-branding-heading {
+  font-family: 'Anton', sans-serif;
+  font-size: 32px;
+  color: var(--fk-blue);
+  margin: 0 0 24px;
+}
+
+.fk-guidance-section {
+  background: var(--fk-white);
+  border-radius: var(--fk-radius);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.fk-guidance-section h2 {
+  font-size: 18px;
+  margin: 0 0 16px;
+  color: var(--fk-blue);
+}
+
+.fk-form-group {
+  margin-bottom: 16px;
+}
+
+.fk-form-group label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--fk-text);
+}
+
+.fk-form-group input[type="email"],
+.fk-form-group input[type="text"],
+.fk-form-group input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--fk-border);
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: 'Inter', sans-serif;
+  box-sizing: border-box;
+}
+
+.fk-secure-framing {
+  background: var(--fk-white);
+  border-radius: var(--fk-radius);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.fk-application-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--fk-border);
+}
+
+.fk-application-card:last-child {
+  border-bottom: none;
+}
+
+.fk-application-card-info {
+  flex: 1;
+}
+
+.fk-application-card-status {
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.fk-cta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.fk-cta-group .fk-btn {
+  width: 100%;
+}

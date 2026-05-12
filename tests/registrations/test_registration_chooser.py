@@ -1,18 +1,16 @@
-"""P1 — Verified guardian chooser / dashboard behavior tests.
+"""Task 2 — Portal chooser behavior with redesigned parent shell.
 
-Covers the verified-parent layer behavior described in
-docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md:
+Covers Task 2 portal redesign assertions that depend on portal
+behavior (draft priority, start-new CTA, registrations list,
+verified gate). These tests use the same session-injection pattern
+as the existing P1 chooser tests but target the redesigned
+portal template structure.
 
-- Chooser/dashboard lives on ``/portal/``, not ``/register/``.
-- Verified guardian session is established by setting
-  ``PARENT_ACCOUNT_SESSION_KEY`` directly in the test client session.
-- With an existing draft on ``/portal/``: continue-draft action visible,
-  start-new-registration action visible, registrations list visible.
-- Without an existing draft on ``/portal/``: start-new-registration visible
-  as primary path, registrations list area still visible.
-- Existing guardian starting a new registration uses ``/applications/new/``.
-- On ``/applications/new/``: guardian fields are prefilled from the verified
-  account / latest application; member/child fields are NOT prefilled.
+Strategy:
+- Assert stable text hooks (Turpināt pieteikumu, Sākt jaunu reģistrāciju,
+  Nav pieteikumu, Melnraksts, Skatīt).
+- Assert fk-parent-page shell hook presence.
+- Do not assert exact DOM nesting.
 """
 
 import pytest
@@ -22,6 +20,7 @@ from django.contrib.sessions.backends.db import SessionStore
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
+from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
 
@@ -32,422 +31,500 @@ pytestmark = pytest.mark.django_db
 
 
 def _login_verified(client: Client, account: ParentAccount) -> None:
-    """Establish verified guardian session by injecting the session cookie.
-
-    Creates a fresh session store, writes the parent-account key, persists
-    to the DB, and sets the session cookie on the test client directly.
-    This avoids magic-link login and works reliably with Django's test
-    client even when no response has been received yet.
-    """
+    """Establish verified guardian session by injecting the session cookie."""
     session = SessionStore()
     session[PARENT_ACCOUNT_SESSION_KEY] = account.pk
     session.save()
     client.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
 
 
-def _make_child_identity_file(name: str = "id.png"):
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
 # ===========================================================================
-# 7a. Existing guardian WITH draft: continue draft primary
+# Portal redesigned — shell and hero summary
 # ===========================================================================
 
 
-class TestExistingGuardianWithDraft:
-    """When a verified guardian has an existing draft, continue draft is primary."""
+class TestPortalShellAndHero:
+    """Portal must render the new shared parent shell and hero summary."""
 
-    def test_continue_draft_link_present_on_portal(self):
-        """The portal page must show a continue-draft action when a draft exists."""
-        from apps.registrations.services import create_or_update_draft
-
+    def test_portal_has_fk_parent_page_wrapper(self):
+        """Portal must contain 'fk-parent-page' shell hook."""
         acct = ParentAccount.objects.create(
-            email="withdraft@example.com",
+            email="shelltest@example.com",
             phone="+3711111111",
         )
-        create_or_update_draft(
-            data={
-                "guardian_email": "withdraft@example.com",
-                "guardian_full_name": "WithDraft Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_address": "Riga 1",
-                "child_full_name": "Child WithDraft",
-                "child_personal_id": "010125-11111",
-                "child_birth_date": "2025-01-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-
         client = Client()
         _login_verified(client, acct)
-
         resp = client.get("/portal/")
-        assert resp.status_code == 200, (
-            f"Portal returned {resp.status_code}, expected 200."
-        )
-        content = resp.content.decode()
-        assert "Turpināt" in content or "turpināt" in content.lower() or "continue" in content.lower(), (
-            "Portal must show a continue-draft action when a draft exists."
+        assert resp.status_code == 200
+        assert "fk-parent-page" in resp.content.decode(), (
+            "Portal must use fk-parent-page shell."
         )
 
-    def test_start_new_registration_available_with_draft(self):
-        """The portal must also offer start-new-registration when a draft exists."""
-        from apps.registrations.services import create_or_update_draft
-
+    def test_portal_has_fk_site_header(self):
+        """Portal must contain 'fk-site-header' hook."""
         acct = ParentAccount.objects.create(
-            email="withdraft2@example.com",
+            email="headertest@example.com",
+            phone="+37122222222",
+        )
+        client = Client()
+        _login_verified(client, acct)
+        resp = client.get("/portal/")
+        assert resp.status_code == 200
+        assert "fk-site-header" in resp.content.decode(), (
+            "Portal must include fk-site-header."
+        )
+
+    def test_portal_shows_mani_pieteikumi_eyebrow(self):
+        """Portal must contain 'Mani pieteikumi' eyebrow."""
+        acct = ParentAccount.objects.create(
+            email="eyebrowtest@example.com",
             phone="+37133333333",
         )
-        create_or_update_draft(
-            data={
-                "guardian_email": "withdraft2@example.com",
-                "guardian_full_name": "WithDraft2 Guardian",
-                "guardian_personal_id": "010101-33333",
-                "guardian_phone": "+37144444444",
-                "guardian_address": "Riga 3",
-                "child_full_name": "Child WithDraft2",
-                "child_personal_id": "010125-33333",
-                "child_birth_date": "2025-02-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-
         client = Client()
         _login_verified(client, acct)
-
         resp = client.get("/portal/")
         assert resp.status_code == 200
-        content = resp.content.decode()
-        assert "jauns" in content.lower() or "new" in content.lower() or "sākt" in content.lower() or "start" in content.lower(), (
-            "Portal must offer start-new-registration when a draft exists."
-        )
+        assert "Mani pieteikumi" in resp.content.decode()
 
-    def test_registrations_list_visible_with_draft(self):
-        """The registrations list must be visible when a draft exists."""
-        from apps.registrations.services import create_or_update_draft
-
+    def test_portal_shows_parskatiet_heading(self):
+        """Portal must contain 'Pārskatiet un turpiniet' heading."""
         acct = ParentAccount.objects.create(
-            email="withdraft3@example.com",
+            email="headingtest@example.com",
+            phone="+37144444444",
+        )
+        client = Client()
+        _login_verified(client, acct)
+        resp = client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Pārskatiet un turpiniet" in resp.content.decode()
+
+
+# ===========================================================================
+# Portal with draft — continue primary + start-new always visible
+# ===========================================================================
+
+
+class TestPortalWithDraft:
+    """Portal with an editable draft must prioritize continue CTA."""
+
+    def setup_method(self):
+        self.acct = ParentAccount.objects.create(
+            email="draftportal@example.com",
             phone="+37155555555",
         )
-        create_or_update_draft(
+        self.client = Client()
+        _login_verified(self.client, self.acct)
+
+    def _create_draft(self, email="draftportal@example.com", child="DraftPortal Child"):
+        from apps.registrations.services import create_or_update_draft
+
+        return create_or_update_draft(
             data={
-                "guardian_email": "withdraft3@example.com",
-                "guardian_full_name": "WithDraft3 Guardian",
+                "guardian_email": email,
+                "guardian_full_name": "DraftPortal Guardian",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37166666666",
-                "guardian_address": "Riga 5",
-                "child_full_name": "Child WithDraft3",
-                "child_personal_id": "010125-55555",
-                "child_birth_date": "2025-03-01",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": child,
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-05-01",
             },
             files={},
-            verified_account=acct,
+            verified_account=self.acct,
         )
 
-        client = Client()
-        _login_verified(client, acct)
+    def test_portal_shows_continue_cta_with_draft(self):
+        """Portal must show 'Turpināt pieteikumu' when draft exists."""
+        self._create_draft()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Turpināt pieteikumu" in resp.content.decode()
 
-        resp = client.get("/portal/")
+    def test_portal_shows_start_new_with_draft(self):
+        """Portal must show 'Sākt jaunu reģistrāciju' when draft exists."""
+        self._create_draft()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Sākt jaunu reģistrāciju" in resp.content.decode()
+
+    def test_continue_cta_links_to_workspace(self):
+        """Continue CTA must link to /applications/<id>/."""
+        app = self._create_draft()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert f"/applications/{app.pk}/" in resp.content.decode()
+
+    def test_portal_shows_draft_status_and_turpat(self):
+        """Draft application card must show 'Melnraksts' and 'Turpināt'."""
+        self._create_draft()
+        resp = self.client.get("/portal/")
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert "WithDraft3" in content or "withdraft3" in content, (
-            "Portal must show the existing application in the registrations list."
-        )
+        assert "Melnraksts" in content
+        assert "Turpināt" in content
 
 
 # ===========================================================================
-# 7b. Existing guardian WITHOUT draft: start new registration primary
+# Portal without draft — start-new primary, empty state
 # ===========================================================================
 
 
-class TestExistingGuardianWithoutDraft:
-    """When a verified guardian has no draft, start-new-registration is primary."""
+class TestPortalWithoutDraft:
+    """Portal without a draft must show start-new as primary and empty state."""
 
-    def test_start_new_registration_primary_without_draft(self):
-        """The portal must show start-new-registration as primary when no draft exists."""
-        acct = ParentAccount.objects.create(
-            email="nodraft@example.com",
+    def setup_method(self):
+        self.acct = ParentAccount.objects.create(
+            email="nodraftportal@example.com",
             phone="+37177777777",
         )
+        self.client = Client()
+        _login_verified(self.client, self.acct)
 
-        client = Client()
-        _login_verified(client, acct)
+    def test_portal_shows_start_new_without_draft(self):
+        """Portal must show 'Sākt jaunu reģistrāciju' when no draft exists."""
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Sākt jaunu reģistrāciju" in resp.content.decode()
 
-        resp = client.get("/portal/")
-        assert resp.status_code == 200, (
-            f"Portal returned {resp.status_code}, expected 200."
-        )
+    def test_portal_shows_empty_state_without_draft(self):
+        """Portal must show 'Nav pieteikumu' empty state when no applications exist."""
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Nav pieteikumu" in resp.content.decode()
+
+    def test_portal_does_not_show_continue_without_draft(self):
+        """Portal must not show 'Turpināt pieteikumu' when no draft exists."""
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
         content = resp.content.decode()
-        assert "jauns" in content.lower() or "new" in content.lower() or "sākt" in content.lower() or "start" in content.lower(), (
-            "Portal must offer start-new-registration when no draft exists."
+        # The hero should not contain the continue CTA text when no draft exists.
+        # We check that the primary hero section does not have it.
+        assert "Turpināt pieteikumu" not in content, (
+            "Portal must not show 'Turpināt pieteikumu' when no draft exists."
         )
 
-    def test_registrations_list_visible_without_draft(self):
-        """The registrations list area must be visible even when no drafts exist."""
-        acct = ParentAccount.objects.create(
-            email="nodraft2@example.com",
+
+# ===========================================================================
+# Portal with submitted application — Skatīt CTA
+# ===========================================================================
+
+
+class TestPortalWithSubmittedApplication:
+    """Portal with a submitted application must show 'Skatīt' CTA."""
+
+    def setup_method(self):
+        self.acct = ParentAccount.objects.create(
+            email="submittedportal@example.com",
             phone="+37188888888",
         )
+        self.client = Client()
+        _login_verified(self.client, self.acct)
 
-        client = Client()
-        _login_verified(client, acct)
+    def _create_submitted(self, email="submittedportal@example.com"):
+        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.members.models import KitSizeOption
+        from django.core.files.uploadedfile import SimpleUploadedFile
 
-        resp = client.get("/portal/")
-        assert resp.status_code == 200, (
-            f"Portal returned {resp.status_code}, expected 200."
+        shirt, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHIRT,
+            defaults={"label": "S", "is_active": True},
         )
-        # The portal page must render (200) even with zero applications.
-        # The template uses an {% empty %} branch, so the page body exists.
-        assert b"Nav pieteikumu" in resp.content or b"pieteikumu" in resp.content.lower(), (
-            "Portal must render the registrations list area even when empty."
-        )
-
-
-# ===========================================================================
-# 8. Existing guardian starting new registration: guardian-only prefill
-# ===========================================================================
-
-
-class TestExistingGuardianPrefill:
-    """Existing guardian starting a new registration must get guardian-only prefill.
-
-    Member/child fields must NOT be prefilled from a previous application.
-    """
-
-    def test_guardian_fields_prefilled_on_new_registration(self):
-        """Guardian fields must be prefilled from the verified account / latest application."""
-        from apps.registrations.services import create_or_update_draft
-
-        acct = ParentAccount.objects.create(
-            email="prefillguardian@example.com",
-            phone="+37199999999",
-        )
-        create_or_update_draft(
-            data={
-                "guardian_email": "prefillguardian@example.com",
-                "guardian_full_name": "Prefill Guardian",
-                "guardian_personal_id": "010101-99999",
-                "guardian_phone": "+37100000000",
-                "guardian_address": "Riga 99",
-                "child_full_name": "Child Previous",
-                "child_personal_id": "010125-99999",
-                "child_birth_date": "2025-04-01",
-            },
-            files={},
-            verified_account=acct,
+        shorts, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHORTS,
+            defaults={"label": "S", "is_active": True},
         )
 
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/applications/new/")
-        assert resp.status_code == 200
-        content = resp.content.decode()
-        assert "Prefill Guardian" in content, (
-            "Guardian full_name must be prefilled from existing application."
-        )
-
-    def test_guardian_email_prefilled_from_account(self):
-        """Guardian email must be prefilled from the verified account."""
-        acct = ParentAccount.objects.create(
-            email="emailprefill@example.com",
-            phone="+37134343434",
-        )
-
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/applications/new/")
-        assert resp.status_code == 200
-        content = resp.content.decode()
-        assert "emailprefill@example.com" in content, (
-            "Guardian email must be prefilled from the verified account."
-        )
-
-    def test_guardian_phone_prefilled_from_account(self):
-        """Guardian phone must be prefilled from the verified account."""
-        acct = ParentAccount.objects.create(
-            email="phoneprefill@example.com",
-            phone="+37150505050",
-        )
-
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/applications/new/")
-        assert resp.status_code == 200
-        content = resp.content.decode()
-        assert "+37150505050" in content, (
-            "Guardian phone must be prefilled from the verified account."
-        )
-
-    def test_member_child_fields_not_prefilled(self):
-        """Member/child fields must NOT be prefilled when starting a new registration."""
-        from apps.registrations.services import create_or_update_draft
-
-        acct = ParentAccount.objects.create(
-            email="nomemberprefill@example.com",
-            phone="+37112121212",
-        )
-        create_or_update_draft(
-            data={
-                "guardian_email": "nomemberprefill@example.com",
-                "guardian_full_name": "NoMemberPrefill Guardian",
-                "guardian_personal_id": "010101-12121",
-                "guardian_phone": "+37123232323",
-                "guardian_address": "Riga 12",
-                "child_full_name": "Previous Child",
-                "child_personal_id": "010125-12121",
-                "child_birth_date": "2025-05-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/applications/new/")
-        assert resp.status_code == 200
-        content = resp.content.decode()
-        assert "Previous Child" not in content, (
-            "Child full_name must NOT be prefilled for new registration."
-        )
-        assert "010125-12121" not in content, (
-            "Child personal ID must NOT be prefilled for new registration."
-        )
-
-    def test_no_continue_draft_action_on_new_registration_page(self):
-        """The new registration page must not show continue-draft actions."""
-        from apps.registrations.services import create_or_update_draft
-
-        acct = ParentAccount.objects.create(
-            email="nocdnprefill@example.com",
-            phone="+37120202020",
-        )
-        create_or_update_draft(
-            data={
-                "guardian_email": "nocdnprefill@example.com",
-                "guardian_full_name": "NoCDN Prefill Guardian",
-                "guardian_personal_id": "010101-20202",
-                "guardian_phone": "+37121212121",
-                "guardian_address": "Riga 20",
-                "child_full_name": "Previous Child CDN",
-                "child_personal_id": "010125-20202",
-                "child_birth_date": "2025-06-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/applications/new/")
-        assert resp.status_code == 200
-        content = resp.content.decode()
-        # The new-registration form must not include continue-draft navigation.
-        # We assert the form action area does not contain a draft-continue link.
-        assert "Turpināt melnrakstu" not in content and "turpināt melnrakstu" not in content.lower(), (
-            "New registration page must not show continue-draft action."
-        )
-
-
-# ===========================================================================
-# 7a-b. Portal is the chooser, not /register/
-# ===========================================================================
-
-
-class TestPortalIsChooserNotRegister:
-    """The chooser/dashboard lives on /portal/, not /register/."""
-
-    def test_register_page_is_not_the_chooser(self):
-        """The /register/ page must NOT serve as the chooser/dashboard for
-        verified guardians. Chooser behavior belongs on /portal/.
-        """
-        acct = ParentAccount.objects.create(
-            email="registernotchooser@example.com",
-            phone="+37130303030",
-        )
-
-        client = Client()
-        _login_verified(client, acct)
-
-        resp = client.get("/register/")
-        # /register/ should either redirect to portal or present the email-entry
-        # gate, NOT a chooser with continue-draft / start-new actions.
-        assert resp.status_code in (302, 200)
-        if resp.status_code == 200:
-            content = resp.content.decode()
-            # Must NOT show the chooser actions
-            assert "Turpināt" not in content or "jauns" not in content or "sākt" not in content, (
-                "/register/ must not serve as the chooser dashboard for verified guardians."
+        def _make_file(name="id.png"):
+            return SimpleUploadedFile(
+                name=name,
+                content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                content_type="image/png",
             )
 
-    def test_portal_redirects_unverified_to_login(self):
-        """Unauthenticated users must be redirected when accessing /portal/."""
-        client = Client()
-        resp = client.get("/portal/", follow=False)
-        assert resp.status_code == 302, (
-            f"Unauthenticated /portal/ must redirect, got {resp.status_code}."
-        )
-        assert "/register/" in resp.url, (
-            "Redirect must go to /register/ for unverified portal access."
-        )
-
-
-# ===========================================================================
-# 7a-b. Continue draft action follows to edit page
-# ===========================================================================
-
-
-class TestContinueDraftAction:
-    """Clicking continue-draft must redirect to the edit page for that draft."""
-
-    def test_continue_draft_redirects_to_edit_page(self):
-        """POST continue-draft must redirect to the application edit URL."""
-        from apps.registrations.services import create_or_update_draft
-
-        acct = ParentAccount.objects.create(
-            email="continuedraft@example.com",
-            phone="+37145454545",
-        )
         app = create_or_update_draft(
             data={
-                "guardian_email": "continuedraft@example.com",
-                "guardian_full_name": "Continue Draft Guardian",
-                "guardian_personal_id": "010101-45454",
-                "guardian_phone": "+37156565656",
-                "guardian_address": "Riga 45",
-                "child_full_name": "Child ContinueDraft",
-                "child_personal_id": "010125-45454",
-                "child_birth_date": "2025-06-01",
+                "guardian_email": email,
+                "guardian_full_name": "SubmittedPortal Guardian",
+                "guardian_personal_id": "010101-88888",
+                "guardian_phone": "+37199999999",
+                "guardian_declared_address": "Riga 8",
+                "member_full_name": "SubmittedPortal Child",
+                "member_personal_id": "010125-88888",
+                "member_birth_date": "2025-08-01",
+                "member_same_address_as_guardian": True,
+                "member_kit_size_shirt": shirt.pk,
+                "member_kit_size_shorts": shorts.pk,
+            },
+            files={
+                "guardian_identity_document": _make_file("sub_guardian.png"),
+                "member_identity_document": _make_file("sub_member.png"),
+                "member_portrait_document": _make_file("sub_portrait.png"),
+            },
+            verified_account=self.acct,
+        )
+        submit_application(app, self.acct)
+        return app
+
+    def test_submitted_application_shows_skatit_cta(self):
+        """Submitted application card must show 'Skatīt pieteikumu'."""
+        self._create_submitted()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Skatīt pieteikumu" in resp.content.decode()
+
+    def test_submitted_application_shows_iesniegts_status(self):
+        """Submitted application card must show 'Iesniegts' status."""
+        self._create_submitted()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Iesniegts" in resp.content.decode()
+
+    def test_portal_shows_start_new_even_with_submitted(self):
+        """Portal must still show 'Sākt jaunu reģistrāciju' alongside submitted app."""
+        self._create_submitted()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        assert "Sākt jaunu reģistrāciju" in resp.content.decode()
+
+
+# ===========================================================================
+# Portal verified gate — unauthenticated redirect
+# ===========================================================================
+
+
+class TestPortalVerifiedGate:
+    """Portal must redirect unauthenticated users to /register/."""
+
+    def test_unauthenticated_portal_redirects_to_register(self):
+        """Unauthenticated GET /portal/ must redirect to /register/."""
+        client = Client()
+        resp = client.get("/portal/", follow=False)
+        assert resp.status_code == 302
+        assert "/register/" in resp.url
+
+    def test_portal_shows_fk_parent_page_after_verification(self):
+        """Verified user must see fk-parent-page shell on portal."""
+        from apps.accounts.services import issue_magic_link
+
+        acct = ParentAccount.objects.create(
+            email="gateverify@example.com",
+            phone="+37100000000",
+        )
+        client = Client()
+        raw = issue_magic_link(acct)
+        client.get(f"/accounts/verify/{raw}/")
+        resp = client.get("/portal/")
+        assert resp.status_code == 200
+        assert "fk-parent-page" in resp.content.decode()
+
+
+# ===========================================================================
+# Portal hero — primary_application as top-level CTA
+# ===========================================================================
+
+
+class TestPortalHeroPrimaryCta:
+    """Portal hero must use primary_application as top-level primary CTA.
+
+    When an editable application (draft or fix_requested) exists, the hero
+    card area must contain a 'Turpināt pieteikumu' CTA linking to the
+    application workspace — not only inside the application card list.
+    """
+
+    def setup_method(self):
+        self.acct = ParentAccount.objects.create(
+            email="herocta@example.com",
+            phone="+37112345678",
+        )
+        self.client = Client()
+        _login_verified(self.client, self.acct)
+
+    def _create_draft(self):
+        from apps.registrations.services import create_or_update_draft
+
+        return create_or_update_draft(
+            data={
+                "guardian_email": "herocta@example.com",
+                "guardian_full_name": "HeroCTA Guardian",
+                "guardian_personal_id": "010101-99999",
+                "guardian_phone": "+37122222222",
+                "guardian_declared_address": "Riga 9",
+                "member_full_name": "HeroCTA Child",
+                "member_personal_id": "010125-99999",
+                "member_birth_date": "2025-09-01",
             },
             files={},
-            verified_account=acct,
+            verified_account=self.acct,
         )
 
-        client = Client()
-        _login_verified(client, acct)
+    def test_portal_hero_has_continue_cta_when_draft_exists(self):
+        """Portal hero card must contain 'Turpināt pieteikumu' CTA when draft exists."""
+        self._create_draft()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Turpināt pieteikumu" in content, (
+            "Portal hero must show 'Turpināt pieteikumu' CTA when editable application exists."
+        )
 
-        resp = client.post(
-            "/portal/",
-            data={"action": "continue_draft"},
-            follow=False,
+    def test_portal_hero_continue_cta_links_to_primary_application(self):
+        """Portal hero CTA must link to /applications/<id>/ for the primary application."""
+        app = self._create_draft()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert f"/applications/{app.pk}/" in content, (
+            f"Portal hero CTA must link to /applications/{app.pk}/."
         )
-        assert resp.status_code == 302, (
-            f"Continue-draft POST returned {resp.status_code}, expected 302."
+
+    def test_portal_hero_continue_cta_visible_when_fix_requested_exists(self):
+        """Portal hero must show 'Turpināt pieteikumu' when fix_requested application exists."""
+        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.members.models import KitSizeOption
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        shirt, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHIRT,
+            defaults={"label": "S", "is_active": True},
         )
-        assert f"/applications/{app.pk}/edit/" in resp.url, (
-            f"Redirect must go to the draft's edit page. Got: {resp.url}"
+        shorts, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHORTS,
+            defaults={"label": "S", "is_active": True},
+        )
+
+        def _make_file(name="id.png"):
+            return SimpleUploadedFile(
+                name=name,
+                content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                content_type="image/png",
+            )
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "herocta@example.com",
+                "guardian_full_name": "HeroCTA Guardian",
+                "guardian_personal_id": "010101-99999",
+                "guardian_phone": "+37122222222",
+                "guardian_declared_address": "Riga 9",
+                "member_full_name": "HeroCTA Child",
+                "member_personal_id": "010125-99999",
+                "member_birth_date": "2025-09-01",
+                "member_kit_size_shirt": shirt.pk,
+                "member_kit_size_shorts": shorts.pk,
+            },
+            files={
+                "guardian_identity_document": _make_file("hero_guardian.png"),
+                "member_identity_document": _make_file("hero_member.png"),
+                "member_portrait_document": _make_file("hero_portrait.png"),
+            },
+            verified_account=self.acct,
+        )
+        submit_application(app, self.acct)
+        app.refresh_from_db()
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.save(update_fields=["status"])
+
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Turpināt pieteikumu" in content, (
+            "Portal hero must show 'Turpināt pieteikumu' CTA when fix_requested application exists."
+        )
+
+
+# ===========================================================================
+# Portal status rendering — fix_requested and broader status contract
+# ===========================================================================
+
+
+class TestPortalStatusBadgeRendering:
+    """Portal must render status badges for all application statuses.
+
+    The portal must use the status_badge primitive (or equivalent
+    consistent rendering) for all statuses, not only draft and submitted.
+    """
+
+    def setup_method(self):
+        self.acct = ParentAccount.objects.create(
+            email="statustest@example.com",
+            phone="+37133344455",
+        )
+        self.client = Client()
+        _login_verified(self.client, self.acct)
+
+    def _create_fix_requested(self):
+        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.members.models import KitSizeOption
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        shirt, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHIRT,
+            defaults={"label": "M", "is_active": True},
+        )
+        shorts, _ = KitSizeOption.objects.get_or_create(
+            kind=KitSizeOption.Kind.SHORTS,
+            defaults={"label": "M", "is_active": True},
+        )
+
+        def _make_file(name="id.png"):
+            return SimpleUploadedFile(
+                name=name,
+                content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+                content_type="image/png",
+            )
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "statustest@example.com",
+                "guardian_full_name": "StatusTest Guardian",
+                "guardian_personal_id": "010101-44444",
+                "guardian_phone": "+37144455566",
+                "guardian_declared_address": "Riga 4",
+                "member_full_name": "StatusTest Child",
+                "member_personal_id": "010125-44444",
+                "member_birth_date": "2025-04-01",
+                "member_kit_size_shirt": shirt.pk,
+                "member_kit_size_shorts": shorts.pk,
+            },
+            files={
+                "guardian_identity_document": _make_file("status_guardian.png"),
+                "member_identity_document": _make_file("status_member.png"),
+                "member_portrait_document": _make_file("status_portrait.png"),
+            },
+            verified_account=self.acct,
+        )
+        submit_application(app, self.acct)
+        app.refresh_from_db()
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.save(update_fields=["status"])
+        return app
+
+    def test_fix_requested_application_shows_jalabo_status(self):
+        """fix_requested application card must show 'Jālabo' status text."""
+        self._create_fix_requested()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Jālabo" in content, (
+            "Portal must show 'Jālabo' status for fix_requested application."
+        )
+
+    def test_fix_requested_application_shows_edit_cta(self):
+        """fix_requested application card must show a visible edit/continue CTA."""
+        self._create_fix_requested()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Turpināt" in content, (
+            "Portal must show a continue/edit CTA for fix_requested application."
+        )
+
+    def test_fix_requested_application_card_links_to_workspace(self):
+        """fix_requested application card must link to the application workspace."""
+        app = self._create_fix_requested()
+        resp = self.client.get("/portal/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert f"/applications/{app.pk}/" in content, (
+            f"Portal must link fix_requested application card to /applications/{app.pk}/."
         )

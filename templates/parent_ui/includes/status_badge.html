@@ -1,0 +1,13 @@
+{% if status %}
+  {% if status == 'draft' %}
+    <span class="fk-status-label fk-status-draft">Melnraksts</span>
+  {% elif status == 'submitted' %}
+    <span class="fk-status-label fk-status-submitted">Iesniegts</span>
+  {% elif status == 'fix_requested' %}
+    <span class="fk-status-label fk-status-fix-requested">Jālabo</span>
+  {% elif status == 'approved' %}
+    <span class="fk-status-label fk-status-approved">Apstiprināts</span>
+  {% elif status == 'rejected' %}
+    <span class="fk-status-label fk-status-rejected">Noraidīts</span>
+  {% endif %}
+{% endif %}

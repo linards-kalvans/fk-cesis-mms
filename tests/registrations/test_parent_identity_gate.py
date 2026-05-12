@@ -143,7 +143,7 @@ class TestNoCrossRegistrationExposure:
             email="secureparent@example.com"
         ).applications.first().pk
 
-        resp = new_client.get(f"/applications/{app_id}/edit/")
+        resp = new_client.get(f"/applications/{app_id}/")
         assert resp.status_code == 404, (
             "Different browser must not access another parent's application."
         )
@@ -177,7 +177,7 @@ class TestCrossBrowserDraftProtection:
 
         # Browser B tries to access the draft
         browser_b = Client()
-        resp = browser_b.get(f"/applications/{app.pk}/edit/")
+        resp = browser_b.get(f"/applications/{app.pk}/")
         assert resp.status_code == 404, (
             "Different browser must not access draft by application ID."
         )
@@ -402,6 +402,7 @@ class TestSubmittedApplicationsReadOnly:
                 "member_identity_document": _make_member_identity_file("ro_member.png"),
                 "member_portrait_document": _make_member_portrait_file("ro_portrait.png"),
             },
+            verified_account=acct,
         )
         # Set status directly to submitted (service-layer submit requires kit sizes
         # which are not created in this test — the gate test only checks editability).
@@ -413,11 +414,12 @@ class TestSubmittedApplicationsReadOnly:
         client = Client()
         _login_via_magic_link(client, acct)
 
-        # Submitted app must not be editable
+        # Submitted app must not be editable — redirects to workspace (read-only)
         resp = client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 404, (
-            "Submitted application must remain read-only after verification."
+        assert resp.status_code == 302, (
+            "Submitted application edit route must redirect to workspace."
         )
+        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
 
     def test_portal_shows_submitted_but_not_editable(self):
         """Submitted application appears in portal with view-only indicator."""

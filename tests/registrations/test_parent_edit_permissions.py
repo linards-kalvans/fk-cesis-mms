@@ -125,7 +125,15 @@ class TestEditRegistrationView:
     def test_owner_can_open_draft_edit_page(self):
         acct, app = self._create_draft_with_owner("ownedit@example.com")
         resp = self.client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 200
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
+
+    def test_summary_route_redirects_to_canonical_workspace(self):
+        """Summary route must redirect (302) to canonical workspace."""
+        acct, app = self._create_draft_with_owner("summaryredirect@example.com")
+        resp = self.client.get(f"/applications/{app.pk}/summary/")
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
 
     def test_other_parent_cannot_open_draft_edit_page(self):
         """A different logged-in parent gets blocked."""
@@ -174,7 +182,8 @@ class TestEditRegistrationView:
         )
         submit_application(app, acct)
         resp = self.client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 404
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +419,8 @@ class TestResumedParentCanContinueDraft:
         app.refresh_from_db()
         assert app.parent_account is not None
 
-        # Step 6: Open edit page — should work (session has verified parent)
-        resp = client.get(f"/applications/{app.pk}/edit/")
+        # Step 6: Open workspace — should work (session has verified parent)
+        resp = client.get(f"/applications/{app.pk}/")
         assert resp.status_code == 200
 
     def test_resumed_parent_cannot_edit_other_parent_draft(self):
@@ -632,13 +641,13 @@ class TestFixRequestedEditability:
         )
 
     def test_fix_requested_edit_page_accessible(self):
-        """fix_requested application edit page must load (200) for owning parent."""
+        """fix_requested application workspace must load (200) for owning parent."""
         acct, app = self._create_fix_requested_app("fixpageedit@example.com")
         _login_via_magic_link(self.client, acct)
 
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
+        resp = self.client.get(f"/applications/{app.pk}/")
         assert resp.status_code == 200, (
-            f"Expected 200 for fix_requested edit page, got {resp.status_code}."
+            f"Expected 200 for fix_requested workspace, got {resp.status_code}."
         )
 
     def test_fix_requested_not_editable_by_other_parent(self):
@@ -718,7 +727,7 @@ class TestParentPortalFixRequestedVisibility:
             "edit" in content.lower()
             or "turpinat" in content.lower()
             or "labot" in content.lower()
-            or f"/applications/{app.pk}/edit/" in content
+            or f"/applications/{app.pk}/" in content
         )
         assert has_edit_link, (
             "Portal must show an edit/continue link for fix_requested application."
@@ -797,12 +806,13 @@ class TestParentPortalRejectedVisibility:
             "rejected application must not be editable."
         )
 
-    def test_rejected_edit_page_returns_404(self):
-        """rejected application edit page must return 404 for owning parent."""
+    def test_rejected_edit_page_redirects_to_workspace(self):
+        """rejected application edit page must redirect to workspace for owning parent."""
         acct, app = self._create_rejected_app("rejected404@example.com")
         _login_via_magic_link(self.client, acct)
 
         resp = self.client.get(f"/applications/{app.pk}/edit/")
-        assert resp.status_code == 404, (
-            f"Expected 404 for rejected edit page, got {resp.status_code}."
+        assert resp.status_code == 302, (
+            f"Expected 302 for rejected edit page, got {resp.status_code}."
         )
+        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")

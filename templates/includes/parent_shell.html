@@ -1,8 +1,21 @@
-<div class="fk-parent-shell {% block parent_shell_modifiers %}{% endblock %}">
-  <div class="fk-parent-shell__inner">
-    {% block parent_shell_header %}{% endblock %}
-    <div class="fk-parent-shell__body">
-      {% block parent_shell_content %}{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_content %}
+<div class="fk-parent-page">
+
+  {# Site header — logo + branding #}
+  <header class="fk-site-header">
+    <img src="{% static 'img/logo.png' %}" alt="FK Cēsis logo">
+    <div class="fk-site-header-text">
+      <span class="fk-site-header-title">FK Cēsis MMS</span>
+      <span class="fk-site-header-subtitle">Vecāku portāls</span>
     </div>
+  </header>
+
+  <div class="fk-page-wrapper">
+    {% block page_content %}{% endblock %}
   </div>
+
 </div>
+{% endblock %}

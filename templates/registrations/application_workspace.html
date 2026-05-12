@@ -1,0 +1,114 @@
+{% extends "parent_ui/base_parent_page.html" %}
+{% load static %}
+
+{% block page_content %}
+<div class="fk-parent-shell">
+  <div class="fk-parent-shell__inner">
+    <section class="fk-card">
+      <h1>{{ application.member_full_name|default:"Jauns pieteikums" }}</h1>
+      {% if workspace_mode == "read_only" %}
+        <p><strong>Statuss:</strong> {{ application.get_status_display }}</p>
+      {% endif %}
+    </section>
+
+   {% if workspace_mode == "editable" %}
+      {% if form.errors %}
+        <div class="fk-error-summary">Lūdzu pārbaudiet laukus zemāk</div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <h2 class="fk-section-heading">Vecāka informācija</h2>
+        <div class="fk-form-section">
+          <p><label for="{{ form.guardian_full_name.id_for_label }}">{{ form.guardian_full_name.label }}</label>{{ form.guardian_full_name }}</p>
+          <p><label for="{{ form.guardian_personal_id.id_for_label }}">{{ form.guardian_personal_id.label }}</label>{{ form.guardian_personal_id }}</p>
+          <p><label for="{{ form.guardian_email.id_for_label }}">{{ form.guardian_email.label }}</label>{{ form.guardian_email }}</p>
+          <p><label for="{{ form.guardian_phone.id_for_label }}">{{ form.guardian_phone.label }}</label>{{ form.guardian_phone }}</p>
+          <p><label for="{{ form.guardian_declared_address.id_for_label }}">{{ form.guardian_declared_address.label }}</label>{{ form.guardian_declared_address }}</p>
+        </div>
+
+        <h2 class="fk-section-heading">Bērna informācija</h2>
+        <div class="fk-form-section">
+          <p><label for="{{ form.member_full_name.id_for_label }}">{{ form.member_full_name.label }}</label>{{ form.member_full_name }}</p>
+          <p><label for="{{ form.member_personal_id.id_for_label }}">{{ form.member_personal_id.label }}</label>{{ form.member_personal_id }}</p>
+          <p><label for="{{ form.member_birth_date.id_for_label }}">{{ form.member_birth_date.label }}</label>{{ form.member_birth_date }}</p>
+          <p><label for="{{ form.member_actual_address.id_for_label }}">{{ form.member_actual_address.label }}</label>{{ form.member_actual_address }}</p>
+          <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
+          <p><label for="{{ form.member_same_address_as_guardian.id_for_label }}">{{ form.member_same_address_as_guardian.label }}</label>{{ form.member_same_address_as_guardian }}</p>
+          <script>
+// same-address-sync: SameAddressSync
+(function(){
+  var cb=document.getElementById('id_member_same_address_as_guardian');
+  var addr=document.getElementById('id_member_actual_address');
+  var prev=document.getElementById('member_actual_address_previous');
+  var guardian=document.getElementById('id_guardian_declared_address');
+  if(!cb||!addr||!prev||!guardian)return;
+  function syncFromGuardian(){
+    addr.value=guardian.value;
+    addr.disabled=true;
+  }
+  function restorePrev(){
+    addr.value=prev.value;
+    addr.disabled=false;
+  }
+  if(cb.checked){syncFromGuardian();}
+  cb.addEventListener('change',function(){
+    if(cb.checked){
+      prev.value=addr.value;
+      syncFromGuardian();
+    }else{
+      restorePrev();
+    }
+  });
+  guardian.addEventListener('input',function(){
+    if(cb.checked){
+      syncFromGuardian();
+    }
+  });
+})();
+          </script>
+          <p><label for="{{ form.member_kit_size_shirt.id_for_label }}">{{ form.member_kit_size_shirt.label }}</label>{{ form.member_kit_size_shirt }}</p>
+          <p><label for="{{ form.member_kit_size_shorts.id_for_label }}">{{ form.member_kit_size_shorts.label }}</label>{{ form.member_kit_size_shorts }}</p>
+        </div>
+
+        <h2 class="fk-section-heading">Dokumenti</h2>
+        <div class="fk-form-section">
+          <p><label for="{{ form.guardian_identity_document.id_for_label }}">{{ form.guardian_identity_document.label }}</label>{{ form.guardian_identity_document }}</p>
+          <p><label for="{{ form.member_identity_document.id_for_label }}">{{ form.member_identity_document.label }}</label>{{ form.member_identity_document }}</p>
+          <p><label for="{{ form.member_portrait_document.id_for_label }}">{{ form.member_portrait_document.label }}</label>{{ form.member_portrait_document }}</p>
+        </div>
+
+        <h2 class="fk-section-heading">Piekrišana</h2>
+        <div class="fk-form-section">
+          <p><label for="{{ form.preferred_agreement_signing.id_for_label }}">{{ form.preferred_agreement_signing.label }}</label>{{ form.preferred_agreement_signing }}</p>
+          <p><label for="{{ form.support_club_instead_of_multi_child_discount.id_for_label }}">{{ form.support_club_instead_of_multi_child_discount.label }}</label>{{ form.support_club_instead_of_multi_child_discount }}</p>
+        </div>
+
+        <div class="fk-form-actions">
+          <button type="submit" name="submit_action" value="save_draft">Saglabāt melnrakstu</button>
+          <button type="submit" name="submit_action" value="submit">Iesniegt pieteikumu</button>
+        </div>
+      </form>
+    {% else %}
+      <section class="fk-card">
+        <h2 class="fk-section-heading">Vecāka informācija</h2>
+        <div class="fk-form-section">
+          <p><strong>Vecāka vārds, uzvārds:</strong> {{ application.guardian_full_name }}</p>
+          <p><strong>Vecāka personas kods:</strong> {{ application.guardian_personal_id }}</p>
+          <p><strong>E-pasts:</strong> {{ application.guardian_email }}</p>
+          <p><strong>Tālrunis:</strong> {{ application.guardian_phone }}</p>
+          <p><strong>Adrese:</strong> {{ application.guardian_declared_address }}</p>
+        </div>
+
+        <h2 class="fk-section-heading">Bērna informācija</h2>
+        <div class="fk-form-section">
+          <p><strong>Bērna vārds, uzvārds:</strong> {{ application.member_full_name }}</p>
+          <p><strong>Bērna personas kods:</strong> {{ application.member_personal_id }}</p>
+          <p><strong>Bērna dzimšanas datums:</strong> {{ application.member_birth_date|date:"Y-m-d" }}</p>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

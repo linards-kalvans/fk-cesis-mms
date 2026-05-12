@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block body_content %}
+<div class="fk-parent-page">
+
+  {# Site header #}
+  {% include "parent_ui/includes/header.html" %}
+
+  <div class="fk-page-wrapper">
+    {% block page_content %}{% endblock %}
+  </div>
+
+</div>
+{% endblock %}

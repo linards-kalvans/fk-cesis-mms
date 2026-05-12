@@ -1,0 +1,7 @@
+{% load static %}
+<div class="fk-hero-card">
+  {% block hero_content %}
+    <h1>{{ hero_title|default:"" }}</h1>
+    {% if hero_subtitle %}<p>{{ hero_subtitle }}</p>{% endif %}
+  {% endblock %}
+</div>

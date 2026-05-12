@@ -1,29 +1,23 @@
-{% extends "base.html" %}
+{% extends "parent_ui/base_parent_page.html" %}
 {% load static %}
 
-{% block content %}
-<div class="fk-parent-shell">
-  <div class="fk-parent-shell__inner">
-    <section class="fk-card fk-hero-card">
-      {% include "includes/site_logo.html" with variant="hero" %}
-      <p class="fk-eyebrow">FK Cēsis</p>
-      <h1>Bērna reģistrācija</h1>
-      <p>Ievadiet savu e-pasta adresi, lai sāktu reģistrāciju.</p>
-    </section>
+{% block page_title %}Reģistrācija — FK Cēsis MMS{% endblock %}
 
-    <section class="fk-card">
-      <form method="post">
-        {% csrf_token %}
-        <div class="fk-form-section">
-          <p>
-            <label for="email">E-pasta adrese</label>
-            <input type="email" id="email" name="email" autofocus required>
-          </p>
-          {% if error %}<p class="fk-error-summary">{{ error }}</p>{% endif %}
-        </div>
-        <button type="submit" class="fk-button fk-button--primary">Turpināt</button>
-      </form>
-    </section>
-  </div>
+{% block page_content %}
+{% include "parent_ui/includes/hero_card.html" with hero_title="Bērna reģistrācija" %}
+{% include "parent_ui/includes/error_summary.html" %}
+{% include "parent_ui/includes/section_card.html" %}
+<div class="fk-guidance-section">
+  <h2>Droša piekļuve</h2>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="fk-form-group">
+      <label for="id_email">E-pasts</label>
+      <input type="email" name="email" id="id_email" required
+             placeholder="jusu@epasts.lv"
+             value="{{ form.email.value|default:'' }}">
+    </div>
+    <button type="submit" class="fk-button primary">Turpināt</button>
+  </form>
 </div>
 {% endblock %}

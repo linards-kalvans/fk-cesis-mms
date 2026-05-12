@@ -9,10 +9,13 @@ app_name = "registrations"
 urlpatterns = [
     path("applications/new/", views.new_application, name="new-application"),
     path("register/", views.start_registration, name="start-registration"),
-    path("applications/<int:application_id>/edit/", views.edit_registration, name="edit-registration"),
+    # Canonical application workspace
+    path("applications/<int:application_id>/", views.application_workspace, name="application-workspace"),
+    # Legacy routes — redirect to canonical workspace
+    path("applications/<int:application_id>/edit/", views.redirect_to_workspace, name="edit-registration"),
+    path("applications/<int:application_id>/summary/", views.redirect_to_workspace, name="view-registration-summary"),
+    path("applications/<int:application_id>/detail/", views.redirect_to_workspace, name="view-registration-detail"),
     path("applications/<int:application_id>/submit/", views.submit_registration, name="submit-registration"),
-    path("applications/<int:application_id>/summary/", views.view_registration_summary, name="view-registration-summary"),
-    path("applications/<int:application_id>/detail/", views.view_registration_detail, name="view-registration-detail"),
     path("portal/", views.parent_portal, name="parent-portal"),
     # Staff review
     path("admin/review/applications/", views.admin_review_queue, name="admin-review-queue"),

@@ -3,13 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}FK Cēsis{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
-  <link rel="stylesheet" href="{% static 'css/parent.css' %}">
-  <link rel="stylesheet" href="{% static 'css/admin_shell.css' %}">
-  {% block extra_head %}{% endblock %}
+  <title>{% block page_title %}FK Cēsis MMS{% endblock %}</title>
+
+  {# Google Fonts — Anton + Inter #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  {# Design tokens (source of truth) #}
+  <link rel="stylesheet" href="{% static 'style-guide/tokens.css' %}">
+
+  {# Parent theming (fonts, colours, spacing) #}
+  <link rel="stylesheet" href="{% static 'css/parent_theme.css' %}">
+
+  {# Parent-page layout styles #}
+  <link rel="stylesheet" href="{% static 'css/parent_pages.css' %}">
+
+  {% block extra_css %}{% endblock %}
 </head>
 <body>
-  {% block content %}{% endblock %}
+  {# body_content defaults to content for backwards compat #}
+  {% block body_content %}{% block content %}{% endblock %}{% endblock %}
 </body>
 </html>

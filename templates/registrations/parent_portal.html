@@ -1,48 +1,53 @@
-{% extends "base.html" %}
+{% extends "parent_ui/base_parent_page.html" %}
 {% load static %}
 
-{% block content %}
-<div class="fk-parent-shell">
-  <div class="fk-parent-shell__inner">
+{% block page_title %}Mani pieteikumi — FK Cēsis MMS{% endblock %}
 
-    {% if has_draft %}
-    <section class="fk-card fk-portal-summary">
-      <h1>Mani pieteikumi</h1>
-      <p>Šeit redzams katra pieteikuma statuss un nākamais solis.</p>
-      <form method="post" style="display:inline;">
-        {% csrf_token %}
-        <button type="submit" name="action" value="continue_draft" class="fk-button fk-button--primary">Turpināt melnrakstu</button>
-      </form>
-      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--secondary">Sākt jaunu reģistrāciju</a>
-    </section>
-    {% else %}
-    <section class="fk-card fk-portal-summary">
-      <h1>Mani pieteikumi</h1>
-      <p>Šeit redzams katra pieteikuma statuss un nākamais solis.</p>
-      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--primary">Sākt jaunu reģistrāciju</a>
-    </section>
-    {% endif %}
+{% block page_content %}
+{% include "parent_ui/includes/hero_card.html" with hero_title="Mani pieteikumi" hero_subtitle="Pārskatiet un turpiniet" %}
 
-    <section class="fk-card fk-registrations-list">
-      <h2>Pieteikumu saraksts</h2>
-      {% for application in applications %}
-        <article class="fk-status-card">
-          <h2>{{ application.member_full_name|default:application.guardian_email }}</h2>
-          <p class="fk-status-card__guardian">{{ application.guardian_full_name|default:application.guardian_email }}</p>
-          <p>{{ application.get_status_display }}</p>
-          {% if application.review_message %}
-            <p class="fk-review-message">{{ application.review_message }}</p>
-          {% endif %}
-          {% if application.can_edit %}
-            <a class="fk-button fk-button--secondary" href="{% url 'registrations:edit-registration' application.id %}">Turpināt</a>
-          {% else %}
-            <a class="fk-button fk-button--secondary" href="{% url 'registrations:view-registration-summary' application.id %}">Skatīt pieteikumu</a>
-          {% endif %}
-        </article>
-      {% empty %}
-        <p>Nav pieteikumu.</p>
-      {% endfor %}
-    </section>
+{% if primary_application %}
+<div class="fk-cta-group" style="margin-bottom: 16px;">
+  <a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button primary">Turpināt pieteikumu</a>
+</div>
+{% endif %}
+
+{% if applications %}
+{% for app in applications %}
+{% include "parent_ui/includes/section_card.html" %}
+<div class="fk-application-card-info">
+  <strong>{{ app.guardian_full_name }}</strong>
+  <span style="color: var(--fk-muted); font-size: 13px;">&nbsp;({{ app.member_full_name }})</span>
+  {% if app.review_message %}
+  <div class="fk-review-message" style="margin-top: 8px; font-size: 13px; color: var(--fk-muted);">
+    {{ app.review_message }}
   </div>
+  {% endif %}
+  {% if app.status == 'draft' %}
+  <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button primary" style="padding: 8px 16px; font-size: 14px; margin-top: 8px;">Turpināt pieteikumu</a>
+  {% elif app.status == 'fix_requested' %}
+  <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button primary" style="padding: 8px 16px; font-size: 14px; margin-top: 8px;">Turpināt pieteikumu</a>
+  {% elif app.status == 'submitted' %}
+  <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button secondary" style="padding: 8px 16px; font-size: 14px; margin-top: 8px;">Skatīt pieteikumu</a>
+  {% elif app.status == 'approved' %}
+  <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button secondary" style="padding: 8px 16px; font-size: 14px; margin-top: 8px;">Skatīt pieteikumu</a>
+  {% elif app.status == 'rejected' %}
+  <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button secondary" style="padding: 8px 16px; font-size: 14px; margin-top: 8px;">Skatīt pieteikumu</a>
+  {% endif %}
+</div>
+<div class="fk-application-card-status">
+  {% include "parent_ui/includes/status_badge.html" with status=app.status %}
+</div>
+{% endfor %}
+{% else %}
+{% include "parent_ui/includes/section_card.html" %}
+<div class="fk-empty-state">
+  <h2>Nav pieteikumu</h2>
+  <p>Jums vēl nav neviena pieteikuma.</p>
+</div>
+{% endif %}
+
+<div class="fk-cta-group">
+  <a href="{% url 'registrations:new-application' %}" class="fk-button secondary">Sākt jaunu reģistrāciju</a>
 </div>
 {% endblock %}
