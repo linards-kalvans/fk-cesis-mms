@@ -10,6 +10,10 @@
   --fk-border: #d1d5db;
   --fk-radius: 12px;
   --fk-spacing: 16px;
+  /* Wide container for registration pages (~1180px) */
+  --fk-maxw: 1180px;
+  /* Wide container for portal/list pages (~1240px) */
+  --fk-maxw-list: 1240px;
 }
 
 body {
@@ -24,55 +28,104 @@ h1, h2, h3, .fk-brand {
   letter-spacing: 0.02em;
 }
 
+/* Wide container for registration pages */
 .fk-parent-page {
-  max-width: 640px;
+  max-width: var(--fk-maxw);
   margin: 0 auto;
   padding: var(--fk-spacing);
 }
 
+/* Site header — navy background, red bottom border */
 .fk-site-header {
+  background: var(--fk-blue);
+  color: var(--fk-white);
+  border-bottom: 5px solid var(--fk-red);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 10px 28px rgba(7, 12, 55, 0.18);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-  margin-bottom: 24px;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 22px;
 }
 
-.fk-site-header img {
-  height: 40px;
-  width: auto;
-}
-
-.fk-site-header-text {
+.fk-brand {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
 }
 
-.fk-site-header-title {
+.fk-brand-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.fk-brand-text {
+  min-width: 0;
+}
+
+.fk-brand-title {
   font-family: 'Anton', sans-serif;
-  font-size: 18px;
-  color: var(--fk-blue);
-  margin: 0;
+  font-size: 26px;
+  font-weight: 850;
+  letter-spacing: .02em;
+  line-height: 1;
+  color: var(--fk-white);
 }
 
-.fk-site-header-subtitle {
+.fk-brand-subtitle {
+  margin-top: 4px;
+  color: rgba(255,255,255,.82);
+  font-size: 15px;
+}
+
+/* Eyebrow treatment — red, uppercase, letter-spacing */
+.fk-eyebrow {
+  color: var(--fk-red);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 800;
   font-size: 13px;
+  margin-bottom: 8px;
+}
+
+/* Lead paragraph — muted, 18px, 1.6 line-height */
+.fk-lead {
   color: var(--fk-muted);
+  font-size: 18px;
+  line-height: 1.6;
   margin: 0;
+  max-width: 720px;
 }
 
 .fk-hero-card {
   background: var(--fk-white);
-  border-radius: var(--fk-radius);
-  padding: 24px;
+  border: 1px solid rgba(201,207,223,.8);
+  box-shadow: 0 18px 45px rgba(7, 12, 55, 0.10);
+  border-radius: 24px;
+  padding: 34px;
   margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: grid;
+  grid-template-columns: 1.25fr .9fr;
+  gap: 32px;
+  overflow: hidden;
+  position: relative;
 }
 
 .fk-hero-card h1 {
-  font-size: 24px;
-  margin: 0 0 8px;
+  font-family: "Anton", Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: clamp(38px, 5vw, 62px);
+  margin: 0 0 12px;
+  line-height: 1.03;
   color: var(--fk-blue);
+  letter-spacing: -0.04em;
 }
 
 .fk-hero-card p {
@@ -83,10 +136,11 @@ h1, h2, h3, .fk-brand {
 
 .fk-section-card {
   background: var(--fk-white);
-  border-radius: var(--fk-radius);
-  padding: 20px;
+  border: 1px solid rgba(201,207,223,.9);
+  box-shadow: 0 10px 28px rgba(7, 12, 55, 0.07);
+  border-radius: 24px;
+  overflow: hidden;
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .fk-empty-state {
@@ -125,36 +179,40 @@ h1, h2, h3, .fk-brand {
 }
 
 .fk-status-label {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
 }
 
 .fk-status-draft {
-  background: #fef3c7;
-  color: #92400e;
+  color: #4b63d1;
+  background: #edf2ff;
 }
 
 .fk-status-submitted {
-  background: #d1fae5;
-  color: #065f46;
+  color: #22a85a;
+  background: #eaf8ef;
 }
 
 .fk-status-fix-requested {
-  background: #fee2e2;
   color: #991b1b;
+  background: #fee2e2;
 }
 
 .fk-status-approved {
-  background: #d1fae5;
-  color: #065f46;
+  color: #22a85a;
+  background: #eaf8ef;
 }
 
 .fk-status-rejected {
-  background: #fee2e2;
   color: #991b1b;
+  background: #fee2e2;
 }
 
 .fk-button {

@@ -4,19 +4,21 @@
 {% block page_title %}Koda verificēšana — FK Cēsis MMS{% endblock %}
 
 {% block page_content %}
-{% include "parent_ui/includes/hero_card.html" with hero_title="Droša piekļuve" %}
+{# Use parent_ui primitives for consistent design system #}
+{% include "parent_ui/includes/hero_card.html" with hero_title="Droša piekļuve" hero_subtitle="Ievadiet verifikācijas kodu, kas nosūtīts uz jūsu e-pastu, lai apstiprinātu piekļuvi." %}
 {% include "parent_ui/includes/alert.html" %}
 {% include "parent_ui/includes/error_summary.html" %}
 {% include "parent_ui/includes/section_card.html" %}
+
 {% if pending_email %}
-<p style="margin: 0 0 16px; color: var(--fk-muted);">
+<p class="fk-eyebrow" style="margin: 0 0 16px; color: var(--fk-muted);">
   Verifikācijas kods tika nosūtīts uz <strong>{{ pending_email }}</strong>.
   Ievadiet kodu zemāk, lai turpinātu.
 </p>
 {% endif %}
 <form method="post" novalidate>
   {% csrf_token %}
-  <div class="fk-form-group">
+  <div class="fk-form-group fk-lead">
     <label for="id_code">Piekļuves kods</label>
     <input type="text" name="code" id="id_code" required
            placeholder="Ievadiet 6 ciparu kodu"

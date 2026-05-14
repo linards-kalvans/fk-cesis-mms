@@ -4,14 +4,16 @@
 {% block page_title %}Reģistrācija — FK Cēsis MMS{% endblock %}
 
 {% block page_content %}
-{% include "parent_ui/includes/hero_card.html" with hero_title="Bērna reģistrācija" %}
+{% include "parent_ui/includes/hero_card.html" with hero_title="Bērna reģistrācija" hero_subtitle="Reģistrējiet savu bērnu treniņiem FK Cēsis. Sākumā augšupielādējiet ID dokumentu, lai mēs varētu nolasīt datus un automātiski aizpildīt daļu no pieteikuma." %}
+{% include "parent_ui/includes/section_card.html" %}
+
 {% include "parent_ui/includes/error_summary.html" %}
 {% include "parent_ui/includes/section_card.html" %}
-<div class="fk-guidance-section">
+<div class="fk-guidance-section fk-eyebrow">
   <h2>Droša piekļuve</h2>
   <form method="post" novalidate>
     {% csrf_token %}
-    <div class="fk-form-group">
+    <div class="fk-form-group fk-lead">
       <label for="id_email">E-pasts</label>
       <input type="email" name="email" id="id_email" required
              placeholder="jusu@epasts.lv"

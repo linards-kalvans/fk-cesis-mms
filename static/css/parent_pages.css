@@ -1,15 +1,26 @@
 /* Parent-page layout helpers */
 
+/* Wide container for portal/list pages (~1240px) */
 .fk-page-wrapper {
-  min-height: calc(100vh - 80px);
+  max-width: var(--fk-maxw-list, 1240px);
+  margin: 0 auto;
+  min-height: calc(100vh - 120px);
   padding-bottom: 40px;
 }
 
 .fk-branding-heading {
   font-family: 'Anton', sans-serif;
-  font-size: 32px;
+  font-size: clamp(2.3rem, 4vw, 4rem);
   color: var(--fk-blue);
-  margin: 0 0 24px;
+  margin: 0 0 8px;
+  line-height: 1;
+}
+
+.fk-page-subtitle {
+  color: var(--fk-muted);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  margin: 0 0 28px;
 }
 
 .fk-guidance-section {
@@ -56,6 +67,81 @@
   padding: 24px;
   margin-bottom: 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Applications list layout */
+.applications {
+  display: grid;
+  gap: 14px;
+}
+
+.application-card {
+  background: var(--fk-white);
+  border: 1px solid var(--fk-border);
+  border-radius: 20px;
+  box-shadow: 0 8px 20px rgba(15, 8, 81, 0.06);
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(160px, 1.2fr) minmax(220px, 1.6fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.app-person {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.app-avatar {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f6f8ff 0%, #eef2ff 100%);
+  border: 1px solid var(--fk-border);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--fk-blue);
+  font-size: 30px;
+}
+
+.app-main {
+  min-width: 0;
+}
+
+.app-name {
+  margin: 0 0 8px;
+  color: var(--fk-blue);
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.app-meta {
+  display: grid;
+  gap: 6px;
+  color: var(--fk-muted);
+  font-size: 0.96rem;
+}
+
+.app-block {
+  min-width: 0;
+}
+
+.block-label {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--fk-muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.app-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .fk-application-card {

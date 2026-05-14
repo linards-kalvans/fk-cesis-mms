@@ -1,7 +1,8 @@
 {% load static %}
 <div class="fk-hero-card">
   {% block hero_content %}
+    <div class="fk-eyebrow">FK Cēsis</div>
     <h1>{{ hero_title|default:"" }}</h1>
-    {% if hero_subtitle %}<p>{{ hero_subtitle }}</p>{% endif %}
+    {% if hero_subtitle %}<p class="fk-lead">{{ hero_subtitle }}</p>{% endif %}
   {% endblock %}
 </div>
