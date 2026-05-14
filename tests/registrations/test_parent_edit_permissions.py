@@ -734,6 +734,87 @@ class TestParentPortalFixRequestedVisibility:
         )
 
 
+class TestFixRequestedDraftSavePreservesStatus:
+    """Saving a fix_requested application through parent workspace must keep fix_requested status.
+
+    Regression: create_or_update_draft() unconditionally sets status=DRAFT,
+    silently reverting fix_requested to draft.
+    """
+
+    def setup_method(self):
+        self.client = Client()
+
+    def _create_fix_requested_app(self, email="fixdraftsave@example.com"):
+        """Create a draft, submit, admin requests fix, return (acct, app)."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        shirt_pk, shorts_pk = _ensure_kit_sizes()
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37111111111",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_full_name": "Fix Draft Save Guardian",
+                "guardian_personal_id": "010101-11111",
+                "guardian_phone": "+37122222222",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child FixDraftSave",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-01-01",
+                "member_kit_size_shirt": shirt_pk,
+                "member_kit_size_shorts": shorts_pk,
+            },
+            files={
+                "guardian_identity_document": _make_guardian_identity_file("fd_guardian.jpg"),
+                "member_identity_document": _make_member_identity_file("fd_member.jpg"),
+                "member_portrait_document": _make_member_identity_file("fd_portrait.jpg"),
+            },
+            verified_account=acct,
+        )
+        submit_application(app, acct)
+        app.status = RegistrationApplication.Status.FIX_REQUESTED
+        app.review_message = "Please correct the personal ID format."
+        app.save(update_fields=["status", "review_message"])
+        return acct, app
+
+    def test_save_draft_on_fix_requested_keeps_fix_requested_status(self):
+        """POST save-draft on a fix_requested application must keep status fix_requested."""
+        from apps.registrations.models import RegistrationApplication
+
+        acct, app = self._create_fix_requested_app("fixdraftsave2@example.com")
+        _login_via_magic_link(self.client, acct)
+
+        initial_status = app.status
+        assert initial_status == RegistrationApplication.Status.FIX_REQUESTED
+
+        resp = self.client.post(
+            f"/applications/{app.pk}/",
+            {
+                "guardian_full_name": "Updated Guardian",
+                "guardian_personal_id": "010101-11111",
+                "guardian_email": acct.email,
+                "guardian_phone": "+37122222222",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Child FixDraftSave",
+                "member_personal_id": "010125-11111",
+                "member_birth_date": "2025-01-01",
+                "member_kit_size_shirt": app.member_kit_size_shirt_id,
+                "member_kit_size_shorts": app.member_kit_size_shorts_id,
+                "preferred_agreement_signing": "paper",
+                "submit_action": "save_draft",
+            },
+        )
+
+        assert resp.status_code == 302
+        app.refresh_from_db()
+        assert app.status == RegistrationApplication.Status.FIX_REQUESTED, (
+            f"Expected fix_requested after save-draft, got {app.status}."
+        )
+
+
 class TestParentPortalRejectedVisibility:
     """Portal must show reject message but no edit CTA for rejected."""
 

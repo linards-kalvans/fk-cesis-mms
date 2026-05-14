@@ -238,7 +238,8 @@ def create_or_update_draft(
     # Field source for guardian_email
     _apply_field_sources_for_guardian_email(application)
 
-    application.status = RegistrationApplication.Status.DRAFT
+    if application.status != RegistrationApplication.Status.FIX_REQUESTED:
+        application.status = RegistrationApplication.Status.DRAFT
     application.save()
 
     # Handle document uploads
