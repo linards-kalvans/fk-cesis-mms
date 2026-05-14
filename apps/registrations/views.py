@@ -11,6 +11,11 @@ from apps.accounts.services import issue_one_time_code, send_one_time_code_email
 from apps.documents.models import Document
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
+from apps.registrations.presentation import (
+    active_documents_by_kind,
+    source_label,
+    workspace_mode,
+)
 from apps.registrations.services import (
     approve_application,
     can_edit_application,
@@ -71,7 +76,7 @@ def new_application(request: HttpRequest) -> HttpResponse:
                 files=request.FILES,
                 verified_account=account,
             )
-            return redirect("registrations:edit-registration", application_id=application.id)
+            return redirect("registrations:application-workspace", application_id=application.id)
         return render(
             request,
             "registrations/new_registration.html",
@@ -83,7 +88,10 @@ def new_application(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "registrations/new_registration.html",
-        {"form": form},
+        {
+            "form": form,
+            "field_source_labels": {},
+        },
     )
 
 
@@ -147,7 +155,12 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         {
             "application": application,
             "form": form,
-            "workspace_mode": "editable" if editable else "read_only",
+            "workspace_mode": workspace_mode(application, account),
+            "document_state": active_documents_by_kind(application),
+            "field_source_labels": {
+                name: source_label(value)
+                for name, value in (application.field_sources or {}).items()
+            },
         },
     )
 
@@ -202,55 +215,12 @@ def start_registration(request: HttpRequest) -> HttpResponse:
 
 
 def edit_registration(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Redirect legacy edit route to canonical workspace."""
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     account = _current_parent_account(request)
-
-    # Verified-parent gate only
-    if not can_edit_application(application, account):
+    if not _parent_can_view_application(application, account):
         raise Http404
-
-    if request.method == "POST":
-        form = RegistrationApplicationForm(
-            request.POST,
-            request.FILES,
-            is_submit=request.POST.get("submit_action") == "submit",
-            has_existing_document=_active_guardian_identity_exists(application),
-        )
-        if form.is_valid():
-            application = create_or_update_draft(
-                data=form.cleaned_data,
-                files=request.FILES,
-                application=application,
-                verified_account=account,
-            )
-            if request.POST.get("submit_action") == "submit":
-                submit_application(application, account)
-                return redirect("registrations:parent-portal")
-            return redirect("registrations:edit-registration", application_id=application.id)
-    else:
-        form = RegistrationApplicationForm(
-            initial={
-                "guardian_full_name": application.guardian_full_name,
-                "guardian_personal_id": application.guardian_personal_id,
-                "guardian_email": application.guardian_email,
-                "guardian_phone": application.guardian_phone,
-                "guardian_declared_address": application.guardian_declared_address,
-                "member_full_name": application.member_full_name,
-                "member_personal_id": application.member_personal_id,
-                "member_birth_date": application.member_birth_date,
-                "member_actual_address": application.member_actual_address,
-                "member_same_address_as_guardian": application.member_same_address_as_guardian,
-                "member_kit_size_shirt": application.member_kit_size_shirt_id,
-                "member_kit_size_shorts": application.member_kit_size_shorts_id,
-                "preferred_agreement_signing": application.preferred_agreement_signing,
-                "support_club_instead_of_multi_child_discount": application.support_club_instead_of_multi_child_discount,
-            }
-        )
-    return render(
-        request,
-        "registrations/edit_registration.html",
-        {"form": form, "application": application},
-    )
+    return redirect("registrations:application-workspace", application_id=application.id)
 
 
 def submit_registration(request: HttpRequest, application_id: int) -> HttpResponse:
@@ -281,8 +251,17 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
 
     return render(
         request,
-        "registrations/edit_registration.html",
-        {"form": form, "application": application},
+        "registrations/application_workspace.html",
+        {
+            "form": form,
+            "application": application,
+            "workspace_mode": workspace_mode(application, account),
+            "document_state": active_documents_by_kind(application),
+            "field_source_labels": {
+                name: source_label(value)
+                for name, value in (application.field_sources or {}).items()
+            },
+        },
         status=400,
     )
 
@@ -336,29 +315,21 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
 
 
 def view_registration_summary(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Redirect legacy summary route to canonical workspace."""
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     account = _current_parent_account(request)
     if not _parent_can_view_application(application, account):
         raise Http404
-
-    return render(
-        request,
-        "registrations/view_registration_summary.html",
-        {"application": application},
-    )
+    return redirect("registrations:application-workspace", application_id=application.id)
 
 
 def view_registration_detail(request: HttpRequest, application_id: int) -> HttpResponse:
+    """Redirect legacy detail route to canonical workspace."""
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     account = _current_parent_account(request)
     if not _parent_can_view_application(application, account):
         raise Http404
-
-    return render(
-        request,
-        "registrations/view_registration_detail.html",
-        {"application": application},
-    )
+    return redirect("registrations:application-workspace", application_id=application.id)
 
 
 # ---------------------------------------------------------------------------

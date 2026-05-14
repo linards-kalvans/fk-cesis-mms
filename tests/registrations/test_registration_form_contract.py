@@ -1,28 +1,20 @@
-"""P1 — Registration field-contract tests.
+"""P1 + P2 Task 3 — Registration field-contract and grouped-form contract.
 
-Uses the exact approved P1 field names from the implementation plan:
-  guardian_full_name
-  guardian_personal_id
-  guardian_declared_address
-  guardian_email
-  guardian_phone
-  member_full_name
-  member_personal_id
-  member_birth_date
-  member_actual_address
-  member_same_address_as_guardian
-  preferred_agreement_signing
-  support_club_instead_of_multi_child_discount
+P1 sections (unchanged):
+- Guardian/member/application field names
+- Submit-time required fields
+- Document separation
+- Document.Kind values
+- KitSizeOption model
+- Draft allows incomplete values
+- Same-address toggle
+- Field-source support
 
-Documents are NOT model fields on RegistrationApplication.
-They are separate Document records with `kind` values:
-  guardian_identity, member_identity, member_portrait.
-
-Kit sizes are managed by the admin lookup model KitSizeOption.
-Application fields: member_kit_size_shirt, member_kit_size_shorts.
-
-Must FAIL because current implementation still uses old child_* fields,
-guardian_address, child_identity document kind, and lacks the P1 fields.
+P2 Task 3 additions:
+- RegistrationApplicationForm.section_order class attribute
+- RegistrationApplicationForm.grouped_fields() method
+- RegistrationApplicationForm.error_summary_items() method
+- Workspace template iterates over form.grouped_fields
 """
 
 import pytest
@@ -747,4 +739,290 @@ class TestFieldSources:
         sources = app.field_sources
         assert sources.get("guardian_email") == "derived_system_filled", (
             "guardian_email must store derived_system_filled in field_sources."
+        )
+
+
+# ===========================================================================
+# 11. P2 Task 3 — Grouped form contract
+# ===========================================================================
+
+
+class TestGroupedFormContract:
+    """RegistrationApplicationForm must expose section_order and grouped_fields()
+    for the canonical workspace template to render grouped sections.
+
+    Section order (from Task 3 plan):
+      1. guardian — guardian_full_name, guardian_personal_id, guardian_email,
+         guardian_phone, guardian_declared_address
+      2. member — member_full_name, member_personal_id, member_birth_date,
+         member_actual_address, member_same_address_as_guardian,
+         member_kit_size_shirt, member_kit_size_shorts
+      3. documents — guardian_identity_document, member_identity_document,
+         member_portrait_document
+      4. agreement — preferred_agreement_signing,
+         support_club_instead_of_multi_child_discount
+    """
+
+    def test_section_order_class_attribute_exists(self):
+        """RegistrationApplicationForm must have a section_order class attribute."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert hasattr(RegistrationApplicationForm, "section_order"), (
+            "RegistrationApplicationForm must define section_order class attribute."
+        )
+
+    def test_section_order_has_four_sections(self):
+        """section_order must contain exactly 4 sections."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        sections = [name for name, _ in RegistrationApplicationForm.section_order]
+        assert len(sections) == 4, (
+            f"Expected 4 sections, got {len(sections)}."
+        )
+
+    def test_section_order_names_are_guardian_member_documents_agreement(self):
+        """Section names must be 'guardian', 'member', 'documents', 'agreement'."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        sections = [name for name, _ in RegistrationApplicationForm.section_order]
+        assert sections == ["guardian", "member", "documents", "agreement"], (
+            f"Section names must be ['guardian', 'member', 'documents', 'agreement'], "
+            f"got {sections}."
+        )
+
+    def test_guardian_section_fields(self):
+        """Guardian section must contain: guardian_full_name, guardian_personal_id,
+        guardian_email, guardian_phone, guardian_declared_address."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        guardian_fields = [
+            fields for name, fields in RegistrationApplicationForm.section_order
+            if name == "guardian"
+        ][0]
+        expected = (
+            "guardian_full_name",
+            "guardian_personal_id",
+            "guardian_email",
+            "guardian_phone",
+            "guardian_declared_address",
+        )
+        assert guardian_fields == expected, (
+            f"Guardian section fields must be {expected}, got {guardian_fields}."
+        )
+
+    def test_member_section_fields(self):
+        """Member section must contain: member_full_name, member_personal_id,
+        member_birth_date, member_actual_address, member_same_address_as_guardian,
+        member_kit_size_shirt, member_kit_size_shorts."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        member_fields = [
+            fields for name, fields in RegistrationApplicationForm.section_order
+            if name == "member"
+        ][0]
+        expected = (
+            "member_full_name",
+            "member_personal_id",
+            "member_birth_date",
+            "member_actual_address",
+            "member_same_address_as_guardian",
+            "member_kit_size_shirt",
+            "member_kit_size_shorts",
+        )
+        assert member_fields == expected, (
+            f"Member section fields must be {expected}, got {member_fields}."
+        )
+
+    def test_documents_section_fields(self):
+        """Documents section must contain: guardian_identity_document,
+        member_identity_document, member_portrait_document."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        docs_fields = [
+            fields for name, fields in RegistrationApplicationForm.section_order
+            if name == "documents"
+        ][0]
+        expected = (
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_portrait_document",
+        )
+        assert docs_fields == expected, (
+            f"Documents section fields must be {expected}, got {docs_fields}."
+        )
+
+    def test_agreement_section_fields(self):
+        """Agreement section must contain: preferred_agreement_signing,
+        support_club_instead_of_multi_child_discount."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        agree_fields = [
+            fields for name, fields in RegistrationApplicationForm.section_order
+            if name == "agreement"
+        ][0]
+        expected = (
+            "preferred_agreement_signing",
+            "support_club_instead_of_multi_child_discount",
+        )
+        assert agree_fields == expected, (
+            f"Agreement section fields must be {expected}, got {agree_fields}."
+        )
+
+    def test_grouped_fields_method_exists(self):
+        """RegistrationApplicationForm must have a grouped_fields() method."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert hasattr(RegistrationApplicationForm, "grouped_fields"), (
+            "RegistrationApplicationForm must define grouped_fields() method."
+        )
+
+    def test_grouped_fields_yields_correct_sections(self):
+        """grouped_fields() must yield (section_name, [bound_fields]) tuples."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm()
+        sections = list(form.grouped_fields())
+
+        section_names = [name for name, _ in sections]
+        assert section_names == ["guardian", "member", "documents", "agreement"], (
+            f"grouped_fields() must yield sections in order, got {section_names}."
+        )
+
+    def test_grouped_fields_yields_correct_field_count_per_section(self):
+        """Each section yielded by grouped_fields() must have the correct number of fields."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm()
+        sections = list(form.grouped_fields())
+
+        expected_counts = {
+            "guardian": 5,
+            "member": 7,
+            "documents": 3,
+            "agreement": 2,
+        }
+        for name, fields in sections:
+            assert len(fields) == expected_counts[name], (
+                f"Section '{name}' must have {expected_counts[name]} fields, "
+                f"got {len(fields)}."
+            )
+
+    def test_grouped_fields_yields_bound_field_objects(self):
+        """Each item yielded by grouped_fields() must be a BoundField instance."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm()
+        for section_name, bound_fields in form.grouped_fields():
+            for bf in bound_fields:
+                assert hasattr(bf, "name"), (
+                    f"Items in grouped_fields() must be BoundField objects, "
+                    f"got {type(bf)}."
+                )
+
+
+# ===========================================================================
+# 12. P2 Task 3 — Error summary contract
+# ===========================================================================
+
+
+class TestErrorSummaryContract:
+    """RegistrationApplicationForm must expose error_summary_items() that
+    returns a list of dicts with 'field', 'label', 'message' keys."""
+
+    def test_error_summary_items_method_exists(self):
+        """RegistrationApplicationForm must have an error_summary_items() method."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert hasattr(RegistrationApplicationForm, "error_summary_items"), (
+            "RegistrationApplicationForm must define error_summary_items() method."
+        )
+
+    def test_error_summary_items_returns_list_of_dicts(self):
+        """error_summary_items() must return a list of dicts with field/label/message."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        # Submit with invalid data to trigger errors
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "",  # invalid — empty
+                "guardian_full_name": "Valid Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_phone": "+37120000000",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Valid Child",
+                "member_personal_id": "010125-54321",
+                "member_birth_date": "2025-01-01",
+                "member_actual_address": "Riga 1",
+                "member_same_address_as_guardian": True,
+                "preferred_agreement_signing": "paper",
+            },
+            is_submit=True,
+            has_existing_document=True,
+        )
+        # Force validation to populate errors
+        form.is_valid()
+
+        items = form.error_summary_items()
+
+        assert isinstance(items, list), (
+            f"error_summary_items() must return a list, got {type(items)}."
+        )
+        if items:
+            first = items[0]
+            assert isinstance(first, dict), (
+                f"Each item must be a dict, got {type(first)}."
+            )
+            assert "field" in first, "Each item must have 'field' key."
+            assert "label" in first, "Each item must have 'label' key."
+            assert "message" in first, "Each item must have 'message' key."
+
+    def test_error_summary_items_contains_guardian_email_error(self):
+        """When guardian_email is empty, error_summary_items must include it."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "",
+                "guardian_full_name": "Valid Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_phone": "+37120000000",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Valid Child",
+                "member_personal_id": "010125-54321",
+                "member_birth_date": "2025-01-01",
+                "member_actual_address": "Riga 1",
+                "member_same_address_as_guardian": True,
+                "preferred_agreement_signing": "paper",
+            },
+            is_submit=True,
+            has_existing_document=True,
+        )
+        form.is_valid()
+
+        items = form.error_summary_items()
+        fields_with_errors = [item["field"] for item in items]
+
+        assert "guardian_email" in fields_with_errors, (
+            "error_summary_items must include guardian_email when it's invalid."
+        )
+
+
+# ===========================================================================
+# 13. P2 Task 3 — Workspace template uses grouped_fields iteration
+# ===========================================================================
+
+
+class TestWorkspaceTemplateGroupedRendering:
+    """The application_workspace.html template must iterate over
+    form.grouped_fields for section rendering."""
+
+    def test_template_uses_grouped_fields_iteration(self):
+        """application_workspace.html must reference form.grouped_fields."""
+        from pathlib import Path
+
+        tpl = Path(__file__).resolve().parents[2] / "templates" / "registrations" / "application_workspace.html"
+        content = tpl.read_text()
+        assert "grouped_fields" in content, (
+            "application_workspace.html must iterate over form.grouped_fields "
+            "for grouped section rendering."
         )

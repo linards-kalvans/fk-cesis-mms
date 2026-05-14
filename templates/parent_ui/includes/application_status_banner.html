@@ -1,0 +1,8 @@
+{% if mode == "read_only" %}
+  <div class="fk-status-banner fk-status-banner--{{ application.status }}">
+    <p><strong>Statuss:</strong> {{ application.get_status_display }}</p>
+    {% if application.review_message %}
+      <p class="fk-status-banner__message">{{ application.review_message }}</p>
+    {% endif %}
+  </div>
+{% endif %}

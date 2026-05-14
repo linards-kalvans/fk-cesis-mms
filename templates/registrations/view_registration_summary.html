@@ -1,29 +1,11 @@
-{% extends "base.html" %}
+{% extends "parent_ui/base_parent_page.html" %}
 
-{% block content %}
+{% block page_content %}
 <div class="fk-parent-shell">
   <div class="fk-parent-shell__inner">
-    <section class="fk-card fk-portal-summary">
-      <h1>Skatīt pieteikumu</h1>
-      <p>Šeit redzams iesniegtā pieteikuma kopsavilkums.</p>
-    </section>
-
-    <section class="fk-status-card">
-      <h2>{{ application.member_full_name }}</h2>
-      <p><strong>Vecāks:</strong> {{ application.guardian_full_name }}</p>
-      <p><strong>Statuss:</strong> {{ application.get_status_display }}</p>
-      {% if application.submitted_at %}
-        <p><strong>Iesniegts:</strong> {{ application.submitted_at|date:"Y-m-d H:i" }}</p>
-      {% endif %}
-      <p>
-        <strong>Dokuments:</strong>
-        {% if application.documents.exists %}
-          Pievienots
-        {% else %}
-          Nav pievienots
-        {% endif %}
-      </p>
-      <a class="fk-button fk-button--secondary" href="{% url 'registrations:view-registration-detail' application.id %}">Skatīt pilnu informāciju</a>
+    <section class="fk-card fk-card--notice">
+      <h1>Pieteikuma kopsavilkums</h1>
+      <p>Šī lapa ir novecojusi. Lūdzu, izmantojiet <a href="{% url 'registrations:application-workspace' application.id|default:0 %}">kanonisko darbvietu</a>.</p>
     </section>
   </div>
 </div>

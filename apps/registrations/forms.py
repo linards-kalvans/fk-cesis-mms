@@ -6,6 +6,46 @@ from django import forms
 class RegistrationApplicationForm(forms.Form):
     """Form for creating/editing a RegistrationApplication."""
 
+    section_order = (
+        (
+            "guardian",
+            (
+                "guardian_full_name",
+                "guardian_personal_id",
+                "guardian_email",
+                "guardian_phone",
+                "guardian_declared_address",
+            ),
+        ),
+        (
+            "member",
+            (
+                "member_full_name",
+                "member_personal_id",
+                "member_birth_date",
+                "member_actual_address",
+                "member_same_address_as_guardian",
+                "member_kit_size_shirt",
+                "member_kit_size_shorts",
+            ),
+        ),
+        (
+            "documents",
+            (
+                "guardian_identity_document",
+                "member_identity_document",
+                "member_portrait_document",
+            ),
+        ),
+        (
+            "agreement",
+            (
+                "preferred_agreement_signing",
+                "support_club_instead_of_multi_child_discount",
+            ),
+        ),
+    )
+
     guardian_full_name = forms.CharField(max_length=255, required=False, label="Vecāka vārds, uzvārds")
     guardian_personal_id = forms.CharField(max_length=32, required=False, label="Vecāka personas kods")
     guardian_email = forms.EmailField(
@@ -91,3 +131,19 @@ class RegistrationApplicationForm(forms.Form):
             self.add_error("guardian_identity_document", "Vecāka personas dokuments ir obligāts iesniegšanai.")
 
         return cleaned_data
+
+    def grouped_fields(self):
+        """Yield (section_name, [BoundField, ...]) tuples in section_order."""
+        for section_name, field_names in self.section_order:
+            yield section_name, [self[name] for name in field_names]
+
+    def error_summary_items(self):
+        """Return list of {'field', 'label', 'message'} dicts for all form errors."""
+        items = []
+        for field_name, errors in self.errors.items():
+            label = ""
+            if field_name in self.fields:
+                label = self.fields[field_name].label or field_name
+            for error in errors:
+                items.append({"field": field_name, "label": label, "message": error})
+        return items

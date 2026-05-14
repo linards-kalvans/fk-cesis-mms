@@ -1,42 +1,28 @@
-{% extends "base.html" %}
+{% extends "parent_ui/base_parent_page.html" %}
 {% load static %}
+{% load reg_filters %}
 
-{% block content %}
-<div class="fk-parent-shell">
-  <div class="fk-parent-shell__inner">
-    <h1>Jauna reģistrācija</h1>
+{% block page_content %}
+<section class="fk-page-heading">
+  <p class="fk-eyebrow">Pieteikums</p>
+  <h1>Jauna reģistrācija</h1>
+</section>
 
-    {% if form.errors %}
-      <div class="fk-error-summary">Lūdzu pārbaudiet laukus zemāk</div>
-    {% endif %}
+{% if form.errors %}
+  {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
+{% endif %}
 
-    <form method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <h2 class="fk-section-heading">ID / pases foto</h2>
-      <div class="fk-form-section">
-        <p><label for="{{ form.guardian_identity_document.id_for_label }}">{{ form.guardian_identity_document.label }}</label>{{ form.guardian_identity_document }}</p>
-        <p><label for="{{ form.member_identity_document.id_for_label }}">{{ form.member_identity_document.label }}</label>{{ form.member_identity_document }}</p>
-      </div>
+<form method="post" enctype="multipart/form-data" class="fk-workspace-form">
+  {% csrf_token %}
 
-
-      <h2 class="fk-section-heading">Vecāka informācija</h2>
-      <div class="fk-form-section">
-        <p><label for="{{ form.guardian_full_name.id_for_label }}">{{ form.guardian_full_name.label }}</label>{{ form.guardian_full_name }}</p>
-        <p><label for="{{ form.guardian_personal_id.id_for_label }}">{{ form.guardian_personal_id.label }}</label>{{ form.guardian_personal_id }}</p>
-        <p><label for="{{ form.guardian_email.id_for_label }}">{{ form.guardian_email.label }}</label>{{ form.guardian_email }}</p>
-        <p><label for="{{ form.guardian_phone.id_for_label }}">{{ form.guardian_phone.label }}</label>{{ form.guardian_phone }}</p>
-        <p><label for="{{ form.guardian_declared_address.id_for_label }}">{{ form.guardian_declared_address.label }}</label>{{ form.guardian_declared_address }}</p>
-      </div>
-
-      <h2 class="fk-section-heading">Bērna informācija</h2>
-      <div class="fk-form-section">
-        <p><label for="{{ form.member_full_name.id_for_label }}">{{ form.member_full_name.label }}</label>{{ form.member_full_name }}</p>
-        <p><label for="{{ form.member_personal_id.id_for_label }}">{{ form.member_personal_id.label }}</label>{{ form.member_personal_id }}</p>
-        <p><label for="{{ form.member_birth_date.id_for_label }}">{{ form.member_birth_date.label }}</label>{{ form.member_birth_date }}</p>
-        <p><label for="{{ form.member_actual_address.id_for_label }}">{{ form.member_actual_address.label }}</label>{{ form.member_actual_address }}</p>
-        <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
-        <p><label for="{{ form.member_same_address_as_guardian.id_for_label }}">{{ form.member_same_address_as_guardian.label }}</label>{{ form.member_same_address_as_guardian }}</p>
-        <script>
+  {% for section_name, bound_fields in form.grouped_fields %}
+    <section class="fk-section-card">
+      <h2>{{ section_name|title }}</h2>
+      {% for bound_field in bound_fields %}
+        {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
+          <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
+          {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:"member_same_address_as_guardian" %}
+          <script>
 // same-address-sync: SameAddressSync
 (function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
@@ -67,27 +53,17 @@
     }
   });
 })();
-        </script>
-        <p><label for="{{ form.member_kit_size_shirt.id_for_label }}">{{ form.member_kit_size_shirt.label }}</label>{{ form.member_kit_size_shirt }}</p>
-        <p><label for="{{ form.member_kit_size_shorts.id_for_label }}">{{ form.member_kit_size_shorts.label }}</label>{{ form.member_kit_size_shorts }}</p>
-      </div>
+          </script>
+        {% else %}
+          {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
+        {% endif %}
+      {% endfor %}
+    </section>
+  {% endfor %}
 
-      <h2 class="fk-section-heading">Bērna foto</h2>
-      <div class="fk-form-section">
-        <p><label for="{{ form.member_portrait_document.id_for_label }}">{{ form.member_portrait_document.label }}</label>{{ form.member_portrait_document }}</p>
-      </div>
-
-      <h2 class="fk-section-heading">Piekrišana</h2>
-      <div class="fk-form-section">
-        <p><label for="{{ form.preferred_agreement_signing.id_for_label }}">{{ form.preferred_agreement_signing.label }}</label>{{ form.preferred_agreement_signing }}</p>
-        <p><label for="{{ form.support_club_instead_of_multi_child_discount.id_for_label }}">{{ form.support_club_instead_of_multi_child_discount.label }}</label>{{ form.support_club_instead_of_multi_child_discount }}</p>
-      </div>
-
-      <div class="fk-form-actions">
-        <button type="submit" name="submit_action" value="save_draft">Saglabāt melnrakstu</button>
-        <button type="submit" name="submit_action" value="submit">Iesniegt pieteikumu</button>
-      </div>
-    </form>
+  <div class="fk-form-actions">
+    <button type="submit" name="submit_action" value="save_draft" class="fk-button fk-button--secondary">Saglabāt melnrakstu</button>
+    <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--primary">Iesniegt pieteikumu</button>
   </div>
-</div>
+</form>
 {% endblock %}

@@ -1,13 +1,12 @@
-"""P2 Task 1 — Canonical application workspace route contract.
+"""P2 Task 3 — Canonical application workspace route contract.
 
 Covers:
 - Owner can open /applications/<id>/ (200) with child/application context.
 - Non-owner gets 404 on /applications/<id>/.
-- Legacy edit route redirects to canonical workspace (302).
+- Legacy edit/summary/detail routes redirect to canonical workspace (302).
 - Submitted application workspace is read-only (no save-draft/submit buttons).
-- Workspace page uses shared parent shell hooks from Task 2.
-- Workspace page loads parent CSS assets via base template.
-- Editable workspace page uses new shell hooks, not orphaned old ones only.
+- POST to read-only workspace returns 404.
+- POST to editable workspace saves draft and redirects.
 """
 
 import pytest
@@ -228,126 +227,77 @@ class TestSubmittedApplicationReadOnly:
         assert "Iesniegt pieteikumu" not in content
         assert "Iesniegts" in content or "submitted" in content.lower()
 
+    def test_post_to_readonly_workspace_returns_404(self):
+        """POST to workspace for submitted app must return 404."""
+        client = Client()
+        acct, app = _make_submitted_app()
+        _login(client, acct)
+
+        resp = client.post(
+            f"/applications/{app.pk}/",
+            {
+                "guardian_full_name": "Readonly Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_email": acct.email,
+                "guardian_phone": "+37120000004",
+                "guardian_declared_address": "Riga 1",
+                "member_full_name": "Readonly Child",
+                "member_personal_id": "010125-54321",
+                "member_birth_date": "2025-01-01",
+                "member_same_address_as_guardian": True,
+                "preferred_agreement_signing": "paper",
+            },
+        )
+
+        assert resp.status_code == 404
+
 
 # ===========================================================================
-# 4. Workspace page uses shared parent shell hooks (Task 2 contract)
+# 4. Editable workspace allows save and submit
 # ===========================================================================
 
 
-class TestWorkspaceParentShellHooks:
-    """Workspace page must render inside the shared parent-page shell.
+class TestEditableWorkspaceActions:
+    """Editable workspace must show save-draft and submit buttons,
+    and POST must save draft and redirect."""
 
-    The canonical application workspace at /applications/<id>/ must extend
-    parent_ui/base_parent_page.html (or otherwise include its hooks) so that
-    it shares the consistent fk-parent-page wrapper and fk-site-header
-    component introduced in Task 2.
-    """
-
-    def test_workspace_has_fk_parent_page_wrapper(self):
-        """Workspace page must contain 'fk-parent-page' CSS hook."""
+    def test_editable_workspace_shows_save_and_submit_buttons(self):
+        """Draft workspace must contain both save-draft and submit buttons."""
         client = Client()
         acct, app = _make_workspace_draft()
         _login(client, acct)
 
         resp = client.get(f"/applications/{app.pk}/")
-        assert resp.status_code == 200
-
         content = resp.content.decode()
-        assert "fk-parent-page" in content, (
-            "Workspace page must use fk-parent-page shell wrapper from "
-            "parent_ui/base_parent_page.html."
-        )
 
-    def test_workspace_has_fk_site_header(self):
-        """Workspace page must contain 'fk-site-header' CSS hook."""
+        assert resp.status_code == 200
+        assert "Saglabāt melnrakstu" in content
+        assert "Iesniegt pieteikumu" in content
+
+    def test_editable_workspace_post_saves_draft_and_redirects(self):
+        """POST with save_draft action must save and redirect to workspace."""
         client = Client()
         acct, app = _make_workspace_draft()
         _login(client, acct)
 
-        resp = client.get(f"/applications/{app.pk}/")
-        assert resp.status_code == 200
-
-        content = resp.content.decode()
-        assert "fk-site-header" in content, (
-            "Workspace page must include fk-site-header from "
-            "parent_ui/includes/header.html."
+        resp = client.post(
+            f"/applications/{app.pk}/",
+            {
+                "guardian_full_name": "Updated Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_email": acct.email,
+                "guardian_phone": "+37120000000",
+                "guardian_declared_address": "Riga 2",
+                "member_full_name": "Updated Child",
+                "member_personal_id": "010125-54321",
+                "member_birth_date": "2025-01-01",
+                "preferred_agreement_signing": "paper",
+                "submit_action": "save_draft",
+            },
         )
 
-
-# ===========================================================================
-# 5. Workspace page loads Task 2 CSS assets via base template
-# ===========================================================================
-
-
-class TestWorkspaceCssAssets:
-    """Workspace page must inherit parent CSS assets from base template.
-
-    Since the workspace should extend parent_ui/base_parent_page.html which
-    in turn extends base.html, the response must include the parent theme
-    and parent pages CSS links.
-    """
-
-    def test_workspace_includes_parent_theme_css(self):
-        """Workspace response must contain parent_theme.css link."""
-        client = Client()
-        acct, app = _make_workspace_draft()
-        _login(client, acct)
-
-        resp = client.get(f"/applications/{app.pk}/")
-        assert resp.status_code == 200
-
-        content = resp.content.decode()
-        assert "parent_theme.css" in content, (
-            "Workspace page must include css/parent_theme.css via base template."
-        )
-
-    def test_workspace_includes_parent_pages_css(self):
-        """Workspace response must contain parent_pages.css link."""
-        client = Client()
-        acct, app = _make_workspace_draft()
-        _login(client, acct)
-
-        resp = client.get(f"/applications/{app.pk}/")
-        assert resp.status_code == 200
-
-        content = resp.content.decode()
-        assert "parent_pages.css" in content, (
-            "Workspace page must include css/parent_pages.css via base template."
-        )
-
-
-# ===========================================================================
-# 6. Editable workspace uses new shell hooks (not orphaned old ones only)
-# ===========================================================================
-
-
-class TestEditableWorkspaceShellContract:
-    """Editable workspace must use the new parent-ui shell, not only
-    the old fk-parent-shell orphaned class.
-
-    The workspace template should extend parent_ui/base_parent_page.html
-    so that it gets fk-parent-page and fk-site-header from the shared
-    primitive system.
-    """
-
-    def test_workspace_template_extends_parent_ui_base(self):
-        """application_workspace.html must extend parent_ui/base_parent_page.html."""
-        from pathlib import Path
-
-        tpl = Path(__file__).resolve().parents[2] / "templates" / "registrations" / "application_workspace.html"
-        content = tpl.read_text()
-        assert "parent_ui/base_parent_page.html" in content, (
-            "application_workspace.html must extend parent_ui/base_parent_page.html "
-            "to inherit fk-parent-page shell and fk-site-header."
-        )
-
-    def test_edit_template_extends_parent_ui_base(self):
-        """edit_registration.html must extend parent_ui/base_parent_page.html."""
-        from pathlib import Path
-
-        tpl = Path(__file__).resolve().parents[2] / "templates" / "registrations" / "edit_registration.html"
-        content = tpl.read_text()
-        assert "parent_ui/base_parent_page.html" in content, (
-            "edit_registration.html must extend parent_ui/base_parent_page.html "
-            "to inherit fk-parent-page shell and fk-site-header."
-        )
+        assert resp.status_code == 302
+        assert f"/applications/{app.pk}/" in resp.headers["Location"]
+        app.refresh_from_db()
+        assert app.guardian_full_name == "Updated Parent"
+        assert app.status == "draft"

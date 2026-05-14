@@ -1,0 +1,9 @@
+<div class="fk-form-field{% if field.errors %} fk-form-field--error{% endif %}">
+  <label class="fk-form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+  {% if source_label %}
+    {% include "parent_ui/includes/source_badge.html" with label=source_label %}
+  {% endif %}
+  {{ field }}
+  {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
+  {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
+</div>
