@@ -1,8 +1,38 @@
 {% load static %}
-<div class="fk-hero-card">
-  {% block hero_content %}
-    <div class="fk-eyebrow">FK Cēsis</div>
+{% if variant == "portal" %}
+<section class="fk-hero-card fk-hero-card--portal">
+  <div class="fk-hero-illustration" aria-hidden="true">
+    <div class="fk-clipboard">
+      <div class="fk-clipboard-line fk-clipboard-line--med"></div>
+      <div class="fk-clipboard-line fk-clipboard-line--short"></div>
+      <div class="fk-clipboard-line fk-clipboard-line--med"></div>
+      <div class="fk-clipboard-check"></div>
+      <div class="fk-clipboard-line fk-clipboard-line--med"></div>
+      <div class="fk-clipboard-check"></div>
+      <div class="fk-clipboard-line fk-clipboard-line--short"></div>
+    </div>
+    <div class="fk-ball"></div>
+  </div>
+  <div class="fk-hero-copy">
+    <h2>Sveiks!</h2>
+    <p>Pārvaldi savu bērnu pieteikumus FK Cēsis viegli un ātri. Turpini iesākto vai sāc jaunu reģistrāciju.</p>
+    <div class="fk-hero-actions">
+      {% if primary_application %}<a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>{% endif %}
+      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--red">＋ Sākt jaunu reģistrāciju</a>
+    </div>
+  </div>
+  <aside class="fk-info-card">
+    <div class="fk-info-card-icon">🛡</div>
+    <h3>Tavi dati ir drošībā</h3>
+    <p>Mēs rūpējamies par tavu informācijas drošību un privātumu.</p>
+  </aside>
+</section>
+{% else %}
+<section class="fk-hero-card">
+  <div>
+    <p class="fk-eyebrow">{{ eyebrow|default:"FK Cēsis" }}</p>
     <h1>{{ hero_title|default:"" }}</h1>
     {% if hero_subtitle %}<p class="fk-lead">{{ hero_subtitle }}</p>{% endif %}
-  {% endblock %}
-</div>
+  </div>
+</section>
+{% endif %}
