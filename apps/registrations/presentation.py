@@ -6,6 +6,19 @@ Task 3 scope only — no business logic, no admin UX, no OCR provider work.
 from apps.documents.models import Document
 from apps.registrations.models import RegistrationApplication
 
+# Canonical mapping: underscored kind key → human-readable display label.
+# Used by document_card.html for empty-state labels.
+DOCUMENT_KIND_LABELS: dict[str, str] = {
+    kind.value: kind.label for kind in list(Document.Kind)
+}
+
+# Canonical mapping: kind key → form field id anchor.
+DOCUMENT_FIELD_ID_MAP = {
+    "guardian_identity": "id_guardian_identity_document",
+    "member_identity": "id_member_identity_document",
+    "member_portrait": "id_member_portrait_document",
+}
+
 # Source-label mapping used by workspace template.
 SOURCE_LABEL_MAP = {
     "ocr_guardian_identity": "Aizpildīts no dokumenta",

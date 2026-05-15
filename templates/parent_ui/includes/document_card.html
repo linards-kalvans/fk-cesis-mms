@@ -1,0 +1,32 @@
+{% load reg_filters %}
+
+{% for kind, document in document_state.items %}
+  <div class="fk-document-card">
+    <div class="fk-document-card__header">
+      <span class="fk-document-card__kind">{% if document %}{{ document.get_kind_display }}{% else %}{{ document_kind_labels|get_item:kind }}{% endif %}</span>
+      {% if document %}
+        <span class="fk-source-badge fk-source-badge--active">Aktīvs</span>
+      {% else %}
+        <span class="fk-source-badge fk-source-badge--inactive">Nav augšupielādēts</span>
+      {% endif %}
+    </div>
+    <div class="fk-document-card__body">
+      {% if document %}
+        <p class="fk-document-card__filename">{{ document.original_filename }}</p>
+        {% if workspace_mode == "editable" %}
+          <p class="fk-document-card__hint">
+            Lai aizvietotu, augšupielādējiet jaunu dokumentu — vecais tiks automātiski aizstāts.
+          </p>
+          <a href="#{{ document_field_id_map|get_item:kind }}" class="fk-button fk-button--secondary fk-button--small fk-document-card__replace">Aizvietot</a>
+        {% endif %}
+      {% else %}
+        <p class="fk-document-card__empty">
+          Dokuments nav augšupielādēts.
+          {% if workspace_mode == "editable" %}
+            <a href="#{{ document_field_id_map|get_item:kind }}" class="fk-link">Augšupielādēt</a>
+          {% endif %}
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
