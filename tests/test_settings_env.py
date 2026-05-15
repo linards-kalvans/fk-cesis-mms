@@ -1,438 +1,326 @@
-"""Tests for .env auto-loading and tunnel-safe CSRF/host config.
+"""Subprocess-driven env-isolation tests for Django settings bootstrap.
 
-These tests verify that:
-1. `.env` at the project root is auto-loaded during Django settings bootstrap.
-2. `SITE_URL` from `.env` is available without manual `source .env`.
-3. `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` derive correct entries from `SITE_URL`.
-4. Other env vars from `.env` (e.g. `DJANGO_SECRET_KEY`) are picked up.
+Each test writes its own temporary .env file and spawns a fresh Python
+subprocess to import Django settings. This guarantees complete isolation
+from the project-root user .env and from Django's settings import cache.
 
-These tests are expected to FAIL (RED) because the current settings.py
-does not auto-load `.env` and does not derive ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS.
+No test depends on the project's .env file. All env values come from
+temp files created per-test.
+
+Helper script: tests/helpers/print_settings_snapshot.py
+  Contract: python print_settings_snapshot.py <temp_env_dir>
+  Output: JSON snapshot of relevant Django settings on stdout.
 """
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
+from typing import Any, cast
 
-import pytest
-from django.conf import settings
+from tests.helpers.print_settings_snapshot import _ENV_ISOLATION_KEYS
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+_WORKTREE_ROOT = Path(__file__).resolve().parent.parent
+_HELPER_SCRIPT = _WORKTREE_ROOT / "tests" / "helpers" / "print_settings_snapshot.py"
+_PYTHON = sys.executable
+
+
+def _isolated_env() -> dict:
+    """Return a copy of the parent env with tested keys cleared."""
+    env = os.environ.copy()
+    for key in _ENV_ISOLATION_KEYS:
+        env.pop(key, None)
+    return env
+
+
+def _run_helper(env_dir: Path) -> dict:
+    """Run the subprocess helper and return parsed JSON snapshot.
+
+    Raises RuntimeError if the helper script is missing or exits non-zero.
+    """
+    if not _HELPER_SCRIPT.exists():
+        raise RuntimeError(
+            f"Subprocess helper not found at {_HELPER_SCRIPT}. "
+            "Env-isolation tests require this script."
+        )
+
+    result = subprocess.run(
+        [_PYTHON, str(_HELPER_SCRIPT), str(env_dir)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=_isolated_env(),
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Subprocess helper failed (exit {result.returncode}).\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}\n"
+        )
+
+    try:
+        return cast(dict[str, Any], json.loads(result.stdout))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Subprocess helper returned invalid JSON.\n"
+            f"stdout: {result.stdout}\n"
+            f"Error: {exc}\n"
+        )
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Test: parent env values do NOT leak into subprocess snapshot
 # ---------------------------------------------------------------------------
 
-_ROOT = Path(__file__).resolve().parent.parent
+class TestEnvIsolationRegression:
+    """Prove parent-process env vars cannot override temp .env values."""
 
+    def test_parent_env_does_not_leak_site_url(self, tmp_path, monkeypatch):
+        """Parent SITE_URL must NOT leak into subprocess snapshot."""
+        parent_url = "http://PARENT-LEAK.example.com"
+        temp_url = "http://temp-env-isolated.example.com:8888"
 
-def _unset_env_vars(*names):
-    """Remove env vars so tests prove .env auto-load, not pre-exported vars."""
-    originals = {}
-    for name in names:
-        if name in os.environ:
-            originals[name] = os.environ.pop(name, None)
-    return originals
+        monkeypatch.setenv("SITE_URL", parent_url)
+        monkeypatch.setenv("DJANGO_SECRET_KEY", "parent-key")
 
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"SITE_URL={temp_url}\nDJANGO_SECRET_KEY=temp-key\n")
 
-def _restore_env_vars(originals):
-    """Restore previously saved env vars."""
-    os.environ.update(originals)
+        snapshot = _run_helper(tmp_path)
+        assert snapshot["site_url"] == temp_url, (
+            f"SITE_URL leaked from parent env: got {snapshot['site_url']}, "
+            f"expected {temp_url} from temp .env."
+        )
 
+    def test_parent_env_does_not_leak_secret_key(self, tmp_path, monkeypatch):
+        """Parent DJANGO_SECRET_KEY must NOT leak into subprocess snapshot."""
+        parent_key = "parent-secret-key-leak"
+        temp_key = "temp-secret-key-isolated"
 
-# ---------------------------------------------------------------------------
-# Test: .env auto-loads SITE_URL
-# ---------------------------------------------------------------------------
+        monkeypatch.setenv("DJANGO_SECRET_KEY", parent_key)
+        monkeypatch.setenv("SITE_URL", "http://localhost")
 
-class TestEnvAutoLoadSiteUrl:
-    """SITE_URL from .env should be available without manual export."""
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"DJANGO_SECRET_KEY={temp_key}\nSITE_URL=http://temp.example.com\n")
 
-    @pytest.fixture(autouse=True)
-    def _ensure_clean_env(self):
-        """Unset SITE_URL so we prove it comes from .env, not env var."""
-        originals = _unset_env_vars("SITE_URL")
-        yield
-        _restore_env_vars(originals)
+        snapshot = _run_helper(tmp_path)
+        assert snapshot["secret_key"] == temp_key, (
+            f"SECRET_KEY leaked from parent env: got {snapshot['secret_key']}, "
+            f"expected {temp_key} from temp .env."
+        )
 
-    def test_site_url_is_set_from_dotenv(self):
-        """settings.SITE_URL should be non-empty after .env is loaded."""
-        # The current settings.py only does os.environ.get("SITE_URL", ...)
-        # which returns "http://localhost" if SITE_URL is not exported.
-        # After .env auto-load, it should pick up the value from .env.
-        assert settings.SITE_URL != "http://localhost"
+    def test_parent_env_does_not_leak_allowed_hosts(self, tmp_path, monkeypatch):
+        """Parent ALLOWED_HOSTS must NOT leak into subprocess snapshot."""
+        monkeypatch.setenv("ALLOWED_HOSTS", "parent-leak.example.com")
+        monkeypatch.setenv("SITE_URL", "http://temp.example.com:7777")
+        monkeypatch.setenv("DJANGO_SECRET_KEY", "test-key")
 
-    def test_site_url_matches_dotenv_value(self):
-        """settings.SITE_URL should match the SITE_URL in .env."""
-        dotenv_path = _ROOT / ".env"
-        if not dotenv_path.exists():
-            pytest.skip(".env file not present")
-        dotenv_content = dotenv_path.read_text()
-        expected_url = None
-        for line in dotenv_content.splitlines():
-            line = line.strip()
-            if line.startswith("SITE_URL="):
-                expected_url = line.split("=", 1)[1].strip()
-                break
-        if expected_url is None:
-            pytest.skip("SITE_URL not found in .env")
-        assert settings.SITE_URL == expected_url
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://temp.example.com:7777\n"
+            "DJANGO_SECRET_KEY=test-key\n"
+        )
 
-
-# ---------------------------------------------------------------------------
-# Test: .env auto-loads DJANGO_SECRET_KEY
-# ---------------------------------------------------------------------------
-
-class TestEnvAutoLoadSecretKey:
-    """DJANGO_SECRET_KEY from .env should override the hardcoded default."""
-
-    @pytest.fixture(autouse=True)
-    def _ensure_clean_env(self):
-        originals = _unset_env_vars("DJANGO_SECRET_KEY")
-        yield
-        _restore_env_vars(originals)
-
-    def test_secret_key_from_dotenv_not_placeholder(self):
-        """SECRET_KEY should not be the hardcoded placeholder after .env load."""
-        # Current default: "django-insecure-task1-placeholder-change-in-production-abc123"
-        # .env contains: DJANGO_SECRET_KEY=change-me
-        assert settings.SECRET_KEY != "django-insecure-task1-placeholder-change-in-production-abc123"
-
-    def test_secret_key_matches_dotenv_value(self):
-        """SECRET_KEY should match the DJANGO_SECRET_KEY in .env."""
-        dotenv_path = _ROOT / ".env"
-        if not dotenv_path.exists():
-            pytest.skip(".env file not present")
-        dotenv_content = dotenv_path.read_text()
-        expected_key = None
-        for line in dotenv_content.splitlines():
-            line = line.strip()
-            if line.startswith("DJANGO_SECRET_KEY="):
-                expected_key = line.split("=", 1)[1].strip()
-                break
-        if expected_key is None:
-            pytest.skip("DJANGO_SECRET_KEY not found in .env")
-        assert settings.SECRET_KEY == expected_key
+        snapshot = _run_helper(tmp_path)
+        assert "parent-leak.example.com" not in snapshot["allowed_hosts"], (
+            f"ALLOWED_HOSTS leaked from parent env: {snapshot['allowed_hosts']}."
+        )
 
 
 # ---------------------------------------------------------------------------
-# Test: ALLOWED_HOSTS derived from SITE_URL
+# Test: subprocess helper exists and produces valid JSON
+# ---------------------------------------------------------------------------
+
+class TestSubprocessBootstrap:
+    """Verify the subprocess helper path is wired correctly."""
+
+    def test_helper_script_exists(self):
+        """The subprocess helper script must exist at the expected path."""
+        assert _HELPER_SCRIPT.exists(), (
+            f"Subprocess helper not found at {_HELPER_SCRIPT}. "
+            "Env-isolation tests require this script."
+        )
+
+    def test_helper_produces_valid_json(self, tmp_path):
+        """Helper must output valid JSON when given a temp .env directory."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("SITE_URL=http://example.com\nDJANGO_SECRET_KEY=test-key\n")
+
+        snapshot = _run_helper(tmp_path)
+        assert isinstance(snapshot, dict)
+        assert "site_url" in snapshot
+        assert "secret_key" in snapshot
+        assert "allowed_hosts" in snapshot
+
+
+# ---------------------------------------------------------------------------
+# Test: SITE_URL from temp .env
+# ---------------------------------------------------------------------------
+
+class TestSiteUrlFromEnv:
+    """SITE_URL must come from the temp .env file, not from user's .env."""
+
+    def test_site_url_from_temp_dotenv(self, tmp_path):
+        """settings.SITE_URL must match the SITE_URL written to temp .env."""
+        temp_url = "http://isolated-test.example.com:9999"
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"SITE_URL={temp_url}\nDJANGO_SECRET_KEY=test-key\n")
+
+        snapshot = _run_helper(tmp_path)
+        assert snapshot["site_url"] == temp_url, (
+            f"Expected SITE_URL={temp_url}, got {snapshot['site_url']}. "
+            "SITE_URL is not being read from the temp .env file."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test: SECRET_KEY from temp .env
+# ---------------------------------------------------------------------------
+
+class TestSecretKeyFromEnv:
+    """SECRET_KEY must come from the temp .env file, not from user's .env."""
+
+    def test_secret_key_from_temp_dotenv(self, tmp_path):
+        """settings.SECRET_KEY must match the DJANGO_SECRET_KEY written to temp .env."""
+        temp_key = "super-secret-key-from-temp-env-xyz789"
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"DJANGO_SECRET_KEY={temp_key}\nSITE_URL=http://localhost\n")
+
+        snapshot = _run_helper(tmp_path)
+        assert snapshot["secret_key"] == temp_key, (
+            f"Expected SECRET_KEY={temp_key}, got {snapshot['secret_key']}. "
+            "SECRET_KEY is not being read from the temp .env file."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test: ALLOWED_HOSTS contains site hostname + local dev hosts
 # ---------------------------------------------------------------------------
 
 class TestAllowedHosts:
-    """ALLOWED_HOSTS should derive host entries from SITE_URL."""
+    """ALLOWED_HOSTS must derive from temp .env SITE_URL and include dev hosts."""
 
-    def test_allowed_hosts_is_not_empty(self):
-        """After .env load + derivation, ALLOWED_HOSTS should have derived entries, not just testserver."""
-        # Django test runner injects "testserver" — we need actual derived entries.
-        # Filter out the test runner's default.
-        derived = [h for h in settings.ALLOWED_HOSTS if h not in ("testserver", "localhost", "*")]
-        assert len(derived) > 0, (
-            f"ALLOWED_HOSTS should contain derived entries from SITE_URL, got: {settings.ALLOWED_HOSTS}"
+    def test_allowed_hosts_contains_site_hostname(self, tmp_path):
+        """ALLOWED_HOSTS must include the hostname extracted from temp .env SITE_URL."""
+        temp_url = "http://isolated-test.example.com:9999"
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"SITE_URL={temp_url}\nDJANGO_SECRET_KEY=test-key\n")
+
+        snapshot = _run_helper(tmp_path)
+        allowed = snapshot["allowed_hosts"]
+        assert "isolated-test.example.com" in allowed, (
+            f"ALLOWED_HOSTS={allowed} must contain 'isolated-test.example.com' "
+            "derived from temp .env SITE_URL."
         )
 
-    def test_allowed_hosts_contains_site_hostname(self):
-        """ALLOWED_HOSTS should contain the hostname extracted from SITE_URL."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        # Parse hostname from URL (strip scheme)
-        from urllib.parse import urlparse
-        parsed = urlparse(site_url)
-        hostname = parsed.hostname or ""
-        assert hostname in settings.ALLOWED_HOSTS, (
-            f"ALLOWED_HOSTS={settings.ALLOWED_HOSTS} should contain {hostname}"
+    def test_allowed_hosts_contains_localhost(self, tmp_path):
+        """ALLOWED_HOSTS must include 'localhost' for local dev."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("SITE_URL=http://isolated.example.com\nDJANGO_SECRET_KEY=test-key\n")
+
+        snapshot = _run_helper(tmp_path)
+        allowed = snapshot["allowed_hosts"]
+        assert "localhost" in allowed, (
+            f"ALLOWED_HOSTS={allowed} must include 'localhost'."
+        )
+
+    def test_allowed_hosts_contains_127_0_0_1(self, tmp_path):
+        """ALLOWED_HOSTS must include '127.0.0.1' for local dev."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("SITE_URL=http://isolated.example.com\nDJANGO_SECRET_KEY=test-key\n")
+
+        snapshot = _run_helper(tmp_path)
+        allowed = snapshot["allowed_hosts"]
+        assert "127.0.0.1" in allowed, (
+            f"ALLOWED_HOSTS={allowed} must include '127.0.0.1'."
         )
 
 
 # ---------------------------------------------------------------------------
-# Test: CSRF_TRUSTED_ORIGINS derived from SITE_URL
+# Test: CSRF_TRUSTED_ORIGINS contains SITE_URL
 # ---------------------------------------------------------------------------
 
 class TestCsrfTrustedOrigins:
-    """CSRF_TRUSTED_ORIGINS should contain the full SITE_URL origin."""
+    """CSRF_TRUSTED_ORIGINS must contain the full SITE_URL from temp .env."""
 
-    def test_csrf_trusted_origins_defined_in_settings(self):
-        """settings should define CSRF_TRUSTED_ORIGINS as a derived list (not Django default)."""
-        # Django 6.x defines CSRF_TRUSTED_ORIGINS = [] by default.
-        # Our settings must override it with derived entries from SITE_URL.
-        # We check that the value is not the Django default empty list.
-        assert settings.CSRF_TRUSTED_ORIGINS != [], (
-            "CSRF_TRUSTED_ORIGINS should be derived from SITE_URL, not Django default []"
-        )
+    def test_csrf_trusted_origins_contains_site_url(self, tmp_path):
+        """CSRF_TRUSTED_ORIGINS must include the full SITE_URL from temp .env."""
+        temp_url = "http://isolated-test.example.com:9999"
+        env_file = tmp_path / ".env"
+        env_file.write_text(f"SITE_URL={temp_url}\nDJANGO_SECRET_KEY=test-key\n")
 
-    def test_csrf_trusted_origins_is_not_empty(self):
-        """CSRF_TRUSTED_ORIGINS should contain derived entries from SITE_URL, not be empty."""
-        # Django defaults CSRF_TRUSTED_ORIGINS to [] — we need actual entries.
-        assert len(settings.CSRF_TRUSTED_ORIGINS) > 0, (
-            f"CSRF_TRUSTED_ORIGINS should contain derived entries from SITE_URL, got: {settings.CSRF_TRUSTED_ORIGINS}"
-        )
-
-    def test_csrf_trusted_origins_contains_site_url(self):
-        """CSRF_TRUSTED_ORIGINS should contain the full SITE_URL."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        assert site_url in settings.CSRF_TRUSTED_ORIGINS, (
-            f"CSRF_TRUSTED_ORIGINS={settings.CSRF_TRUSTED_ORIGINS} should contain {site_url}"
-        )
-
-    def test_csrf_trusted_origins_has_https_for_tunnel(self):
-        """For tunnel URLs (kimaki.dev), CSRF_TRUSTED_ORIGINS must use https.
-
-        Reads .env directly to check the tunnel URL even if settings hasn't loaded it yet.
-        """
-        dotenv_path = _ROOT / ".env"
-        if not dotenv_path.exists():
-            pytest.skip(".env file not present")
-        dotenv_content = dotenv_path.read_text()
-        expected_site_url = None
-        for line in dotenv_content.splitlines():
-            line = line.strip()
-            if line.startswith("SITE_URL="):
-                expected_site_url = line.split("=", 1)[1].strip()
-                break
-        if not expected_site_url:
-            pytest.skip("SITE_URL not found in .env")
-
-        # Tunnel URLs are HTTPS — CSRF_TRUSTED_ORIGINS must have matching https origins
-        if expected_site_url.startswith("https://"):
-            https_origins = [o for o in settings.CSRF_TRUSTED_ORIGINS if o.startswith("https://")]
-            assert len(https_origins) > 0, (
-                f"CSRF_TRUSTED_ORIGINS should have https:// entries when SITE_URL is https, got: {settings.CSRF_TRUSTED_ORIGINS}"
-            )
-            if "kimaki.dev" in expected_site_url:
-                tunnel_origins = [o for o in settings.CSRF_TRUSTED_ORIGINS if "kimaki.dev" in o]
-                assert len(tunnel_origins) > 0, (
-                    f"CSRF_TRUSTED_ORIGINS should have a kimaki.dev entry, got: {settings.CSRF_TRUSTED_ORIGINS}"
-                )
-                for origin in tunnel_origins:
-                    assert origin.startswith("https://"), (
-                        f"CSRF_TRUSTED_ORIGINS entry for tunnel must use https://, got: {origin}"
-                    )
-
-
-# ---------------------------------------------------------------------------
-# Test: ALLOWED_HOSTS includes local dev hosts for tunnel/proxy traffic
-# ---------------------------------------------------------------------------
-
-class TestAllowedHostsLocalDev:
-    """ALLOWED_HOSTS must include localhost and 127.0.0.1 for tunnel/proxy traffic.
-
-    Bug: when SITE_URL is a tunnel URL (e.g. https://...kimaki.dev),
-    Django receives HTTP_HOST=localhost:8000 on the incoming tunnel path.
-    If ALLOWED_HOSTS lacks 'localhost' and '127.0.0.1', Django raises
-    DisallowedHost and blocks the request.
-
-    Fix: ALLOWED_HOSTS must always include local dev hosts regardless of SITE_URL.
-    """
-
-    def test_allowed_hosts_contains_localhost(self):
-        """ALLOWED_HOSTS must include 'localhost' to accept tunnel/proxy traffic."""
-        assert "localhost" in settings.ALLOWED_HOSTS, (
-            f"ALLOWED_HOSTS={settings.ALLOWED_HOSTS} must include 'localhost' "
-            "for tunnel/proxy traffic"
-        )
-
-    def test_allowed_hosts_contains_127_0_0_1(self):
-        """ALLOWED_HOSTS must include '127.0.0.1' to accept tunnel/proxy traffic."""
-        assert "127.0.0.1" in settings.ALLOWED_HOSTS, (
-            f"ALLOWED_HOSTS={settings.ALLOWED_HOSTS} must include '127.0.0.1' "
-            "for tunnel/proxy traffic"
+        snapshot = _run_helper(tmp_path)
+        origins = snapshot["csrf_trusted_origins"]
+        assert temp_url in origins, (
+            f"CSRF_TRUSTED_ORIGINS={origins} must contain '{temp_url}' "
+            "from temp .env SITE_URL."
         )
 
 
 # ---------------------------------------------------------------------------
-# Test: SECURE_PROXY_SSL_HEADER for HTTPS tunnel traffic
+# Test: Secure cookie flags reflect https SITE_URL
 # ---------------------------------------------------------------------------
 
-class TestSecureProxySslHeader:
-    """Django must trust the proxy's X-Forwarded-Proto header.
+class TestSecureCookieFlagsHttps:
+    """When temp .env SITE_URL is https://, secure cookie flags must be True."""
 
-    Bug: tunnel/proxy terminates HTTPS and forwards requests as HTTP.
-    Django sees plain HTTP, so SecurityMiddleware does not mark cookies
-    secure and does not enforce HTTPS redirects. The real browser over
-    the tunnel gets redirected back to the login page because the session
-    cookie is not sent (not marked secure on an apparent HTTP connection).
+    def _https_snapshot(self, tmp_path) -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=https://secure-tunnel.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n"
+        )
+        return _run_helper(tmp_path)
 
-    Fix: set SECURE_PROXY_SSL_HEADER so Django knows the original request
-    was HTTPS.
-    """
-
-    def test_secure_proxy_ssl_header_is_set(self):
-        """SECURE_PROXY_SSL_HEADER must be set to trust proxy HTTPS."""
-        assert hasattr(settings, "SECURE_PROXY_SSL_HEADER"), (
-            "SECURE_PROXY_SSL_HEADER is not defined in settings. "
-            "Django cannot trust the proxy's X-Forwarded-Proto header."
+    def test_session_cookie_secure_true_for_https(self, tmp_path):
+        """SESSION_COOKIE_SECURE must be True when SITE_URL is https://."""
+        snapshot = self._https_snapshot(tmp_path)
+        assert snapshot["session_cookie_secure"] is True, (
+            f"SESSION_COOKIE_SECURE={snapshot['session_cookie_secure']}, "
+            "expected True for https:// SITE_URL."
         )
 
-    def test_secure_proxy_ssl_header_value(self):
-        """SECURE_PROXY_SSL_HEADER must match ('HTTP_X_FORWARDED_PROTO', 'https')."""
-        expected = ("HTTP_X_FORWARDED_PROTO", "https")
-        actual = getattr(settings, "SECURE_PROXY_SSL_HEADER", None)
-        assert actual == expected, (
-            f"SECURE_PROXY_SSL_HEADER={actual}, expected {expected}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test: USE_X_FORWARDED_HOST for proxy host forwarding
-# ---------------------------------------------------------------------------
-
-class TestUseXForwardedHost:
-    """Django must respect the Host header forwarded by the proxy.
-
-    Bug: the tunnel proxy may rewrite the Host header. Without
-    USE_X_FORWARDED_HOST=True, Django ignores the forwarded host and
-    may generate wrong absolute URLs (e.g. for redirect targets),
-    causing the browser to land back at the login page.
-
-    Fix: set USE_X_FORWARDED_HOST = True.
-    """
-
-    def test_use_x_forwarded_host_is_true(self):
-        """USE_X_FORWARDED_HOST must be True to trust forwarded Host header."""
-        assert getattr(settings, "USE_X_FORWARDED_HOST", False) is True, (
-            f"USE_X_FORWARDED_HOST={getattr(settings, 'USE_X_FORWARDED_HOST', 'not set')}, "
-            "expected True for tunnel/proxy host forwarding"
+    def test_csrf_cookie_secure_true_for_https(self, tmp_path):
+        """CSRF_COOKIE_SECURE must be True when SITE_URL is https://."""
+        snapshot = self._https_snapshot(tmp_path)
+        assert snapshot["csrf_cookie_secure"] is True, (
+            f"CSRF_COOKIE_SECURE={snapshot['csrf_cookie_secure']}, "
+            "expected True for https:// SITE_URL."
         )
 
 
 # ---------------------------------------------------------------------------
-# Test: SESSION_COOKIE_SECURE for HTTPS tunnel traffic
+# Test: SameSite cookie attributes reflect https SITE_URL
 # ---------------------------------------------------------------------------
 
-class TestSessionCookieSecure:
-    """Session cookie must be marked secure for HTTPS tunnel traffic.
+class TestSameSiteCookieAttrsHttps:
+    """When temp .env SITE_URL is https://, SameSite attrs must be 'None'."""
 
-    Bug: when SITE_URL is https://, the session cookie should be
-    secure=True so the browser sends it over HTTPS. Without this,
-    the cookie is not sent and the browser sees an unauthenticated
-    state, redirecting back to the login page.
+    def _https_snapshot(self, tmp_path) -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=https://secure-tunnel.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n"
+        )
+        return _run_helper(tmp_path)
 
-    Fix: set SESSION_COOKIE_SECURE = True when SITE_URL is https.
-    """
-
-    def test_session_cookie_secure_is_true_for_https_site(self):
-        """SESSION_COOKIE_SECURE must be True when SITE_URL starts with https."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        if not site_url.startswith("https://"):
-            pytest.skip(f"SITE_URL is {site_url}, not https")
-        assert getattr(settings, "SESSION_COOKIE_SECURE", False) is True, (
-            f"SESSION_COOKIE_SECURE={getattr(settings, 'SESSION_COOKIE_SECURE', 'not set')}, "
-            "expected True when SITE_URL is https://"
+    def test_session_cookie_samesite_none_for_https(self, tmp_path):
+        """SESSION_COOKIE_SAMESITE must be 'None' when SITE_URL is https://."""
+        snapshot = self._https_snapshot(tmp_path)
+        assert snapshot["session_cookie_samesite"] == "None", (
+            f"SESSION_COOKIE_SAMESITE={snapshot['session_cookie_samesite']!r}, "
+            "expected 'None' for https:// SITE_URL."
         )
 
-    def test_session_cookie_secure_set_in_settings(self):
-        """SESSION_COOKIE_SECURE must be explicitly defined in settings."""
-        assert hasattr(settings, "SESSION_COOKIE_SECURE"), (
-            "SESSION_COOKIE_SECURE is not defined in settings. "
-            "Browser may reject the session cookie over HTTPS tunnel."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test: CSRF_COOKIE_SECURE for HTTPS tunnel traffic
-# ---------------------------------------------------------------------------
-
-class TestCsrfCookieSecure:
-    """CSRF cookie must be marked secure for HTTPS tunnel traffic.
-
-    Bug: CSRF cookie not marked secure means the browser won't send
-    it over HTTPS, causing CSRF validation to fail on POST requests
-    (like login). The user gets redirected back to the login page.
-
-    Fix: set CSRF_COOKIE_SECURE = True when SITE_URL is https.
-    """
-
-    def test_csrf_cookie_secure_is_true_for_https_site(self):
-        """CSRF_COOKIE_SECURE must be True when SITE_URL starts with https."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        if not site_url.startswith("https://"):
-            pytest.skip(f"SITE_URL is {site_url}, not https")
-        assert getattr(settings, "CSRF_COOKIE_SECURE", False) is True, (
-            f"CSRF_COOKIE_SECURE={getattr(settings, 'CSRF_COOKIE_SECURE', 'not set')}, "
-            "expected True when SITE_URL is https://"
-        )
-
-    def test_csrf_cookie_secure_set_in_settings(self):
-        """CSRF_COOKIE_SECURE must be explicitly defined in settings."""
-        assert hasattr(settings, "CSRF_COOKIE_SECURE"), (
-            "CSRF_COOKIE_SECURE is not defined in settings. "
-            "CSRF validation may fail over HTTPS tunnel."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test: SESSION_COOKIE_SAMESITE for HTTPS tunnel traffic
-# ---------------------------------------------------------------------------
-
-class TestSessionCookieSameSite:
-    """Session cookie SameSite must be None for HTTPS tunnel traffic.
-
-    Bug: Django defaults SESSION_COOKIE_SAMESITE to 'Lax'.
-    Lax cookies are not sent on cross-site requests. A tunnel proxy
-    (kimaki.dev) terminates HTTPS and forwards the request — the browser
-    treats the tunnel as a cross-site context. With SameSite=Lax the
-    session cookie is stripped, the admin login POST gets no session,
-    and the browser lands back at the login page.
-
-    Fix: set SESSION_COOKIE_SAMESITE = 'None' when SITE_URL is https://.
-    """
-
-    def test_session_cookie_samesite_is_none_for_https_site(self):
-        """SESSION_COOKIE_SAMESITE must be 'None' when SITE_URL starts with https."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        if not site_url.startswith("https://"):
-            pytest.skip(f"SITE_URL is {site_url}, not https")
-        actual = getattr(settings, "SESSION_COOKIE_SAMESITE", None)
-        assert actual == "None", (
-            f"SESSION_COOKIE_SAMESITE={actual!r}, expected 'None' when SITE_URL is https://"
-        )
-
-    def test_session_cookie_samesite_set_in_settings(self):
-        """SESSION_COOKIE_SAMESITE must be explicitly defined in settings."""
-        assert hasattr(settings, "SESSION_COOKIE_SAMESITE"), (
-            "SESSION_COOKIE_SAMESITE is not defined in settings. "
-            "Browser may strip session cookie over HTTPS tunnel due to default Lax."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test: CSRF_COOKIE_SAMESITE for HTTPS tunnel traffic
-# ---------------------------------------------------------------------------
-
-class TestCsrfCookieSameSite:
-    """CSRF cookie SameSite must be None for HTTPS tunnel traffic.
-
-    Bug: Django defaults CSRF_COOKIE_SAMESITE to 'Lax'.
-    Lax cookies are not sent on cross-site requests. A tunnel proxy
-    (kimaki.dev) terminates HTTPS and forwards the request — the browser
-    treats the tunnel as a cross-site context. With SameSite=Lax the
-    CSRF cookie is stripped, POST login fails CSRF validation, and the
-    user gets redirected back to the login page.
-
-    Fix: set CSRF_COOKIE_SAMESITE = 'None' when SITE_URL is https://.
-    """
-
-    def test_csrf_cookie_samesite_is_none_for_https_site(self):
-        """CSRF_COOKIE_SAMESITE must be 'None' when SITE_URL starts with https."""
-        site_url = getattr(settings, "SITE_URL", None)
-        if not site_url:
-            pytest.skip("SITE_URL not set")
-        if not site_url.startswith("https://"):
-            pytest.skip(f"SITE_URL is {site_url}, not https")
-        actual = getattr(settings, "CSRF_COOKIE_SAMESITE", None)
-        assert actual == "None", (
-            f"CSRF_COOKIE_SAMESITE={actual!r}, expected 'None' when SITE_URL is https://"
-        )
-
-    def test_csrf_cookie_samesite_set_in_settings(self):
-        """CSRF_COOKIE_SAMESITE must be explicitly defined in settings."""
-        assert hasattr(settings, "CSRF_COOKIE_SAMESITE"), (
-            "CSRF_COOKIE_SAMESITE is not defined in settings. "
-            "CSRF validation may fail over HTTPS tunnel due to default Lax."
+    def test_csrf_cookie_samesite_none_for_https(self, tmp_path):
+        """CSRF_COOKIE_SAMESITE must be 'None' when SITE_URL is https://."""
+        snapshot = self._https_snapshot(tmp_path)
+        assert snapshot["csrf_cookie_samesite"] == "None", (
+            f"CSRF_COOKIE_SAMESITE={snapshot['csrf_cookie_samesite']!r}, "
+            "expected 'None' for https:// SITE_URL."
         )

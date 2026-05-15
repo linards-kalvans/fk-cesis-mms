@@ -33,8 +33,11 @@ Target Django monolith with domain apps:
 - `apps/accounts/views.py` implements request, verify, logout, and one-time code verification views.
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
 - `apps/registrations/models.py` implements `RegistrationApplication` with finalized P1 guardian/member/application fields, draft/submitted states, and fix/reject/approve workflow.
-- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, chooser/prefill support, same-address handling, link to parent account, and admin review actions (request_fix, reject, approve).
-- `apps/registrations/views.py` provides guardian email entry, verified registration create/edit, chooser portal, and admin review queue/detail views.
+- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, chooser/prefill support, same-address handling, link to parent account, and admin review actions (request_fix, reject, approve). `fix_requested` save preserves status (Task 3).
+- `apps/registrations/views.py` provides guardian email entry, verified registration create/edit, chooser portal, admin review queue/detail views, and canonical application workspace routing (Task 3).
+- `apps/registrations/presentation.py` implements grouped form rendering contract and workspace mode logic (Task 3).
+- `apps/registrations/forms.py` implements the unified registration form with grouped sections (Task 3).
+- `apps/registrations/templatetags/reg_filters.py` provides template filters for the form contract (Task 3).
 - `apps/members/models.py` implements `Member`, `Guardian`, `TrainingGroup`, and `KitSizeOption` models; approval creates `Member` + `Guardian` with `training_group` left empty.
 - `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`), P1 document kinds, and placeholder OCR status.
 - `apps/documents` uses a dedicated private storage root (`private-uploads/`) and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
@@ -46,9 +49,12 @@ Target Django monolith with domain apps:
 - `/register/verify/` completes verified parent access before continuation.
 - `/portal/` acts as chooser/dashboard for verified guardians.
 - `/applications/new/` starts a new verified registration with guardian-only prefill.
+- `/applications/<id>/` is the canonical parent application workspace (Task 3); legacy parent routes redirect here.
 - Anonymous same-browser draft continuation was removed; edit/submit now require verified parent ownership.
 - Edit page uses a single form with two actions: **save draft** and **submit application**.
 - Member address supports live **Adrese tāda pati kā vecāka** sync and restore behavior.
+- Grouped form rendering contract in place (Task 3): guardian, child/player, and document sections rendered via shared template primitives (`form_field.html`, `source_badge.html`).
+- Application workspace supports read-only (submitted/approved/rejected) and editable (draft/fix_requested) modes; `fix_requested` save preserves status (Task 3).
 
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
