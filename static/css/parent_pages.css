@@ -28,7 +28,7 @@
 
 /* ── Portal hero card (3-col variant) ── */
 
-.fk-hero-card--portal {
+.fk-hero-card:has(.fk-hero-illustration) {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 270px;
   gap: 24px;
@@ -398,7 +398,7 @@
 /* ── Responsive ── */
 
 @media (max-width: 1120px) {
-  .fk-hero-card--portal {
+  .fk-hero-card:has(.fk-hero-illustration) {
     grid-template-columns: 220px minmax(0, 1fr);
   }
   .fk-info-card { grid-column: 1 / -1; }
@@ -408,7 +408,7 @@
 }
 
 @media (max-width: 900px) {
-  .fk-hero-card--portal {
+  .fk-hero-card:has(.fk-hero-illustration) {
     grid-template-columns: 1fr;
     padding: 22px;
   }
@@ -425,10 +425,10 @@
   .fk-page-wrapper,
   .fk-page { padding: 24px 12px 40px; }
   .fk-page-subtitle { margin-bottom: 20px; }
-  .fk-hero-card--portal,
+  .fk-hero-card:has(.fk-hero-illustration),
   .fk-application-card,
   .fk-helper-card { border-radius: 18px; }
-  .fk-hero-card--portal { padding: 18px; }
+  .fk-hero-card:has(.fk-hero-illustration) { padding: 18px; }
   .fk-hero-copy h2 { font-size: 1.7rem; }
   .fk-hero-actions { display: grid; grid-template-columns: 1fr; }
   .fk-hero-actions .fk-button { width: 100%; }

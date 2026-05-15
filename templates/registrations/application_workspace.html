@@ -79,6 +79,7 @@
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
             <script>
+// SameAddressSync
 (function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
   var addr=document.getElementById('id_member_actual_address');
