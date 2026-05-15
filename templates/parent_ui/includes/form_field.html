@@ -1,3 +1,36 @@
+{% if field.field.widget.input_type == "checkbox" %}
+<div class="fk-form-field fk-form-field--checkbox{% if field.errors %} fk-form-field--error{% endif %}">
+  <label class="fk-form-label fk-form-label--checkbox" for="{{ field.id_for_label }}">
+    {{ field }}
+    <span>{{ field.label }}</span>
+  </label>
+  {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
+  {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
+</div>
+{% elif field.field.widget.input_type == "file" %}
+<div class="fk-form-field{% if field.errors %} fk-form-field--error{% endif %}">
+  <label class="fk-form-label">{{ field.label }}</label>
+  {% if source_label %}{% include "parent_ui/includes/source_badge.html" with label=source_label %}{% endif %}
+  <label class="fk-dropzone{% if existing_doc %} fk-dropzone--filled{% endif %}" for="{{ field.id_for_label }}">
+    {{ field }}
+    {% if existing_doc %}
+    <span>
+      <div class="fk-dropzone-icon">✓</div>
+      <div class="fk-dropzone-title">{{ existing_doc.original_filename }}</div>
+      <div class="fk-dropzone-meta">{{ existing_doc.get_kind_display }} · <a href="#{{ field.id_for_label }}">Aizvietot</a></div>
+    </span>
+    {% else %}
+    <span>
+      <div class="fk-dropzone-icon">⇧</div>
+      <a href="#{{ field.id_for_label }}" class="fk-dropzone-title">Augšupielādēt failu</a>
+      <div class="fk-dropzone-meta">{% if kind_label %}<span class="fk-document-card__kind">{{ kind_label }}</span> · {% endif %}JPG, PNG vai PDF</div>
+    </span>
+    {% endif %}
+  </label>
+  {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
+  {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
+</div>
+{% else %}
 <div class="fk-form-field{% if field.errors %} fk-form-field--error{% endif %}">
   <label class="fk-form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
   {% if source_label %}
@@ -7,3 +40,4 @@
   {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
   {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
 </div>
+{% endif %}

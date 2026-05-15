@@ -53,13 +53,16 @@
         </div>
       </div>
       <div class="fk-section-body">
+        {% if section_name == "documents" %}
+        <p class="fk-section-note" style="margin-bottom:18px;">Augšupielādējiet personas apliecinošo dokumentu foto. Dati tiks izmantoti priekšaizpildei nākamajā solī.</p>
+        {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:"member_same_address_as_guardian" %}
             <script>
 // SameAddressSync
-(function(){
+document.addEventListener('DOMContentLoaded',function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
   var addr=document.getElementById('id_member_actual_address');
   var prev=document.getElementById('member_actual_address_previous');
@@ -70,7 +73,7 @@
   if(cb.checked){syncFromGuardian();}
   cb.addEventListener('change',function(){if(cb.checked){prev.value=addr.value;syncFromGuardian();}else{restorePrev();}});
   guardian.addEventListener('input',function(){if(cb.checked){syncFromGuardian();}});
-})();
+});
             </script>
           {% else %}
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
@@ -102,6 +105,19 @@
         </div>
       </div>
       <div class="fk-section-body">
+        {% for review_section_name, review_fields in form.grouped_fields %}
+        <div class="fk-summary-section">
+          <h3 class="fk-summary-section-title">{% if review_section_name == "documents" %}ID dokuments{% elif review_section_name == "guardian" %}Vecāka informācija{% elif review_section_name == "member" %}Bērna informācija{% elif review_section_name == "agreement" %}Piekrišana{% else %}{{ review_section_name|title }}{% endif %}</h3>
+          <div class="fk-summary-grid">
+            {% for bound_field in review_fields %}
+            <div class="fk-summary-item">
+              <span>{{ bound_field.label }}</span>
+              <strong data-review-for="id_{{ bound_field.name }}">{% if bound_field.field.widget.input_type == "file" %}{% if bound_field.value %}Augšupielādēts ✓{% else %}—{% endif %}{% elif bound_field.name == "member_same_address_as_guardian" or bound_field.name == "support_club_instead_of_multi_child_discount" %}{{ bound_field.value|yesno:"Jā,Nē" }}{% else %}{{ bound_field.value|default:"—" }}{% endif %}</strong>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
         <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
         <div class="fk-wizard-nav" style="margin-top:22px;">
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>

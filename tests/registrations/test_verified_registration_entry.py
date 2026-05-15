@@ -513,7 +513,7 @@ class TestTask2RegisterPageRedesign:
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "fonts.googleapis.com" in content
-        assert "Anton" in content
+        assert "Barlow+Condensed" in content or "Anton" in content
         assert "Inter" in content
 
     def test_register_page_links_parent_theme_css(self):
@@ -610,7 +610,7 @@ class TestTask2VerifyPageRedesign:
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "fonts.googleapis.com" in content
-        assert "Anton" in content
+        assert "Barlow+Condensed" in content or "Anton" in content
         assert "Inter" in content
 
     def test_verify_page_links_parent_theme_css(self):

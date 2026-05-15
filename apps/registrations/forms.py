@@ -1,5 +1,7 @@
 """Django forms for registration workflow."""
 
+import re
+
 from django import forms
 
 
@@ -7,6 +9,13 @@ class RegistrationApplicationForm(forms.Form):
     """Form for creating/editing a RegistrationApplication."""
 
     section_order = (
+        (
+            "documents",
+            (
+                "guardian_identity_document",
+                "member_identity_document",
+            ),
+        ),
         (
             "guardian",
             (
@@ -23,17 +32,10 @@ class RegistrationApplicationForm(forms.Form):
                 "member_full_name",
                 "member_personal_id",
                 "member_birth_date",
-                "member_actual_address",
                 "member_same_address_as_guardian",
+                "member_actual_address",
                 "member_kit_size_shirt",
                 "member_kit_size_shorts",
-            ),
-        ),
-        (
-            "documents",
-            (
-                "guardian_identity_document",
-                "member_identity_document",
                 "member_portrait_document",
             ),
         ),
@@ -133,9 +135,20 @@ class RegistrationApplicationForm(forms.Form):
         return cleaned_data
 
     def grouped_fields(self):
-        """Yield (section_name, [BoundField, ...]) tuples in section_order."""
-        for section_name, field_names in self.section_order:
-            yield section_name, [self[name] for name in field_names]
+        """Return list of (section_name, [BoundField, ...]) tuples in section_order."""
+        return [(section_name, [self[name] for name in field_names]) for section_name, field_names in self.section_order]
+
+    def clean_guardian_personal_id(self):
+        value = self.cleaned_data.get("guardian_personal_id", "")
+        if value and not re.match(r"^\d{6}-\d{5}$", value):
+            raise forms.ValidationError("Ievadiet personas kodu formātā DDDDDD-DDDDD.")
+        return value
+
+    def clean_member_personal_id(self):
+        value = self.cleaned_data.get("member_personal_id", "")
+        if value and not re.match(r"^\d{6}-\d{5}$", value):
+            raise forms.ValidationError("Ievadiet personas kodu formātā DDDDDD-DDDDD.")
+        return value
 
     def error_summary_items(self):
         """Return list of {'field', 'label', 'message'} dicts for all form errors."""

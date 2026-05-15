@@ -14,7 +14,9 @@ from apps.registrations.models import RegistrationApplication
 from apps.registrations.presentation import (
     DOCUMENT_FIELD_ID_MAP,
     DOCUMENT_KIND_LABELS,
+    FIELD_KIND_LABELS,
     active_documents_by_kind,
+    documents_by_field_name,
     source_label,
     workspace_mode,
 )
@@ -159,6 +161,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             "form": form,
             "workspace_mode": workspace_mode(application, account),
             "document_state": active_documents_by_kind(application),
+            "document_by_field": documents_by_field_name(application),
+            "field_kind_labels": FIELD_KIND_LABELS,
             "document_field_id_map": DOCUMENT_FIELD_ID_MAP,
             "document_kind_labels": DOCUMENT_KIND_LABELS,
             "field_source_labels": {
@@ -261,6 +265,8 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
             "application": application,
             "workspace_mode": workspace_mode(application, account),
             "document_state": active_documents_by_kind(application),
+            "document_by_field": documents_by_field_name(application),
+            "field_kind_labels": FIELD_KIND_LABELS,
             "document_field_id_map": DOCUMENT_FIELD_ID_MAP,
             "document_kind_labels": DOCUMENT_KIND_LABELS,
             "field_source_labels": {

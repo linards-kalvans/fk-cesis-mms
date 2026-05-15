@@ -28,6 +28,23 @@ SOURCE_LABEL_MAP = {
 }
 
 
+_FIELD_TO_KIND: dict[str, str] = {
+    "guardian_identity_document": "guardian_identity",
+    "member_identity_document": "member_identity",
+    "member_portrait_document": "member_portrait",
+}
+
+FIELD_KIND_LABELS: dict[str, str] = {
+    field: Document.Kind(kind).label for field, kind in _FIELD_TO_KIND.items()
+}
+
+
+def documents_by_field_name(application: RegistrationApplication) -> dict:
+    """Return {form_field_name: Document | None} for active documents."""
+    kind_map = active_documents_by_kind(application)
+    return {field: kind_map.get(kind) for field, kind in _FIELD_TO_KIND.items()}
+
+
 def workspace_mode(application: RegistrationApplication, account) -> str:
     """Return 'editable' or 'read_only' based on ownership + status."""
     return "editable" if application.is_editable_by(account) else "read_only"

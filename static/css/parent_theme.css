@@ -37,7 +37,7 @@ img { max-width: 100%; display: block; }
 a { color: inherit; text-decoration: none; }
 
 h1, h2, h3 {
-  font-family: 'Anton', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   letter-spacing: 0.02em;
   font-weight: 400;
   text-transform: uppercase;
@@ -89,7 +89,7 @@ h1, h2, h3 {
 .fk-brand-text { min-width: 0; }
 
 .fk-brand-title {
-  font-family: 'Anton', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-size: 1.9rem;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -106,6 +106,18 @@ h1, h2, h3 {
 }
 
 /* ── Eyebrow / lead ── */
+
+.fk-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fk-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 16px;
+}
+.fk-back-link:hover { color: var(--fk-blue); }
 
 .fk-eyebrow {
   color: var(--fk-red);
@@ -153,7 +165,7 @@ h1, h2, h3 {
 }
 
 .fk-hero-card h1 {
-  font-family: 'Anton', sans-serif;
+  font-family: 'Barlow Condensed', sans-serif;
   font-weight: 400;
   text-transform: uppercase;
   font-size: clamp(38px, 5vw, 62px);
@@ -273,6 +285,26 @@ h1, h2, h3 {
   accent-color: var(--fk-blue);
 }
 
+.fk-form-field--checkbox {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.fk-form-label--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.fk-form-field--checkbox input[type="checkbox"] {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
 .fk-form-field input:focus,
 .fk-form-field select:focus,
 .fk-form-field textarea:focus {
@@ -321,9 +353,18 @@ h1, h2, h3 {
   transform: translateY(-1px);
 }
 
+.fk-dropzone input[type="file"] { display: none; }
+.fk-dropzone--filled { border-color: var(--fk-blue); border-style: solid; background: #f5f7ff; }
+
 .fk-dropzone-icon { font-size: 28px; margin-bottom: 8px; }
 .fk-dropzone-title { font-weight: 700; margin-bottom: 5px; }
 .fk-dropzone-meta { color: var(--fk-muted); font-size: 13px; }
+.fk-dropzone-preview {
+  max-width: 100%;
+  max-height: 120px;
+  border-radius: 8px;
+  object-fit: contain;
+}
 
 /* ── Info / requirements boxes ── */
 
@@ -412,6 +453,8 @@ h1, h2, h3 {
   color: var(--fk-muted);
   position: relative;
   min-width: 60px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .fk-step:not(:first-child)::before {
@@ -587,6 +630,17 @@ h1, h2, h3 {
 .fk-link { color: var(--fk-blue); text-decoration: underline; }
 
 /* ── Summary grid (wizard review step) ── */
+
+.fk-summary-section { margin-bottom: 28px; }
+.fk-summary-section:last-of-type { margin-bottom: 8px; }
+.fk-summary-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fk-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
 
 .fk-summary-grid {
   display: grid;

@@ -55,13 +55,13 @@ def _create_and_login(email="visualex@example.com"):
 class TestBaseTemplateAssets:
     """Base template must include Google fonts and parent CSS links."""
 
-    def test_base_template_links_anton_font(self):
-        """Base template must link Google Anton font."""
+    def test_base_template_links_display_font(self):
+        """Base template must link a Google display font for headings."""
         resp = Client().get("/register/")
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert "Anton" in content, (
-            "Base template must include Google Anton font link."
+        assert "Barlow+Condensed" in content or "Anton" in content, (
+            "Base template must include a Google display font link."
         )
 
     def test_base_template_links_inter_font(self):

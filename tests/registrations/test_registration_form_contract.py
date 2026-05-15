@@ -781,12 +781,12 @@ class TestGroupedFormContract:
         )
 
     def test_section_order_names_are_guardian_member_documents_agreement(self):
-        """Section names must be 'guardian', 'member', 'documents', 'agreement'."""
+        """Section names must be 'documents', 'guardian', 'member', 'agreement'."""
         from apps.registrations.forms import RegistrationApplicationForm
 
         sections = [name for name, _ in RegistrationApplicationForm.section_order]
-        assert sections == ["guardian", "member", "documents", "agreement"], (
-            f"Section names must be ['guardian', 'member', 'documents', 'agreement'], "
+        assert sections == ["documents", "guardian", "member", "agreement"], (
+            f"Section names must be ['documents', 'guardian', 'member', 'agreement'], "
             f"got {sections}."
         )
 
@@ -824,10 +824,11 @@ class TestGroupedFormContract:
             "member_full_name",
             "member_personal_id",
             "member_birth_date",
-            "member_actual_address",
             "member_same_address_as_guardian",
+            "member_actual_address",
             "member_kit_size_shirt",
             "member_kit_size_shorts",
+            "member_portrait_document",
         )
         assert member_fields == expected, (
             f"Member section fields must be {expected}, got {member_fields}."
@@ -845,7 +846,6 @@ class TestGroupedFormContract:
         expected = (
             "guardian_identity_document",
             "member_identity_document",
-            "member_portrait_document",
         )
         assert docs_fields == expected, (
             f"Documents section fields must be {expected}, got {docs_fields}."
@@ -884,7 +884,7 @@ class TestGroupedFormContract:
         sections = list(form.grouped_fields())
 
         section_names = [name for name, _ in sections]
-        assert section_names == ["guardian", "member", "documents", "agreement"], (
+        assert section_names == ["documents", "guardian", "member", "agreement"], (
             f"grouped_fields() must yield sections in order, got {section_names}."
         )
 
@@ -896,9 +896,9 @@ class TestGroupedFormContract:
         sections = list(form.grouped_fields())
 
         expected_counts = {
+            "documents": 2,
             "guardian": 5,
-            "member": 7,
-            "documents": 3,
+            "member": 8,
             "agreement": 2,
         }
         for name, fields in sections:

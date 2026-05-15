@@ -6,6 +6,8 @@
 
 {% block page_content %}
 
+<a href="{% url 'registrations:parent-portal' %}" class="fk-back-link">← Visi pieteikumi</a>
+
 {# ── Hero card with stepper (editable) or status banner (read-only) ── #}
 <section class="fk-hero-card">
   <div>
@@ -40,30 +42,14 @@
 
 {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
 
-{# ── Documents section (always shown above wizard) ── #}
-<section class="fk-section-card">
-  <div class="fk-section-header">
-    <div class="fk-section-title-wrap">
-      <div class="fk-section-icon">▣</div>
-      <div>
-        <h2>Dokumenti</h2>
-        <p class="fk-section-note">Personas apliecinoši dokumenti un bērna foto.</p>
-      </div>
-    </div>
-  </div>
-  <div class="fk-section-body">
-    {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
-  </div>
-</section>
-
 {% if workspace_mode == "editable" %}
 
 {# ── Multi-step wizard form ── #}
-<form method="post" enctype="multipart/form-data" class="fk-workspace-form">
+<form method="post" enctype="multipart/form-data" class="fk-workspace-form" data-wizard-start="{{ form.grouped_fields|length }}">
   {% csrf_token %}
 
   {% for section_name, bound_fields in form.grouped_fields %}
-  <div class="fk-wizard-step {% if forloop.first %}fk-wizard-step--active{% endif %}" data-step="{{ forloop.counter0 }}">
+  <div class="fk-wizard-step" data-step="{{ forloop.counter0 }}">
     <section class="fk-section-card">
       <div class="fk-section-header">
         <div class="fk-section-title-wrap">
@@ -74,13 +60,16 @@
         </div>
       </div>
       <div class="fk-section-body">
+        {% if section_name == "documents" %}
+        <p class="fk-section-note" style="margin-bottom:18px;">Augšupielādējiet personas apliecinošo dokumentu foto. Dati tiks izmantoti priekšaizpildei nākamajā solī.</p>
+        {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
-            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
+            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name existing_doc=document_by_field|get_item:bound_field.name kind_label=field_kind_labels|get_item:bound_field.name %}
             <script>
 // SameAddressSync
-(function(){
+document.addEventListener('DOMContentLoaded',function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
   var addr=document.getElementById('id_member_actual_address');
   var prev=document.getElementById('member_actual_address_previous');
@@ -91,10 +80,10 @@
   if(cb.checked){syncFromGuardian();}
   cb.addEventListener('change',function(){if(cb.checked){prev.value=addr.value;syncFromGuardian();}else{restorePrev();}});
   guardian.addEventListener('input',function(){if(cb.checked){syncFromGuardian();}});
-})();
+});
             </script>
           {% else %}
-            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
+            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name existing_doc=document_by_field|get_item:bound_field.name kind_label=field_kind_labels|get_item:bound_field.name %}
           {% endif %}
         {% endfor %}
         <div class="fk-wizard-nav">
@@ -111,7 +100,7 @@
   {% endfor %}
 
   {# ── Review step ── #}
-  <div class="fk-wizard-step" data-step="{{ form.grouped_fields|length }}">
+  <div class="fk-wizard-step fk-wizard-step--active" data-step="{{ form.grouped_fields|length }}">
     <section class="fk-section-card">
       <div class="fk-section-header">
         <div class="fk-section-title-wrap">
@@ -123,11 +112,21 @@
         </div>
       </div>
       <div class="fk-section-body">
-        <div class="fk-summary-grid">
-          <div class="fk-summary-item"><span>Vecāks</span><strong>{{ application.guardian_full_name|default:"—" }}</strong></div>
-          <div class="fk-summary-item"><span>Bērns</span><strong>{{ application.member_full_name|default:"Nav aizpildīts" }}</strong></div>
-          <div class="fk-summary-item"><span>Statuss</span><strong>{{ application.get_status_display|default:"Melnraksts" }}</strong></div>
+        {% for review_section_name, review_fields in form.grouped_fields %}
+        <div class="fk-summary-section">
+          <h3 class="fk-summary-section-title">{% if review_section_name == "documents" %}ID dokuments{% elif review_section_name == "guardian" %}Vecāka informācija{% elif review_section_name == "member" %}Bērna informācija{% elif review_section_name == "agreement" %}Piekrišana{% else %}{{ review_section_name|title }}{% endif %}</h3>
+          <div class="fk-summary-grid">
+            {% for bound_field in review_fields %}
+            <div class="fk-summary-item">
+              <span>{{ bound_field.label }}</span>
+              {% with existing_doc=document_by_field|get_item:bound_field.name %}
+              <strong data-review-for="id_{{ bound_field.name }}">{% if bound_field.field.widget.input_type == "file" %}{% if existing_doc %}{{ existing_doc.original_filename }}{% else %}—{% endif %}{% elif bound_field.name == "member_same_address_as_guardian" or bound_field.name == "support_club_instead_of_multi_child_discount" %}{{ bound_field.value|yesno:"Jā,Nē" }}{% else %}{{ bound_field.value|default:"—" }}{% endif %}</strong>
+              {% endwith %}
+            </div>
+            {% endfor %}
+          </div>
         </div>
+        {% endfor %}
         <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
         <div class="fk-wizard-nav" style="margin-top:22px;">
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
@@ -155,6 +154,9 @@
     </div>
   </div>
   <div class="fk-section-body">
+    {% if section_name == "documents" %}
+    {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
+    {% endif %}
     <div class="fk-form-section">
       {% for bound_field in bound_fields %}
         <p><strong>{{ bound_field.label }}:</strong>
