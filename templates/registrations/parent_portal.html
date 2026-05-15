@@ -62,7 +62,7 @@
       {% if app.status == 'draft' or app.status == 'fix_requested' %}
         <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>
       {% else %}
-        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary">Skatīt</a>
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary">Skatīt pieteikumu</a>
       {% endif %}
     </div>
   </article>
