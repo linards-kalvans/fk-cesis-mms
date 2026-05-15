@@ -9,9 +9,12 @@
   {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
 </section>
 
-{% if form.errors %}
-  {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
-{% endif %}
+{% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
+
+<section class="fk-section-card">
+  <h2>Dokumenti</h2>
+  {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
+</section>
 
 {% if workspace_mode == "editable" %}
   <form method="post" enctype="multipart/form-data" class="fk-workspace-form">
@@ -23,7 +26,7 @@
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
-            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:"member_same_address_as_guardian" %}
+            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
             <script>
 // same-address-sync: SameAddressSync
 (function(){

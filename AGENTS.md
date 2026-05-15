@@ -56,6 +56,14 @@ Target Django monolith with domain apps:
 - Grouped form rendering contract in place (Task 3): guardian, child/player, and document sections rendered via shared template primitives (`form_field.html`, `source_badge.html`).
 - Application workspace supports read-only (submitted/approved/rejected) and editable (draft/fix_requested) modes; `fix_requested` save preserves status (Task 3).
 
+### Task 4 delivered — document state, OCR source cues, error summary
+- `templates/parent_ui/includes/document_card.html` — reusable document card partial showing filename, kind label, active/not-uploaded state, and replace/upload links for parent workspace.
+- `templates/parent_ui/includes/error_summary.html` — updated to render field label, validation message, and anchor link to invalid field via `items` parameter.
+- `templates/registrations/application_workspace.html` — includes document card section in both editable and read-only modes; replace/upload links only shown in editable mode; passes source labels to all form fields.
+- Source badges render for `manual_only`, `derived_system_filled`, and OCR markers (`ocr_guardian_identity`, `ocr_member_identity`) using `SOURCE_LABEL_MAP` in `presentation.py`.
+- Invalid-submit error summary shows heading, field label, validation message, and anchor target (`id-guardian_email` pattern).
+- No schema changes, no business rule changes, no admin redesign.
+
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 - Registration edit form does not show that an identity document was already uploaded; users can re-upload unnecessarily, which soft-deletes the earlier document and creates confusing duplicate admin rows.

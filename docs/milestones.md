@@ -240,6 +240,16 @@ Verification evidence captured in current codebase:
 - lint green: `ruff check .`
 - types green: `mypy .`
 
+### P2 Task 4 — Document state, OCR source cues, error summary
+**Status:** complete
+
+**Delivered outcome**
+- Reusable document card partial (`document_card.html`) shows filename, kind label, active state, and replace action in parent workspace.
+- Error summary uses `items` parameter to render field label, validation message, and anchor link to invalid field.
+- Source badges render for `manual_only`, `derived_system_filled`, and OCR markers using `SOURCE_LABEL_MAP` in `presentation.py`.
+- Invalid-submit error summary shows heading, field label, validation message, and anchor target.
+- No schema changes, no business rule changes, no admin redesign.
+
 ### P2 acceptance — Visual system + registration UX redesign
 P2 is complete when all of the following are true:
 
