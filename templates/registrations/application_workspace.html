@@ -2,95 +2,176 @@
 {% load static %}
 {% load reg_filters %}
 
+{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script>{% endblock %}
+
 {% block page_content %}
-<section class="fk-page-heading">
-  <p class="fk-eyebrow">Pieteikums</p>
-  <h1>{{ application.member_full_name|default:"Jauns pieteikums" }}</h1>
-  {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
+
+{# ── Hero card with stepper (editable) or status banner (read-only) ── #}
+<section class="fk-hero-card">
+  <div>
+    <p class="fk-eyebrow">Pieteikums</p>
+    <h1>{{ application.member_full_name|default:"Jauns pieteikums" }}</h1>
+    {% if workspace_mode == "editable" %}
+    <div class="fk-mobile-progress" aria-label="Reģistrācijas progress">
+      <strong><span class="fk-mobile-step-count">1 / {{ form.grouped_fields|length|add:1 }}</span></strong>
+      <div class="fk-progress-line"><span></span></div>
+      <span class="fk-mobile-step-label"></span>
+    </div>
+    {% else %}
+    {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
+    {% endif %}
+  </div>
+
+  {% if workspace_mode == "editable" %}
+  <div class="fk-stepper" aria-label="Reģistrācijas soļi">
+    {% for section_name, bound_fields in form.grouped_fields %}
+    <div class="fk-step">
+      <div class="fk-step-number">{{ forloop.counter }}</div>
+      <div class="fk-step-label">{% if section_name == "documents" %}ID dokuments{% elif section_name == "guardian" %}Vecāka informācija{% elif section_name == "member" %}Bērna informācija{% elif section_name == "agreement" %}Piekrišana{% else %}{{ section_name|title }}{% endif %}</div>
+    </div>
+    {% endfor %}
+    <div class="fk-step">
+      <div class="fk-step-number">{{ form.grouped_fields|length|add:1 }}</div>
+      <div class="fk-step-label">Pārskats</div>
+    </div>
+  </div>
+  {% endif %}
 </section>
 
 {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
 
+{# ── Documents section (always shown above wizard) ── #}
 <section class="fk-section-card">
-  <h2>Dokumenti</h2>
-  {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
+  <div class="fk-section-header">
+    <div class="fk-section-title-wrap">
+      <div class="fk-section-icon">▣</div>
+      <div>
+        <h2>Dokumenti</h2>
+        <p class="fk-section-note">Personas apliecinoši dokumenti un bērna foto.</p>
+      </div>
+    </div>
+  </div>
+  <div class="fk-section-body">
+    {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
+  </div>
 </section>
 
 {% if workspace_mode == "editable" %}
-  <form method="post" enctype="multipart/form-data" class="fk-workspace-form">
-    {% csrf_token %}
 
-    {% for section_name, bound_fields in form.grouped_fields %}
-      <section class="fk-section-card">
-        <h2>{{ section_name|title }}</h2>
+{# ── Multi-step wizard form ── #}
+<form method="post" enctype="multipart/form-data" class="fk-workspace-form">
+  {% csrf_token %}
+
+  {% for section_name, bound_fields in form.grouped_fields %}
+  <div class="fk-wizard-step {% if forloop.first %}fk-wizard-step--active{% endif %}" data-step="{{ forloop.counter0 }}">
+    <section class="fk-section-card">
+      <div class="fk-section-header">
+        <div class="fk-section-title-wrap">
+          <div class="fk-section-icon">{% if section_name == "documents" %}▣{% elif section_name == "guardian" %}👤{% elif section_name == "member" %}⚽{% elif section_name == "agreement" %}✓{% else %}📋{% endif %}</div>
+          <div>
+            <h2>{% if section_name == "documents" %}ID dokuments{% elif section_name == "guardian" %}Vecāka informācija{% elif section_name == "member" %}Bērna informācija{% elif section_name == "agreement" %}Piekrišana{% else %}{{ section_name|title }}{% endif %}</h2>
+          </div>
+        </div>
+      </div>
+      <div class="fk-section-body">
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
             <script>
-// same-address-sync: SameAddressSync
 (function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
   var addr=document.getElementById('id_member_actual_address');
   var prev=document.getElementById('member_actual_address_previous');
   var guardian=document.getElementById('id_guardian_declared_address');
   if(!cb||!addr||!prev||!guardian)return;
-  function syncFromGuardian(){
-    addr.value=guardian.value;
-    addr.disabled=true;
-  }
-  function restorePrev(){
-    addr.value=prev.value;
-    addr.disabled=false;
-  }
+  function syncFromGuardian(){addr.value=guardian.value;addr.disabled=true;}
+  function restorePrev(){addr.value=prev.value;addr.disabled=false;}
   if(cb.checked){syncFromGuardian();}
-  cb.addEventListener('change',function(){
-    if(cb.checked){
-      prev.value=addr.value;
-      syncFromGuardian();
-    }else{
-      restorePrev();
-    }
-  });
-  guardian.addEventListener('input',function(){
-    if(cb.checked){
-      syncFromGuardian();
-    }
-  });
+  cb.addEventListener('change',function(){if(cb.checked){prev.value=addr.value;syncFromGuardian();}else{restorePrev();}});
+  guardian.addEventListener('input',function(){if(cb.checked){syncFromGuardian();}});
 })();
             </script>
           {% else %}
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name %}
           {% endif %}
         {% endfor %}
-      </section>
-    {% endfor %}
-
-    <div class="fk-form-actions">
-      <button type="submit" name="submit_action" value="save_draft" class="fk-button fk-button--secondary">Saglabāt melnrakstu</button>
-      <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--primary">Iesniegt pieteikumu</button>
-    </div>
-  </form>
-{% else %}
-  {% for section_name, bound_fields in form.grouped_fields %}
-    <section class="fk-section-card">
-      <h2>{{ section_name|title }}</h2>
-      <div class="fk-form-section">
-        {% for bound_field in bound_fields %}
-          <p><strong>{{ bound_field.label }}:</strong>
-            {% if section_name == "member" and bound_field.name == "member_birth_date" %}
-              {{ application.member_birth_date|date:"Y-m-d" }}
-            {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
-              {{ bound_field.value|yesno:"Jā,Nē" }}
-            {% elif bound_field.name == "guardian_email" %}
-              {{ application.guardian_email }}
-            {% else %}
-              {{ bound_field.value|default:"—" }}
-            {% endif %}
-          </p>
-        {% endfor %}
+        <div class="fk-wizard-nav">
+          {% if not forloop.first %}
+          <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
+          {% else %}
+          <span></span>
+          {% endif %}
+          <button type="button" data-wizard-next class="fk-button fk-button--primary">Turpināt →</button>
+        </div>
       </div>
     </section>
+  </div>
   {% endfor %}
+
+  {# ── Review step ── #}
+  <div class="fk-wizard-step" data-step="{{ form.grouped_fields|length }}">
+    <section class="fk-section-card">
+      <div class="fk-section-header">
+        <div class="fk-section-title-wrap">
+          <div class="fk-section-icon">▤</div>
+          <div>
+            <h2>Pārskats</h2>
+            <p class="fk-section-note">Pārbaudiet pieteikuma kopsavilkumu pirms iesniegšanas.</p>
+          </div>
+        </div>
+      </div>
+      <div class="fk-section-body">
+        <div class="fk-summary-grid">
+          <div class="fk-summary-item"><span>Vecāks</span><strong>{{ application.guardian_full_name|default:"—" }}</strong></div>
+          <div class="fk-summary-item"><span>Bērns</span><strong>{{ application.member_full_name|default:"Nav aizpildīts" }}</strong></div>
+          <div class="fk-summary-item"><span>Statuss</span><strong>{{ application.get_status_display|default:"Melnraksts" }}</strong></div>
+        </div>
+        <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
+        <div class="fk-wizard-nav" style="margin-top:22px;">
+          <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
+          <div class="fk-wizard-nav-actions">
+            <button type="submit" name="submit_action" value="save_draft" class="fk-button fk-button--secondary">Saglabāt melnrakstu</button>
+            <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--red">Iesniegt pieteikumu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</form>
+
+{% else %}
+
+{# ── Read-only flat view ── #}
+{% for section_name, bound_fields in form.grouped_fields %}
+<section class="fk-section-card">
+  <div class="fk-section-header">
+    <div class="fk-section-title-wrap">
+      <div class="fk-section-icon">{% if section_name == "documents" %}▣{% elif section_name == "guardian" %}👤{% elif section_name == "member" %}⚽{% elif section_name == "agreement" %}✓{% else %}📋{% endif %}</div>
+      <div>
+        <h2>{% if section_name == "documents" %}ID dokuments{% elif section_name == "guardian" %}Vecāka informācija{% elif section_name == "member" %}Bērna informācija{% elif section_name == "agreement" %}Piekrišana{% else %}{{ section_name|title }}{% endif %}</h2>
+      </div>
+    </div>
+  </div>
+  <div class="fk-section-body">
+    <div class="fk-form-section">
+      {% for bound_field in bound_fields %}
+        <p><strong>{{ bound_field.label }}:</strong>
+          {% if section_name == "member" and bound_field.name == "member_birth_date" %}
+            {{ application.member_birth_date|date:"Y-m-d" }}
+          {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
+            {{ bound_field.value|yesno:"Jā,Nē" }}
+          {% elif bound_field.name == "guardian_email" %}
+            {{ application.guardian_email }}
+          {% else %}
+            {{ bound_field.value|default:"—" }}
+          {% endif %}
+        </p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endfor %}
+
 {% endif %}
 {% endblock %}
