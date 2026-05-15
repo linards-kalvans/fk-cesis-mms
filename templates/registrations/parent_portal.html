@@ -4,77 +4,87 @@
 {% block page_title %}Mani pieteikumi — FK Cēsis MMS{% endblock %}
 
 {% block page_content %}
-{# Use parent_ui primitives for consistent design system #}
-{% include "parent_ui/includes/hero_card.html" with hero_title="Mani pieteikumi" %}
-{% include "parent_ui/includes/section_card.html" %}
-{% include "parent_ui/includes/status_badge.html" %}
+<h1 class="fk-page-title">Mani pieteikumi</h1>
 <p class="fk-page-subtitle">Pārskatiet un turpiniet — šeit redzams katra pieteikuma statuss un nākamais solis.</p>
 
-{% if primary_application %}
-<div class="fk-cta-group" style="margin-bottom: 16px;">
-  <a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button primary">Turpināt pieteikumu</a>
-</div>
-{% endif %}
+{% include "parent_ui/includes/hero_card.html" with variant="portal" primary_application=primary_application %}
 
 {% if applications %}
-<div class="section-head" style="margin-top: 28px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px;">
-  <h2 class="anton" style="margin: 0; color: var(--fk-blue); font-size: 2rem; line-height: 1;">Pieteikumu saraksts</h2>
+<div class="fk-section-head">
+  <h2>Pieteikumu saraksts</h2>
 </div>
 
-<section class="applications">
-{% for app in applications %}
-<article class="application-card">
-  <div class="app-person">
-    <div class="app-avatar">🙂</div>
-    <div class="app-main">
-      <h3 class="app-name anton">{{ app.guardian_full_name }}</h3>
-      <div class="app-meta">
-        <div>Bērns: {{ app.member_full_name }}</div>
+<section class="fk-applications">
+  {% include "parent_ui/includes/section_card.html" %}
+  {% for app in applications %}
+  <article class="fk-application-card">
+    <div class="fk-app-person">
+      <div class="fk-app-avatar">🙂</div>
+      <div class="fk-app-main">
+        <h3 class="fk-app-name">{{ app.guardian_full_name }}</h3>
+        <div class="fk-app-meta">
+          <div>Bērns: {{ app.member_full_name }}</div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="app-block">
-    <span class="block-label">Statuss</span>
-    {% include "parent_ui/includes/status_badge.html" with status=app.status %}
-    {% if app.review_message %}
-    <div class="app-meta" style="margin-top:10px;">
-      <div>{{ app.review_message }}</div>
+    <div class="fk-app-block">
+      <span class="fk-block-label">Statuss</span>
+      {% include "parent_ui/includes/status_badge.html" with status=app.status %}
+      {% if app.review_message %}
+      <div class="fk-app-meta" style="margin-top:10px;">
+        <div>{{ app.review_message }}</div>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
-  </div>
 
-  <div class="app-actions">
-    {% if app.status == 'draft' or app.status == 'fix_requested' %}
-    <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button primary">Turpināt</a>
-    {% else %}
-    <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button secondary">Skatīt pieteikumu</a>
-    {% endif %}
-  </div>
-</article>
-{% endfor %}
+    <div class="fk-app-block fk-progress-wrap">
+      <span class="fk-block-label">Nākamais solis</span>
+      {% if app.status == 'draft' or app.status == 'fix_requested' %}
+        <div class="fk-progress-title">Aizpildi un iesniegt pieteikumu</div>
+        <div class="fk-progress-meta">Melnraksts</div>
+        <div class="fk-progress-bar"><span style="width:40%"></span></div>
+      {% elif app.status == 'submitted' %}
+        <div class="fk-progress-title">Pieteikums izskatīšanā</div>
+        <div class="fk-progress-meta">Iesniegts</div>
+        <div class="fk-progress-bar fk-progress-bar--success"><span style="width:100%"></span></div>
+      {% elif app.status == 'approved' %}
+        <div class="fk-progress-title">Pieteikums apstiprināts</div>
+        <div class="fk-progress-meta">Apstiprināts</div>
+        <div class="fk-progress-bar fk-progress-bar--success"><span style="width:100%"></span></div>
+      {% else %}
+        <div class="fk-progress-title">{{ app.get_status_display }}</div>
+        <div class="fk-progress-bar"><span style="width:0%"></span></div>
+      {% endif %}
+    </div>
+
+    <div class="fk-app-actions">
+      {% if app.status == 'draft' or app.status == 'fix_requested' %}
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>
+      {% else %}
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary">Skatīt</a>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
 </section>
+
 {% else %}
-<div class="fk-empty-state" style="margin-top: 28px;">
+<div class="fk-empty-state" style="margin-top:28px;">
   <h2>Nav pieteikumu</h2>
   <p>Jums vēl nav neviena pieteikuma.</p>
-  <a href="{% url 'registrations:new-application' %}" class="fk-button primary" style="margin-top: 16px;">Sākt jaunu reģistrāciju</a>
+  <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--primary" style="margin-top:16px;">Sākt jaunu reģistrāciju</a>
 </div>
 {% endif %}
 
-<div class="helper-card" style="margin-top: 18px; background: var(--fk-white); border: 1px solid var(--fk-border); border-radius: 20px; box-shadow: 0 8px 20px rgba(15, 8, 81, 0.06); padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;">
-  <div style="display: flex; align-items: flex-start; gap: 14px; min-width: 0;">
-    <div style="width: 46px; height: 46px; border-radius: 14px; background: #eef1ff; color: var(--fk-blue); display: grid; place-items: center; font-size: 20px; flex: 0 0 auto;">ⓘ</div>
+<div class="fk-helper-card">
+  <div class="fk-helper-copy">
+    <div class="fk-helper-icon">ⓘ</div>
     <div>
-      <h3 style="margin: 0 0 6px; color: var(--fk-blue); font-size: 1.05rem; font-weight: 800;">Nevari atrast savu pieteikumu?</h3>
-      <p style="margin: 0; color: var(--fk-muted); line-height: 1.55; font-size: 0.95rem;">Pārliecinies, ka esi reģistrējies ar to pašu e-pasta adresi, ko izmantoji pieteikuma izveidē.</p>
+      <h3>Nevari atrast savu pieteikumu?</h3>
+      <p>Pārliecinies, ka esi reģistrējies ar to pašu e-pasta adresi, ko izmantoji pieteikuma izveidē.</p>
     </div>
   </div>
-  <a href="{% url 'registrations:start-registration' %}" class="fk-button secondary">✉ Pārbaudīt citu e-pastu</a>
-</div>
-
-<div class="fk-cta-group">
-  <a href="{% url 'registrations:new-application' %}" class="fk-button secondary">Sākt jaunu reģistrāciju</a>
-</div>
+  <a href="{% url 'registrations:start-registration' %}" class="fk-button fk-button--secondary">✉ Pārbaudīt citu e-pastu</a>
 </div>
 {% endblock %}
