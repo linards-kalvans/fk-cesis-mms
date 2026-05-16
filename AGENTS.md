@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–6 complete in current worktree, and P1 is complete.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, and guardian-email-first verified registration gate are operational.
+**Tasks 1–6 complete in current worktree, and P1 + P2 are complete.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, and guardian-email-first verified registration gate are operational. P2 delivered visual system refinements and document-state/review-cue presentation layer.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -64,9 +64,14 @@ Target Django monolith with domain apps:
 - Invalid-submit error summary shows heading, field label, validation message, and anchor target (`id-guardian_email` pattern).
 - No schema changes, no business rule changes, no admin redesign.
 
+### P2 delivered — visual system refinements, document-state/review-cue presentation
+- Typography refined for readability (desktop and mobile).
+- Active uploaded-document state and replace guidance clarified via document card partial.
+- Review/correction cues completed at presentation layer without real OCR dependency: source badges, error summary with anchor links, invalid-submit error summary.
+- No schema changes, no business rule changes, no admin redesign.
+
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
-- Registration edit form does not show that an identity document was already uploaded; users can re-upload unnecessarily, which soft-deletes the earlier document and creates confusing duplicate admin rows.
 - Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
 - Training group assignment on approval (currently left empty).
 - Admin activity audit entries for review actions.
@@ -75,7 +80,7 @@ Target Django monolith with domain apps:
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
 - **Registration entry direction:** implemented in P1 as guardian email entry with one-time email code verification, verified continuation, guardian-only prefill, and chooser/dashboard for existing guardians. See `docs/superpowers/specs/2026-05-08-p1-field-contract-and-verified-registration-gate-design.md`.
 - **Security fix — parent identity verification:** implemented in P1. Typed email in registration draft is a claim, not proof of ownership. Verified access now gates registration continuation and portal access. See `docs/superpowers/specs/2026-05-08-p1-field-contract-and-verified-registration-gate-design.md`.
-- **Research spikes / preferred directions:** OCR vendor shortlist with **tiny-IDP** favored first, agreement generation with manual signing first and **DocuSeal self-hosted** favored for future richer processing, and SMTP/email provider strategy for scale.
+- **Research spikes / preferred directions:** OCR vendor direction narrowed to **tiny-IDP** only, agreement generation with manual signing first and **DocuSeal self-hosted** favored for future richer processing, and SMTP/email provider strategy for scale.
 - **Hosting stance:** self-hosted is not assumed more secure by default; compare self-hosted and SaaS by security posture, ops maturity, compliance, and API portability.
 - **Visual direction:** unified design system, calm centered parent flow, denser admin shell, club logo hero-style on parent entry screens.
 - **Style source of truth:** `style-guide/` supersedes `design-template.html`. Canonical tokens currently: font `Anton`, blue `#0f0851`, red `#ce1c20`.
