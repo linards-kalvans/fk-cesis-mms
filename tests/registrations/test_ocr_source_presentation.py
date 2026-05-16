@@ -297,3 +297,55 @@ class TestVerifiedParentOwnershipNoRegression:
         resp = Client().get(f"/applications/{app.pk}/")
 
         assert resp.status_code == 404
+
+
+# ===========================================================================
+# 6. review_hint_extracted source label
+# ===========================================================================
+
+
+class TestReviewHintExtractedSource:
+    """The review_hint_extracted source marker must map to 'Lūdzu, pārbaudiet'."""
+
+    def test_review_hint_extracted_maps_to_ludzu_parbaudiet(self):
+        """When field_sources contains 'review_hint_extracted', the workspace must
+        display 'Lūdzu, pārbaudiet' as the source badge label."""
+        acct = ParentAccount.objects.create(
+            email="reviewhint@example.com",
+            phone="+37140000001",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "reviewhint@example.com",
+                "guardian_full_name": "ReviewHint Parent",
+                "guardian_personal_id": "010101-40001",
+                "guardian_phone": "+37140000001",
+                "guardian_declared_address": "Riga 4",
+                "member_full_name": "ReviewHint Child",
+                "member_personal_id": "010125-40001",
+                "member_birth_date": "2025-01-01",
+                "member_actual_address": "Riga 4",
+                "member_same_address_as_guardian": True,
+                "preferred_agreement_signing": "paper",
+            },
+            files={},
+            verified_account=acct,
+        )
+        # Simulate a review_hint_extracted source marker
+        app.field_sources = {
+            "guardian_full_name": "review_hint_extracted",
+            "guardian_personal_id": "review_hint_extracted",
+        }
+        app.save(update_fields=["field_sources"])
+
+        client = Client()
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Lūdzu, pārbaudiet" in content, (
+            "Workspace must display 'Lūdzu, pārbaudiet' when field_sources "
+            "contains the 'review_hint_extracted' source marker."
+        )

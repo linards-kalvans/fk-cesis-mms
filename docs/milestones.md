@@ -29,13 +29,17 @@ Do **not** use archived implementation plans for current planning unless user ex
 - request / verify / logout views exist
 - current parent portal exists
 
-### Registration workflow
-- `/register/` is accessible without prior login in current implementation
-- current implementation supports draft save and submit
-- current implementation still allows anonymous same-browser draft continuation
-- registration edit page uses one form with **save draft** and **submit application** actions
-- child birth date uses native browser date input
-- `RegistrationApplication` workflow exists with `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
+### Registration workflow (P1 delivered)
+- `/register/` is guardian email entry with one-time code verification
+- `/register/verify/` completes verified parent access before continuation
+- `/portal/` acts as chooser/dashboard for verified guardians
+- `/applications/new/` starts a new verified registration with guardian-only prefill
+- `/applications/<id>/` is the canonical parent application workspace
+- Anonymous same-browser draft continuation removed; edit/submit require verified parent ownership
+- Registration form uses one form with **save draft** and **submit application** actions
+- Grouped form sections: guardian, child/player, documents
+- `RegistrationApplication` workflow with `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
+- `fix_requested` save preserves status
 
 ### Documents
 - `Document` model exists
@@ -55,24 +59,6 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ## 3. Confirmed target direction not yet implemented
 
-### Registration entry and identity gate
-- registration must start with guardian email
-- email code is primary entry verification method
-- if guardian exists, verified code should attach to existing guardian account and lead to chooser/dashboard
-- if guardian does not exist, verified code should establish new verified session/account before registration continues
-- verified access must gate both registration continuation and portal access
-- current anonymous draft-start behavior must be replaced
-
-### Field-set review
-- guardian field set is **not final**
-- child/player field set is **not final**
-- finalization of both field sets must happen early before deeper workflow expansion
-- field finalization must include source mapping for each field:
-  - guardian OCR
-  - member OCR
-  - manual-only
-  - derived/system-filled
-
 ### Documents and OCR
 - registration should handle both `guardian_identity` and `member_identity` documents
 - existing verified guardian should reuse active guardian document by default, with optional refresh/replacement
@@ -80,7 +66,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 - OCR should also store serialized sensitive metadata such as document number, issuer, issuance date, expiry, and similar fields
 - OCR metadata must be protected with same posture as raw identity documents
 - OCR mode must be configurable between real provider and stub/dummy provider
-- preferred OCR direction: **tiny-IDP** first
+- preferred OCR direction: **tiny-IDP** (only provider)
+- live sample-document validation required before implementation sign-off
 
 ### Agreement handling
 - after approval, generate agreement
@@ -94,16 +81,12 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 4. Open gaps and debt
 
 ### Security and architecture gaps
-- guardian-email-first verified continuation not implemented yet
-- current typed-email / anonymous-draft behavior still needs replacement
 - audit/event baseline still incomplete
 - OCR extracted metadata storage/security not implemented yet
 
 ### Registration UX gaps
-- final guardian/child-player field review not done yet
-- current registration form does not show existing uploaded identity document clearly
+- guardian/child-player field visual presentation needs polish (fields finalized in P1)
 - unnecessary re-upload can replace earlier file and create confusing admin rows
-- visual redesign still pending
 
 ### Admin UX gaps
 - admin review should show inline identity-document previews beside applicant data
@@ -132,6 +115,17 @@ Do **not** use archived implementation plans for current planning unless user ex
 - same-browser anonymous draft edit/submit fallback removed
 
 ### P2 — Visual system + registration UX redesign
+**Status:** complete
+
+**Delivered outcome**
+- unified visual system applied across parent-facing flow: guardian-email entry, chooser/dashboard, registration form, parent portal/registration list — all match style guide with canonical tokens, readable typography on desktop/mobile, FK Cēsis identity
+- registration form: grouped guardian, child/player, and document sections with shared template primitives
+- document-upload UX: guardian and member documents clearly separated; active uploaded document state visible; replace/refresh action understandable
+- OCR-prefill review UX: extracted values distinguishable via source badges (`manual_only`, `derived_system_filled`, OCR markers); user can correct without confusion
+- validation UX: readable field errors; top-level error summary with anchor links to invalid fields; invalid-submit error summary with heading and anchor target
+- no workflow regression: verified entry, chooser, continue draft, start new, save draft, submit still work; no insecure ownership regression
+- no schema changes, no business rule changes, no admin redesign
+
 **Why second**
 - should be built on final entry-flow model, not current temporary draft model
 - improves parent-facing clarity after identity gate is decided
@@ -140,12 +134,17 @@ Do **not** use archived implementation plans for current planning unless user ex
 - parent flow matches style guide and approved visual direction
 
 ### P3 — OCR integration + secure extracted metadata
+**Provider decision (2026-05-15):**
+- Provider: **tiny-IDP** (only provider)
+- Open risks: no Latvian-specific accuracy data; tiny-IDP post-incident operational resilience unverified; pricing not publicly documented; legal review of DPA still needed; live benchmark required before implementation sign-off
+- Live sample-document validation still required before implementation sign-off
+
 **Why third**
 - depends on final field model and stable registration flow
 - introduces real extraction and sensitive metadata handling
 
 **Target outcome**
-- tiny-IDP-backed OCR path (if validation holds)
+- tiny-IDP-backed OCR path (pending validation)
 - editable extracted person data and secure serialized document metadata
 
 ### P4 — Approval-to-agreement flow
@@ -251,6 +250,8 @@ Verification evidence captured in current codebase:
 - No schema changes, no business rule changes, no admin redesign.
 
 ### P2 acceptance — Visual system + registration UX redesign
+**Status:** complete
+
 P2 is complete when all of the following are true:
 
 1. Style guide is applied on parent-facing flow:
@@ -477,15 +478,12 @@ P7 is complete when all of the following are true:
 
 ### M1 — Security and foundation completion
 Remaining focus:
-- guardian-email-first verified continuation
 - background-job baseline where still missing
 - audit baseline
 - OCR metadata security posture
 
 ### M2 — Parent intake completion
 Remaining focus:
-- final field sets
-- visual redesign
 - dual-document registration flow
 - OCR-backed prefill
 

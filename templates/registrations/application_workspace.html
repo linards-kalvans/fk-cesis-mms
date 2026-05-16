@@ -60,9 +60,6 @@
         </div>
       </div>
       <div class="fk-section-body">
-        {% if section_name == "documents" %}
-        <p class="fk-section-note" style="margin-bottom:18px;">Augšupielādējiet personas apliecinošo dokumentu foto. Dati tiks izmantoti priekšaizpildei nākamajā solī.</p>
-        {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
@@ -154,9 +151,6 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
   <div class="fk-section-body">
-    {% if section_name == "documents" %}
-    {% include "parent_ui/includes/document_card.html" with document_state=document_state workspace_mode=workspace_mode document_field_id_map=document_field_id_map document_kind_labels=document_kind_labels %}
-    {% endif %}
     <div class="fk-form-section">
       {% for bound_field in bound_fields %}
         <p><strong>{{ bound_field.label }}:</strong>

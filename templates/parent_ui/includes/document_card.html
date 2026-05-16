@@ -13,9 +13,10 @@
     <div class="fk-document-card__body">
       {% if document %}
         <p class="fk-document-card__filename">{{ document.original_filename }}</p>
+        <p class="fk-document-card__hint">Dokuments jau ir augšupielādēts.</p>
         {% if workspace_mode == "editable" %}
           <p class="fk-document-card__hint">
-            Lai aizvietotu, augšupielādējiet jaunu dokumentu — vecais tiks automātiski aizstāts.
+            Aizvietojiet tikai tad, ja dokuments ir nepareizs vai novecojis.
           </p>
           <a href="#{{ document_field_id_map|get_item:kind }}" class="fk-button fk-button--secondary fk-button--small fk-document-card__replace">Aizvietot</a>
         {% endif %}

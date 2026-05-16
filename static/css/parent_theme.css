@@ -39,7 +39,7 @@ a { color: inherit; text-decoration: none; }
 h1, h2, h3 {
   font-family: 'Barlow Condensed', sans-serif;
   letter-spacing: 0.02em;
-  font-weight: 400;
+  font-weight: 200;
   text-transform: uppercase;
 }
 
@@ -130,7 +130,8 @@ h1, h2, h3 {
 
 .fk-lead {
   color: var(--fk-muted);
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 400;
   line-height: 1.6;
   margin: 0;
   max-width: 720px;
@@ -172,7 +173,7 @@ h1, h2, h3 {
   margin: 0 0 12px;
   line-height: 1.03;
   color: var(--fk-blue);
-  letter-spacing: -0.04em;
+  /* letter-spacing: -0.04em; */
 }
 
 /* ── Section card ── */
@@ -222,7 +223,8 @@ h1, h2, h3 {
 .fk-section-note {
   margin: 6px 0 0;
   color: var(--fk-muted);
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 400;
   line-height: 1.55;
 }
 
@@ -319,7 +321,9 @@ h1, h2, h3 {
 .fk-form-help {
   color: var(--fk-muted);
   font-size: 13px;
+  font-weight: 400;
   margin: 4px 0 0;
+  line-height: 1.45;
 }
 
 .fk-form-error {
@@ -378,7 +382,8 @@ h1, h2, h3 {
   color: #3a4670;
   border-radius: 10px;
   font-size: 14px;
-  line-height: 1.45;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .fk-requirements {
@@ -387,10 +392,11 @@ h1, h2, h3 {
   padding: 18px;
   color: #303762;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.55;
 }
 
-.fk-requirements strong { color: var(--fk-blue); }
+.fk-requirements strong { color: var(--fk-blue); font-weight: 700; }
 .fk-requirements ul { margin: 8px 0 0; padding-left: 18px; }
 
 /* ── Buttons ── */
@@ -435,6 +441,13 @@ h1, h2, h3 {
   color: var(--fk-white);
   background: linear-gradient(135deg, var(--fk-red), var(--fk-red-dark));
   box-shadow: 0 10px 20px rgba(206, 28, 32, 0.18);
+}
+
+.fk-button--small {
+  min-height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+  border-radius: 8px;
 }
 
 /* ── Stepper ── */
@@ -596,13 +609,28 @@ h1, h2, h3 {
 .fk-source-badge {
   display: inline-block;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--fk-soft-blue);
   color: var(--fk-blue);
   margin-left: 6px;
   vertical-align: middle;
+}
+
+.fk-source-badge--review {
+  background: #fff8e1;
+  color: #b8860b;
+}
+
+.fk-source-badge--active {
+  background: #eaf8ef;
+  color: #22a85a;
+}
+
+.fk-source-badge--inactive {
+  background: #f4f6fb;
+  color: var(--fk-muted);
 }
 
 /* ── Document card ── */
@@ -620,14 +648,45 @@ h1, h2, h3 {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+  gap: 8px;
 }
 
 .fk-document-card__kind { font-weight: 700; color: var(--fk-text); }
 .fk-document-card__filename { color: var(--fk-muted); font-size: 14px; margin: 0 0 8px; }
-.fk-document-card__hint { color: var(--fk-muted); font-size: 13px; margin: 0 0 10px; }
-.fk-document-card__empty { color: var(--fk-muted); font-size: 14px; margin: 0; }
+.fk-document-card__hint { color: var(--fk-muted); font-size: 13px; font-weight: 400; margin: 0 0 10px; line-height: 1.45; }
+.fk-document-card__empty { color: var(--fk-muted); font-size: 14px; margin: 0; font-weight: 400; }
+
+.fk-document-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.fk-document-card__status--active {
+  background: #eaf8ef;
+  color: #22a85a;
+}
+
+.fk-document-card__status--inactive {
+  background: #f4f6fb;
+  color: var(--fk-muted);
+}
 
 .fk-link { color: var(--fk-blue); text-decoration: underline; }
+
+.fk-document-card__replace {
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 14px;
+}
+
+.fk-document-card__replace:hover {
+  background: var(--fk-soft-blue);
+}
 
 /* ── Summary grid (wizard review step) ── */
 
@@ -660,12 +719,22 @@ h1, h2, h3 {
   display: block;
   color: var(--fk-muted);
   font-size: 13px;
+  font-weight: 500;
   margin-bottom: 6px;
 }
 
 .fk-summary-item strong {
-  color: var(--fk-blue);
-  font-size: 16px;
+  color: var(--fk-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.fk-field-hint {
+  margin: 6px 0 0;
+  color: #b8860b;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .fk-fine-print {

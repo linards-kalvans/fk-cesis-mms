@@ -25,6 +25,7 @@ SOURCE_LABEL_MAP = {
     "ocr_member_identity": "Aizpildīts no dokumenta",
     "manual_only": "Ievadījāt jūs",
     "derived_system_filled": "Aizpildīts no pārbaudīta konta",
+    "review_hint_extracted": "Lūdzu, pārbaudiet",
 }
 
 

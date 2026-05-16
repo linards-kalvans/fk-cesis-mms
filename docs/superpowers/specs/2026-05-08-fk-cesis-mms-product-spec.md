@@ -131,13 +131,13 @@ Single-use, short-TTL token for parent verification or portal access.
 Workflow record for intake and review.
 - status: `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
 - `verified_parent` — FK to `ParentAccount`; registration flow continues only after verified email access
-- guardian snapshot fields — provisional set, to be finalized early in planning
-- child/player snapshot fields — provisional set, to be finalized early in planning
+- guardian snapshot fields — finalized in P1
+- child/player snapshot fields — finalized in P1
 - review fields: `review_message`, `reviewed_by`, `reviewed_at`
 - `submitted_at`
 - `approved_member` — nullable one-to-one link to created `Member`
 
-Guardian and child values stay on application as submitted snapshot so later account/profile changes do not rewrite historical intake data. Exact field lists are not final and must be reviewed early before implementation proceeds further.
+Guardian and child values stay on application as submitted snapshot so later account/profile changes do not rewrite historical intake data. Field sets finalized in P1.
 
 ### `Document`
 Private uploaded identity document linked to application.
@@ -234,7 +234,7 @@ System uses verified guardian email as front gate for registration and portal ac
 
 ### 7.2 Registration form
 - after verified access, form opens with grouped guardian, child/player, and document sections
-- exact guardian and child/player field sets are provisional and must be finalized early in planning
+- guardian and child/player field sets are finalized in P1
 - native browser date input may still be used for birth-date fields if retained in final field set
 - visible field-level errors and top-level error summary
 - single form with **save draft** and **submit application** actions
@@ -394,7 +394,8 @@ Principles:
 - provider-specific logic hidden behind adapter / protocol interface
 - extracted data treated as sensitive PII
 - extracted payload should include both person fields and document metadata such as number, issuer, issuance date, expiry, and similar fields when available
-- current preferred service direction: **tiny-IDP**, provided it satisfies compliance, accuracy, and integration requirements
+- current preferred service direction: **tiny-IDP** (only provider), provided it satisfies compliance, accuracy, and integration requirements
+- provider choice is provisional pending live Latvian sample-document validation
 
 ### 11.3 Email delivery
 Purpose:
@@ -475,12 +476,13 @@ Other discount handling may remain manual in Invoice Ninja for MVP.
 ## 14. Research and deferred items
 
 ### Active research tracks
-1. **ID document extraction vendor shortlist + architecture**
-2. **Agreement generation and signing module**
-3. **SMTP / email provider strategy for scale**
+1. **Agreement generation and signing module**
+2. **SMTP / email provider strategy for scale**
+
+### Resolved direction
+- **ID document extraction:** tiny-IDP (only provider). Live Latvian sample validation still required before implementation sign-off.
 
 ### Deferred / follow-up product items
-- early finalization of guardian and child/player field sets before further workflow expansion
 - training-group assignment workflow polish
 - admin activity audit details for review actions
 - clearer parent-side display of already uploaded identity documents

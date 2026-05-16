@@ -603,3 +603,43 @@ class TestEmptyStateDocumentKindLabels:
             assert raw_key not in span, (
                 f"Kind label '{span}' contains raw underscored key '{raw_key}'."
             )
+
+
+# ===========================================================================
+# 7. Stronger active document guidance
+# ===========================================================================
+
+
+class TestStrongerActiveDocumentGuidance:
+    """Active document cards must show stronger guidance: a clear 'already uploaded'
+    statement and a conditional replace instruction."""
+
+    def test_active_card_shows_already_uploaded_hint(self):
+        """When a document is active, the card must show 'Dokuments jau ir augšupielādēts'."""
+        client = Client()
+        acct, app = _create_workspace_draft_with_guardian_doc()
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Dokuments jau ir augšupielādēts" in content, (
+            "Active document card must show 'Dokuments jau ir augšupielādēts' "
+            "to clearly indicate the document is already uploaded."
+        )
+
+    def test_active_card_shows_conditional_replace_hint(self):
+        """When a document is active, the card must show 'Aizvietojiet tikai tad' guidance."""
+        client = Client()
+        acct, app = _create_workspace_draft_with_guardian_doc()
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert "Aizvietojiet tikai tad" in content, (
+            "Active document card must show 'Aizvietojiet tikai tad' guidance "
+            "to tell users to replace only when necessary."
+        )
