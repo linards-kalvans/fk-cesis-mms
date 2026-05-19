@@ -184,7 +184,11 @@ def safe_extract_document_data(
     content: bytes,
     content_type: str,
 ) -> tuple[OCRExtractionResult | None, str | None]:
-    """Safe wrapper: returns (result, None) on success or (None, error_code) on failure."""
+    """Safe wrapper: returns (result, None) on success or (None, error_code) on failure.
+
+    Classifies known tiny-IDP exceptions into domain-specific error codes.
+    Unknown exceptions fall back to the generic provider_unavailable code.
+    """
     try:
         result = extract_document_data(
             kind=kind,
@@ -193,5 +197,31 @@ def safe_extract_document_data(
             content_type=content_type,
         )
         return result, None
-    except Exception:
-        return None, "provider_unavailable"
+    except Exception as exc:
+        return None, _classify_exception(exc)
+
+
+# ---------------------------------------------------------------------------
+# Exception classification
+# ---------------------------------------------------------------------------
+
+
+def _classify_exception(exc: Exception) -> str:
+    """Map an exception to a classified error code."""
+    # Lazy-import tiny-IDP exceptions to avoid hard dependency on provider config.
+    from apps.integrations import tiny_idp
+
+    if isinstance(exc, tiny_idp.ProviderMisconfigurationError):
+        return "provider_misconfigured"
+    if isinstance(exc, tiny_idp.AuthError):
+        return "auth_failed"
+    if isinstance(exc, tiny_idp.RateLimitError):
+        return "rate_limited"
+    if isinstance(exc, tiny_idp.RequestTimeoutError):
+        return "request_timeout"
+    if isinstance(exc, tiny_idp.ProviderUnavailableError):
+        return "provider_unavailable"
+    if isinstance(exc, tiny_idp.InvalidResponseError):
+        return "invalid_response"
+    # Unknown / generic → generic code
+    return "provider_unavailable"

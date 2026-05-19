@@ -21,6 +21,11 @@ from apps.registrations.models import RegistrationApplication
 def extract_document_data(*args, **kwargs):
     return _ocr.extract_document_data(*args, **kwargs)
 
+
+def safe_extract_document_data(*args, **kwargs):
+    """Wrapper so monkeypatches on apps.registrations.services intercept."""
+    return _ocr.safe_extract_document_data(*args, **kwargs)
+
 REQUIRED_SUBMIT_FIELDS = (
     "guardian_full_name",
     "guardian_personal_id",
@@ -238,16 +243,15 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
     if kind not in OCR_SUPPORTED_KINDS:
         return
 
-    try:
-        result = extract_document_data(
-            kind=kind,
-            file_name=upload.name,
-            content=upload_bytes,
-            content_type=getattr(upload, "content_type", "application/octet-stream"),
-        )
-    except Exception:
+    result, error_code = safe_extract_document_data(
+        kind=kind,
+        file_name=upload.name,
+        content=upload_bytes,
+        content_type=getattr(upload, "content_type", "application/octet-stream"),
+    )
+    if result is None:
         document.ocr_status = Document.OcrStatus.FAILED
-        document.ocr_error_code = "provider_unavailable"
+        document.ocr_error_code = error_code or "provider_unavailable"
         document.save(update_fields=["ocr_status", "ocr_error_code", "updated_at"])
         return
 
