@@ -123,6 +123,23 @@ def _stub_extraction(kind: str, file_name: str) -> OCRExtractionResult:
 # ---------------------------------------------------------------------------
 
 
+def _extract_with_tiny_idp(
+    kind: str,
+    file_name: str,
+    content: bytes,
+    content_type: str,
+) -> OCRExtractionResult:
+    """tiny-IDP provider — delegates to apps.integrations.tiny_idp."""
+    from apps.integrations import tiny_idp
+
+    return tiny_idp.extract_document(
+        kind=kind,
+        file_name=file_name,
+        content=content,
+        content_type=content_type,
+    )
+
+
 def _extract_with_stub(
     kind: str,
     file_name: str,
@@ -155,7 +172,7 @@ def extract_document_data(
     if mode == "stub":
         return _extract_with_stub(kind, file_name, content, content_type)
     elif mode == "tiny_idp":
-        raise NotImplementedError("tiny_idp provider not yet implemented")
+        return _extract_with_tiny_idp(kind, file_name, content, content_type)
     else:
         raise ValueError(f"unknown OCR provider mode: {mode}")
 
