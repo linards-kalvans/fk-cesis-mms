@@ -9,6 +9,7 @@ from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
 from apps.documents.models import Document
+from apps.documents.ocr import decrypt_json
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.presentation import (
@@ -29,6 +30,47 @@ from apps.registrations.services import (
     request_application_fix,
     submit_application,
 )
+
+
+def _has_reusable_guardian_document(account: ParentAccount) -> bool:
+    """Return True when the account has a prior non-rejected application
+    with an active guardian identity document."""
+    has = RegistrationApplication.objects.filter(
+        parent_account=account,
+    ).exclude(
+        status=RegistrationApplication.Status.REJECTED,
+    ).exclude(
+        status__isnull=True,
+    ).filter(
+        documents__kind=Document.Kind.GUARDIAN_IDENTITY,
+        documents__deleted_at__isnull=True,
+    ).exists()
+    return bool(has)
+
+
+def _get_reusable_guardian_document(account: ParentAccount) -> Document | None:
+    """Return the active guardian identity document from the most recent
+    prior non-rejected application, or None."""
+    prior_app = (
+        RegistrationApplication.objects.filter(
+            parent_account=account,
+        )
+        .exclude(status=RegistrationApplication.Status.REJECTED)
+        .exclude(status__isnull=True)
+        .filter(
+            documents__kind=Document.Kind.GUARDIAN_IDENTITY,
+            documents__deleted_at__isnull=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if prior_app is None:
+        return None
+    doc = prior_app.documents.filter(
+        kind=Document.Kind.GUARDIAN_IDENTITY,
+        deleted_at__isnull=True,
+    ).select_related("extraction").first()
+    return doc if isinstance(doc, Document) else None
 
 
 def _current_parent_account(request: HttpRequest) -> ParentAccount | None:
@@ -67,24 +109,32 @@ def new_application(request: HttpRequest) -> HttpResponse:
     if account is None:
         return redirect("registrations:start-registration")
 
+    reusable_doc = _get_reusable_guardian_document(account)
+    has_existing = reusable_doc is not None
+
     if request.method == "POST":
         form = RegistrationApplicationForm(
             request.POST,
             request.FILES,
             is_submit=False,
-            has_existing_document=False,
+            has_existing_document=has_existing,
         )
         if form.is_valid():
             application = create_or_update_draft(
                 data=form.cleaned_data,
                 files=request.FILES,
                 verified_account=account,
+                reusable_guardian_document=reusable_doc if has_existing else None,
             )
             return redirect("registrations:application-workspace", application_id=application.id)
         return render(
             request,
             "registrations/new_registration.html",
-            {"form": form},
+            {
+                "form": form,
+                "field_source_labels": {},
+                "has_reusable_guardian_document": has_existing,
+            },
         )
 
     prefill = get_application_prefill(account)
@@ -95,6 +145,7 @@ def new_application(request: HttpRequest) -> HttpResponse:
         {
             "form": form,
             "field_source_labels": {},
+            "has_reusable_guardian_document": has_existing,
         },
     )
 
@@ -153,6 +204,17 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             }
         )
 
+    ocr_decrypted_summaries: dict[str, str | None] = {}
+    for doc in application.documents.filter(deleted_at__isnull=True).select_related("extraction"):
+        extraction = getattr(doc, "extraction", None)
+        if extraction is None or not extraction.encrypted_summary:
+            continue
+        try:
+            summary = decrypt_json(extraction.encrypted_summary)
+            ocr_decrypted_summaries[doc.kind] = str(summary)
+        except Exception:
+            ocr_decrypted_summaries[doc.kind] = None
+
     return render(
         request,
         "registrations/application_workspace.html",
@@ -169,6 +231,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 name: source_label(value)
                 for name, value in (application.field_sources or {}).items()
             },
+            "ocr_decrypted_summaries": ocr_decrypted_summaries,
         },
     )
 
@@ -382,11 +445,42 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
         return result
     application = get_object_or_404(RegistrationApplication, pk=application_id)
 
-    # Determine active guardian identity document for preview link
-    active_doc = application.documents.filter(
+    active_guardian_doc = application.documents.filter(
         kind=Document.Kind.GUARDIAN_IDENTITY,
         deleted_at__isnull=True,
-    ).first()
+    ).select_related("extraction").first()
+    active_member_doc = application.documents.filter(
+        kind=Document.Kind.MEMBER_IDENTITY,
+        deleted_at__isnull=True,
+    ).select_related("extraction").first()
+
+    ocr_decrypted: dict[str, object | None] = {}
+    ocr_confidence: dict[str, dict[str, object]] = {}
+    for doc in [active_guardian_doc, active_member_doc]:
+        if doc is None:
+            continue
+        extraction = getattr(doc, "extraction", None)
+        if extraction is None:
+            continue
+        try:
+            payload = decrypt_json(extraction.encrypted_payload)
+            summary = decrypt_json(extraction.encrypted_summary)
+            ocr_decrypted[doc.kind] = payload if isinstance(payload, dict) else None
+            ocr_decrypted[f"{doc.kind}_summary"] = summary
+            if isinstance(payload, dict) and isinstance(payload.get("confidence"), dict):
+                ocr_confidence[doc.kind] = payload["confidence"]
+        except Exception:
+            ocr_decrypted[doc.kind] = None
+            ocr_decrypted[f"{doc.kind}_summary"] = None
+            ocr_confidence[doc.kind] = {}
+
+    context = {
+        "application": application,
+        "active_guardian_doc": active_guardian_doc,
+        "active_member_doc": active_member_doc,
+        "ocr_decrypted": ocr_decrypted,
+        "ocr_confidence": ocr_confidence,
+    }
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -399,11 +493,7 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {
-                        "application": application,
-                        "active_doc": active_doc,
-                        "error": "Labojuma ziņojums ir obligāts.",
-                    },
+                    {**context, "error": "Labojuma ziņojums ir obligāts."},
                     status=400,
                 )
             return redirect("registrations:admin-review-detail", application_id=application.id)
@@ -416,11 +506,7 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {
-                        "application": application,
-                        "active_doc": active_doc,
-                        "error": "Noraidīšanas ziņojums ir obligāts.",
-                    },
+                    {**context, "error": "Noraidīšanas ziņojums ir obligāts."},
                     status=400,
                 )
             return redirect("registrations:admin-review-queue")
@@ -432,20 +518,9 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {
-                        "application": application,
-                        "active_doc": active_doc,
-                        "error": "Var apstiprināt tikai iesniegtus pieteikumus.",
-                    },
+                    {**context, "error": "Var apstiprināt tikai iesniegtus pieteikumus."},
                     status=400,
                 )
             return redirect("registrations:admin-review-queue")
 
-    return render(
-        request,
-        "registrations/admin_review_detail.html",
-        {
-            "application": application,
-            "active_doc": active_doc,
-        },
-    )
+    return render(request, "registrations/admin_review_detail.html", context)

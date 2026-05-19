@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–6 complete in current worktree, and P1 + P2 are complete.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, and guardian-email-first verified registration gate are operational. P2 delivered visual system refinements and document-state/review-cue presentation layer.
+**Tasks 1–6 complete in current worktree, P1 + P2 are complete, and P3 implementation baseline is now landed in code.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, guardian-email-first verified registration gate, and OCR-backed parent/admin review flow are operational. P3 still requires live sample-document validation before implementation sign-off.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -33,14 +33,14 @@ Target Django monolith with domain apps:
 - `apps/accounts/views.py` implements request, verify, logout, and one-time code verification views.
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation.
 - `apps/registrations/models.py` implements `RegistrationApplication` with finalized P1 guardian/member/application fields, draft/submitted states, and fix/reject/approve workflow.
-- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, chooser/prefill support, same-address handling, link to parent account, and admin review actions (request_fix, reject, approve). `fix_requested` save preserves status (Task 3).
-- `apps/registrations/views.py` provides guardian email entry, verified registration create/edit, chooser portal, admin review queue/detail views, and canonical application workspace routing (Task 3).
+- `apps/registrations/services.py` implements application lifecycle: create, save draft, submit, chooser/prefill support, same-address handling, link to parent account, admin review actions (request_fix, reject, approve), OCR-triggered identity upload processing, guardian-doc reuse, and OCR-derived prefill/field-source mapping. `fix_requested` save preserves status (Task 3).
+- `apps/registrations/views.py` provides guardian email entry, verified registration create/edit, chooser portal, admin review queue/detail views, canonical application workspace routing, parent OCR summary rendering, and admin OCR review context.
 - `apps/registrations/presentation.py` implements grouped form rendering contract and workspace mode logic (Task 3).
 - `apps/registrations/forms.py` implements the unified registration form with grouped sections (Task 3).
 - `apps/registrations/templatetags/reg_filters.py` provides template filters for the form contract (Task 3).
 - `apps/members/models.py` implements `Member`, `Guardian`, `TrainingGroup`, and `KitSizeOption` models; approval creates `Member` + `Guardian` with `training_group` left empty.
-- `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`), P1 document kinds, and placeholder OCR status.
-- `apps/documents` uses a dedicated private storage root (`private-uploads/`) and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
+- `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`), OCR process state fields, and `DocumentExtraction` for encrypted OCR payload/summary persistence.
+- `apps/documents` uses a dedicated private storage root (`private-uploads/`), Fernet-encrypted OCR payload/summary helpers in `apps/documents/ocr.py`, and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
 - `.env` autoload works for local commands and app startup.
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 
@@ -70,11 +70,23 @@ Target Django monolith with domain apps:
 - Review/correction cues completed at presentation layer without real OCR dependency: source badges, error summary with anchor links, invalid-submit error summary.
 - No schema changes, no business rule changes, no admin redesign.
 
+### P3 delivered — OCR integration + secure extracted metadata baseline
+- `apps/integrations/ocr.py` provides OCR provider boundary with deterministic stub mode and tiny-IDP hook point.
+- Identity uploads for `guardian_identity` and `member_identity` now run synchronous OCR in draft flow; `member_portrait` stays outside OCR scope.
+- OCR success persists encrypted payload and encrypted summary in `DocumentExtraction`; OCR failure stays non-blocking and records failed state.
+- `/applications/new/` reuses active guardian identity document by default for returning verified guardians and merges prior OCR extraction into new-app prefill.
+- Parent workspace shows OCR-derived source labels and decrypted OCR summaries for uploaded identity documents.
+- Admin review detail shows separate guardian/member document preview sections, decrypted OCR summaries, and confidence values when provider returns them.
+- Test-client file upload workaround in `tests/conftest.py` supports Django 6 multipart posts with `files=`.
+- Full repo verification after P3 landing: `uv run pytest -q` → `584 passed`, `uv run ruff check .` → passed, `uv run mypy .` → passed.
+- Live sample-document validation is still required before final implementation sign-off.
+
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 - Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
 - Training group assignment on approval (currently left empty).
 - Admin activity audit entries for review actions.
+- Run real tiny-IDP sample-document validation and capture evidence before calling P3 fully signed off.
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).

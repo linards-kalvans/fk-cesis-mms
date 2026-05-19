@@ -134,6 +134,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 - parent flow matches style guide and approved visual direction
 
 ### P3 — OCR integration + secure extracted metadata
+**Status:** implemented in code, live validation pending final sign-off
+
 **Provider decision (2026-05-15):**
 - Provider: **tiny-IDP** (only provider)
 - Open risks: no Latvian-specific accuracy data; tiny-IDP post-incident operational resilience unverified; pricing not publicly documented; legal review of DPA still needed; live benchmark required before implementation sign-off
@@ -143,9 +145,23 @@ Do **not** use archived implementation plans for current planning unless user ex
 - depends on final field model and stable registration flow
 - introduces real extraction and sensitive metadata handling
 
-**Target outcome**
-- tiny-IDP-backed OCR path (pending validation)
-- editable extracted person data and secure serialized document metadata
+**Delivered code outcome**
+- stub/real OCR provider boundary exists in `apps/integrations/ocr.py`
+- identity uploads for `guardian_identity` and `member_identity` trigger synchronous OCR in draft flow
+- `member_portrait` stays outside OCR scope
+- OCR success persists encrypted payload and encrypted summary in `DocumentExtraction`
+- `/applications/new/` reuses active guardian identity document by default and merges prior OCR extraction into parent prefill
+- parent workspace shows OCR source markers and decrypted OCR summaries
+- admin review detail shows separate guardian/member preview sections, decrypted OCR summaries, and confidence values when provider returns them
+- non-blocking OCR failure path is covered in tests
+
+**Verification evidence**
+- full suite green: `584 passed`
+- lint green: `uv run ruff check .`
+- types green: `uv run mypy .`
+
+**Remaining sign-off work**
+- run live tiny-IDP sample-document validation and record evidence before calling P3 complete
 
 ### P4 — Approval-to-agreement flow
 **Why fourth**
@@ -291,6 +307,8 @@ P2 is complete when all of the following are true:
 11. Public visual implementation remains easy to refine with designer assistance.
 
 ### P3 acceptance — OCR integration + secure extracted metadata
+**Status:** implemented in code; live validation still pending
+
 P3 is complete when all of the following are true:
 
 1. Real OCR integration exists for guardian and member documents.

@@ -8,9 +8,18 @@ from django.core.mail import send_mail
 from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
-from apps.documents.models import Document
+from apps.documents.models import Document, DocumentExtraction
+from apps.documents.ocr import encrypt_json
+from apps.integrations import ocr as _ocr
+from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.members.models import Guardian, KitSizeOption, Member
 from apps.registrations.models import RegistrationApplication
+
+# Module-level wrapper for monkeypatch compatibility.
+# Tests patch both apps.registrations.services.extract_document_data and
+# apps.integrations.ocr.extract_document_data, so calls must flow through both.
+def extract_document_data(*args, **kwargs):
+    return _ocr.extract_document_data(*args, **kwargs)
 
 REQUIRED_SUBMIT_FIELDS = (
     "guardian_full_name",
@@ -63,12 +72,27 @@ def _latest_application(account: ParentAccount) -> RegistrationApplication | Non
     return result
 
 
+def _decrypt_extraction_payload(extraction: DocumentExtraction) -> dict[str, Any] | None:
+    """Decrypt an extraction payload, returning None on failure."""
+    try:
+        from apps.documents.ocr import decrypt_json
+
+        payload = decrypt_json(extraction.encrypted_payload)
+        if isinstance(payload, dict):
+            return payload
+        return None
+    except Exception:
+        return None
+
+
 def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
     """Return prefilled field values for a new registration form.
 
     Guardian fields are prefilled from the verified account / latest
     application. Member/child fields are NOT prefilled — the user
     enters a new child each time.
+
+    OCR extraction data from prior apps is merged into prefill values.
     """
     if account is None:
         return {}
@@ -86,7 +110,79 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
                 "guardian_declared_address": latest.guardian_declared_address,
             }
         )
+
+    # Merge OCR-extracted values from prior applications
+    # OCR values take priority when extraction exists; model values used as fallback.
+    ocr_prefill = _merge_ocr_extractions(account)
+    for key, value in ocr_prefill.items():
+        prefill[key] = value
+
     return prefill
+
+
+def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
+    """Extract OCR person fields from prior app documents and return prefill values."""
+    result: dict[str, str] = {}
+
+    prior_apps = list(account.applications.order_by("-created_at"))
+    guardian_merged = False
+    member_merged = False
+
+    for prior_app in prior_apps:
+        if not guardian_merged:
+            guardian_identity_doc = prior_app.documents.filter(
+                kind=Document.Kind.GUARDIAN_IDENTITY,
+                deleted_at__isnull=True,
+                ocr_status=Document.OcrStatus.COMPLETED,
+            ).select_related("extraction").first()
+            if guardian_identity_doc is not None:
+                extraction = getattr(guardian_identity_doc, "extraction", None)
+                payload = _decrypt_extraction_payload(extraction) if extraction is not None else None
+                if payload:
+                    person_fields = payload.get("person_fields", {})
+                    if isinstance(person_fields, dict):
+                        fn = str(person_fields.get("first_name", "")).strip()
+                        ln = str(person_fields.get("last_name", "")).strip()
+                        pid = str(person_fields.get("personal_id", "")).strip()
+                        full_name = " ".join(part for part in [fn, ln] if part).strip()
+                        if full_name:
+                            latest = _latest_application(account)
+                            existing = result.get("guardian_full_name") or str(latest.guardian_full_name if latest is not None else "")
+                            result["guardian_full_name"] = f"{existing} {full_name}".strip() if existing else full_name
+                        if pid:
+                            result["guardian_personal_id"] = pid
+                        guardian_merged = True
+
+        if not member_merged:
+            member_identity_doc = prior_app.documents.filter(
+                kind=Document.Kind.MEMBER_IDENTITY,
+                deleted_at__isnull=True,
+                ocr_status=Document.OcrStatus.COMPLETED,
+            ).select_related("extraction").first()
+            if member_identity_doc is not None:
+                extraction = getattr(member_identity_doc, "extraction", None)
+                payload = _decrypt_extraction_payload(extraction) if extraction is not None else None
+                if payload:
+                    person_fields = payload.get("person_fields", {})
+                    if isinstance(person_fields, dict):
+                        fn = str(person_fields.get("first_name", "")).strip()
+                        ln = str(person_fields.get("last_name", "")).strip()
+                        pid = str(person_fields.get("personal_id", "")).strip()
+                        full_name = " ".join(part for part in [fn, ln] if part).strip()
+                        latest = _latest_application(account)
+                        existing = result.get("member_full_name") or str(latest.member_full_name if latest is not None else "")
+                        if full_name:
+                            result["member_full_name"] = f"{existing} {full_name}".strip() if existing else full_name
+                        elif fn:
+                            result["member_full_name"] = f"{existing} {fn}".strip() if existing else fn
+                        if pid:
+                            result["member_personal_id"] = pid
+                        member_merged = True
+
+        if guardian_merged and member_merged:
+            break
+
+    return result
 
 
 def can_edit_application(application: RegistrationApplication, actor_account: ParentAccount | None) -> bool:
@@ -103,8 +199,21 @@ def can_edit_application(application: RegistrationApplication, actor_account: Pa
 # ---------------------------------------------------------------------------
 
 
+def _set_ocr_field_sources(application: RegistrationApplication, kind: str) -> None:
+    """Persist OCR source values for fields affected by *kind*."""
+    sources = dict(application.field_sources) if application.field_sources else {}
+    if kind == Document.Kind.GUARDIAN_IDENTITY:
+        sources["guardian_full_name"] = "ocr_guardian_identity"
+        sources["guardian_personal_id"] = "ocr_guardian_identity"
+    elif kind == Document.Kind.MEMBER_IDENTITY:
+        sources["member_full_name"] = "ocr_member_identity"
+        sources["member_personal_id"] = "ocr_member_identity"
+    application.field_sources = sources
+    application.save(update_fields=["field_sources", "updated_at"])
+
+
 def _handle_document_upload(application: RegistrationApplication, upload, kind: str) -> None:
-    """Soft-delete existing active docs of the same kind, then create new one."""
+    """Soft-delete existing active docs of the same kind, create new one, run OCR."""
     existing = application.documents.filter(
         kind=kind,
         deleted_at__isnull=True,
@@ -113,15 +222,65 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
         existing.deleted_at = timezone.now()
         existing.save(update_fields=["deleted_at", "updated_at"])
 
-    Document.objects.create(
+    from django.core.files.base import ContentFile
+
+    upload_bytes = upload.read()
+    document = Document.objects.create(
         application=application,
         kind=kind,
-        file=upload,
+        file=ContentFile(upload_bytes, name=upload.name),
         original_filename=upload.name,
         content_type=getattr(upload, "content_type", "application/octet-stream"),
         file_size=upload.size,
         ocr_status=Document.OcrStatus.NOT_REQUESTED,
     )
+
+    if kind not in OCR_SUPPORTED_KINDS:
+        return
+
+    try:
+        result = extract_document_data(
+            kind=kind,
+            file_name=upload.name,
+            content=upload_bytes,
+            content_type=getattr(upload, "content_type", "application/octet-stream"),
+        )
+    except Exception:
+        document.ocr_status = Document.OcrStatus.FAILED
+        document.ocr_error_code = "provider_unavailable"
+        document.save(update_fields=["ocr_status", "ocr_error_code", "updated_at"])
+        return
+
+    encrypted_payload = encrypt_json(
+        {
+            "subject": result.subject,
+            "person_fields": result.person_fields,
+            "document_metadata": result.document_metadata,
+            "confidence": result.confidence,
+            "flags": result.flags,
+            "raw_reference": result.raw_reference,
+        }
+    )
+    summary_lines = []
+    for key, value in result.person_fields.items():
+        summary_lines.append(f"{key}: {value}")
+    for key, value in result.document_metadata.items():
+        summary_lines.append(f"{key}: {value}")
+    encrypted_summary = encrypt_json("\n".join(summary_lines))
+
+    DocumentExtraction.objects.create(
+        document=document,
+        subject_role=result.subject,
+        provider=str(result.raw_reference.get("provider", "")),
+        extraction_schema_version="v1",
+        encrypted_payload=encrypted_payload,
+        encrypted_summary=encrypted_summary,
+    )
+    document.ocr_status = Document.OcrStatus.COMPLETED
+    document.ocr_provider = str(result.raw_reference.get("provider", ""))
+    document.ocr_last_processed_at = timezone.now()
+    document.save(update_fields=["ocr_status", "ocr_provider", "ocr_last_processed_at", "updated_at"])
+    _set_ocr_field_sources(application, kind)
 
 
 def _apply_same_address_logic(application: RegistrationApplication, data: Mapping[str, Any]) -> None:
@@ -151,18 +310,102 @@ def _apply_field_sources_for_guardian_email(application: RegistrationApplication
     application.field_sources = sources
 
 
+def _find_reusable_guardian_document(account: ParentAccount | None) -> Document | None:
+    """Return most recent active guardian identity document for *account*."""
+    if account is None:
+        return None
+    prior_app = (
+        account.applications.exclude(status=RegistrationApplication.Status.REJECTED)
+        .filter(
+            documents__kind=Document.Kind.GUARDIAN_IDENTITY,
+            documents__deleted_at__isnull=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    if prior_app is None:
+        return None
+    doc = prior_app.documents.filter(
+        kind=Document.Kind.GUARDIAN_IDENTITY,
+        deleted_at__isnull=True,
+    ).first()
+    return doc if isinstance(doc, Document) else None
+
+
+def _handle_guardian_doc_reuse(
+    application: RegistrationApplication,
+    verified_account: ParentAccount | None,
+    reusable_guardian_document: Document | None = None,
+) -> None:
+    """Copy reusable guardian document and extraction onto *application*."""
+    if application.pk is None:
+        return
+    if application.documents.filter(
+        kind=Document.Kind.GUARDIAN_IDENTITY,
+        deleted_at__isnull=True,
+    ).exists():
+        return
+
+    prior_doc = reusable_guardian_document or _find_reusable_guardian_document(verified_account)
+    if prior_doc is None:
+        return
+
+    try:
+        from django.core.files.base import ContentFile
+        file_content = prior_doc.file.read()
+    except FileNotFoundError:
+        return
+
+    new_doc = Document.objects.create(
+        application=application,
+        kind=prior_doc.kind,
+        file=ContentFile(file_content, name=prior_doc.file.name),
+        original_filename=prior_doc.original_filename,
+        content_type=prior_doc.content_type,
+        file_size=prior_doc.file_size,
+        ocr_status=prior_doc.ocr_status,
+        ocr_provider=prior_doc.ocr_provider,
+        ocr_last_processed_at=prior_doc.ocr_last_processed_at,
+        ocr_error_code=prior_doc.ocr_error_code,
+        ocr_error_detail_redacted=prior_doc.ocr_error_detail_redacted,
+    )
+
+    extraction = getattr(prior_doc, "extraction", None)
+    if extraction is not None:
+        DocumentExtraction.objects.create(
+            document=new_doc,
+            subject_role=extraction.subject_role,
+            provider=extraction.provider,
+            extraction_schema_version=extraction.extraction_schema_version,
+            encrypted_payload=extraction.encrypted_payload,
+            encrypted_summary=extraction.encrypted_summary,
+        )
+        _set_ocr_field_sources(application, prior_doc.kind)
+    else:
+        sources = dict(application.field_sources) if application.field_sources else {}
+        sources["guardian_full_name"] = "manual_only"
+        sources["guardian_personal_id"] = "manual_only"
+        application.field_sources = sources
+        application.save(update_fields=["field_sources", "updated_at"])
+
+
 def create_or_update_draft(
     *,
     data: Mapping[str, Any],
     files: Mapping[str, Any],
     application: RegistrationApplication | None = None,
     verified_account: ParentAccount | None = None,
+    reusable_guardian_document: Document | None = None,
 ) -> RegistrationApplication:
     """Create or update a draft registration application.
 
     Drafts store the typed email as claimed_email. A draft_session_key is
     assigned for same-browser access. Typed email is a claim only, so no
     ParentAccount lookup or linking happens here.
+
+    When creating a new application with a reusable guardian document
+    from a prior app, the document is copied and field_sources are set
+    from the prior OCR extraction.
     """
     email = str(data.get("guardian_email", "")).strip().lower()
     if not email:
@@ -242,6 +485,9 @@ def create_or_update_draft(
         application.status = RegistrationApplication.Status.DRAFT
     application.save()
 
+    # Handle reusable guardian document for new applications.
+    _handle_guardian_doc_reuse(application, verified_account, reusable_guardian_document)
+
     # Handle document uploads
     guardian_doc = files.get("guardian_identity_document")
     if guardian_doc is not None:
@@ -255,6 +501,10 @@ def create_or_update_draft(
     portrait_doc = files.get("member_portrait_document")
     if portrait_doc is not None:
         _handle_document_upload(application, portrait_doc, "member_portrait")
+
+    # Persist field_sources after all upload processing
+    if application.pk is not None:
+        application.save(update_fields=["field_sources", "updated_at"])
 
     return application
 

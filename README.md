@@ -86,7 +86,7 @@ docs/               # Design docs, milestones
 
 ## Status
 
-**Tasks 1–6 complete, and P1 (field contract + guardian-email-first verified registration gate) is now complete.** Registration workflow is usable for LAN acceptance testing.
+**Tasks 1–6 complete, P1 + P2 are complete, and P3 implementation baseline is now landed in code.** Registration workflow is usable for LAN acceptance testing, including OCR-backed parent/admin review flow. Live tiny-IDP sample-document validation is still pending before final P3 sign-off.
 
 - `apps/` contains `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, and `integrations`
 - `apps/core/models.py` defines the abstract `TimeStampedModel` base model
@@ -95,10 +95,10 @@ docs/               # Design docs, milestones
 - `apps/accounts/views.py` provides request, verify, logout, and one-time code verification views
 - `apps/accounts/management/commands/ensure_admin_user.py` for env-driven admin creation
 - `apps/registrations/models.py` defines `RegistrationApplication` with finalized P1 guardian/member/application snapshot fields plus admin review workflow metadata
-- `apps/registrations/services.py` implements P1 application lifecycle, same-address handling, chooser/prefill support, and admin review actions
-- `apps/registrations/views.py` provides guardian email entry, new/edit registration, parent chooser portal, and admin review views
+- `apps/registrations/services.py` implements application lifecycle, same-address handling, chooser/prefill support, OCR-triggered identity processing, guardian-doc reuse, OCR-derived prefill, and admin review actions
+- `apps/registrations/views.py` provides guardian email entry, new/edit registration, parent chooser portal, parent OCR summary rendering, and admin OCR review views
 - `apps/members/models.py` defines `Member`, `Guardian`, `TrainingGroup`, and `KitSizeOption`
-- `apps/documents/models.py` defines `Document` with private storage (`PRIVATE_DOCUMENTS_ROOT`), P1 document kinds, and placeholder OCR status
+- `apps/documents/models.py` defines `Document` with private storage (`PRIVATE_DOCUMENTS_ROOT`), OCR process state, and `DocumentExtraction` for encrypted OCR payload/summary persistence
 - `apps/documents` exposes admin-only protected preview/download endpoints; anonymous users are redirected to admin login, non-admin users receive `404`
 - `.env` autoload works for management commands and app startup
 - current acceptance-test URL: `http://192.168.3.245:8000`
@@ -115,8 +115,16 @@ docs/               # Design docs, milestones
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 
+### P3 delivered baseline
+- synchronous OCR for `guardian_identity` and `member_identity`
+- `member_portrait` excluded from OCR path
+- encrypted OCR payload/summary persistence
+- guardian identity default reuse on `/applications/new/`
+- parent OCR summary/source-label rendering
+- admin guardian/member OCR preview and confidence rendering
+
 ### Next task
-P2 visual system + registration UX redesign, production email delivery setup, and agreement-handling first slice remain active follow-up work.
+Live tiny-IDP sample-document validation, agreement-handling first slice, and production email delivery remain active follow-up work.
 
 ## Development Workflow
 

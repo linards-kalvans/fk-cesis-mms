@@ -25,11 +25,37 @@
       <p><strong>Adrese:</strong> {{ application.guardian_declared_address }}</p>
     </section>
 
-    {% if active_doc %}
+    {% if active_guardian_doc %}
     <section class="fk-status-card">
-      <h2>Dokuments</h2>
-      <p><a href="{% url 'documents:admin-document-preview' active_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
-      <p><a href="{% url 'documents:admin-document-download' active_doc.id %}">Lejupielādēt dokumentu</a></p>
+      <h2>Vecāka dokuments</h2>
+      <p><a href="{% url 'documents:admin-document-preview' active_guardian_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
+      <p><a href="{% url 'documents:admin-document-download' active_guardian_doc.id %}">Lejupielādēt dokumentu</a></p>
+      {% if ocr_decrypted.guardian_identity_summary %}
+        <pre style="white-space:pre-wrap;">{{ ocr_decrypted.guardian_identity_summary }}</pre>
+      {% endif %}
+      {% if ocr_confidence.guardian_identity %}
+        <p><strong>Pārliecība:</strong></p>
+        {% for key, value in ocr_confidence.guardian_identity.items %}
+          <p>{{ key }}: {{ value }}</p>
+        {% endfor %}
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if active_member_doc %}
+    <section class="fk-status-card">
+      <h2>Bērna dokuments</h2>
+      <p><a href="{% url 'documents:admin-document-preview' active_member_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
+      <p><a href="{% url 'documents:admin-document-download' active_member_doc.id %}">Lejupielādēt dokumentu</a></p>
+      {% if ocr_decrypted.member_identity_summary %}
+        <pre style="white-space:pre-wrap;">{{ ocr_decrypted.member_identity_summary }}</pre>
+      {% endif %}
+      {% if ocr_confidence.member_identity %}
+        <p><strong>Pārliecība:</strong></p>
+        {% for key, value in ocr_confidence.member_identity.items %}
+          <p>{{ key }}: {{ value }}</p>
+        {% endfor %}
+      {% endif %}
     </section>
     {% endif %}
 
