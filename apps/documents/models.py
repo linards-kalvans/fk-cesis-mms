@@ -40,6 +40,10 @@ class Document(TimeStampedModel):
         choices=OcrStatus.choices,
         default=OcrStatus.NOT_REQUESTED,
     )
+    ocr_provider = models.CharField(max_length=64, default="", blank=True)
+    ocr_last_processed_at = models.DateTimeField(null=True, blank=True)
+    ocr_error_code = models.CharField(max_length=64, default="", blank=True)
+    ocr_error_detail_redacted = models.TextField(default="", blank=True)
     uploaded_by_parent_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -49,3 +53,25 @@ class Document(TimeStampedModel):
 
     def __str__(self):
         return f"{self.kind} — {self.original_filename}"
+
+
+class DocumentExtraction(TimeStampedModel):
+    """Encrypted OCR extraction result for a single document."""
+
+    class SubjectRole(models.TextChoices):
+        GUARDIAN = "guardian", "Guardian"
+        MEMBER = "member", "Member"
+
+    document = models.OneToOneField(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="extraction",
+    )
+    subject_role = models.CharField(max_length=32, default="", blank=True)
+    provider = models.CharField(max_length=64, default="", blank=True)
+    extraction_schema_version = models.CharField(max_length=32, default="v1", blank=True)
+    encrypted_payload = models.TextField(default="", blank=True)
+    encrypted_summary = models.TextField(default="", blank=True)
+
+    def __str__(self):
+        return f"Extraction — {self.subject_role} — {self.document}"

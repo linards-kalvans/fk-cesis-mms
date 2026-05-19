@@ -411,7 +411,7 @@ class TestUploadCreatesDocument:
         )
         doc = Document.objects.get(application=app)
         assert doc.kind == "guardian_identity"
-        assert doc.ocr_status == "not_requested"
+        assert doc.ocr_status == "completed"
         assert doc.uploaded_by_parent_at is not None
         assert doc.file_size > 0
 

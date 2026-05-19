@@ -38,6 +38,14 @@
   {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
 {% endif %}
 
+{% if has_reusable_guardian_document %}
+<div class="fk-section-card" style="margin-bottom:18px;">
+  <div class="fk-section-body" style="padding:14px 18px;">
+    <p style="margin:0;"><strong>Izmanto iepriekš augšupielādēto vecāka ID dokumentu?</strong> Jā, vecāka dati automātiski aizpildīti no iepriekšējā pieteikuma OCR izvelces. Lai mainītu, aizpildiet laukus manuāli vai augšupielādējiet jaunu dokumentu.</p>
+  </div>
+</div>
+{% endif %}
+
 <form method="post" enctype="multipart/form-data" class="fk-workspace-form">
   {% csrf_token %}
 

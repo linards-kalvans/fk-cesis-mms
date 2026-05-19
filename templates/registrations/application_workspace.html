@@ -60,6 +60,9 @@
         </div>
       </div>
       <div class="fk-section-body">
+        {% if section_name == "documents" %}
+          {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map workspace_mode=workspace_mode %}
+        {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
             <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
@@ -124,6 +127,19 @@ document.addEventListener('DOMContentLoaded',function(){
           </div>
         </div>
         {% endfor %}
+        {% if ocr_decrypted_summaries %}
+        <div class="fk-summary-section">
+          <h3 class="fk-summary-section-title">OCR kopsavilkums</h3>
+          {% for doc_kind, summary in ocr_decrypted_summaries.items %}
+            {% if summary %}
+              <div class="fk-summary-item">
+                <span>{{ doc_kind }}</span>
+                <strong style="white-space:pre-wrap;">{{ summary }}</strong>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
         <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
         <div class="fk-wizard-nav" style="margin-top:22px;">
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
@@ -151,6 +167,9 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
   <div class="fk-section-body">
+    {% if section_name == "documents" %}
+      {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map workspace_mode=workspace_mode %}
+    {% endif %}
     <div class="fk-form-section">
       {% for bound_field in bound_fields %}
         <p><strong>{{ bound_field.label }}:</strong>
@@ -166,6 +185,16 @@ document.addEventListener('DOMContentLoaded',function(){
         </p>
       {% endfor %}
     </div>
+    {% if ocr_decrypted_summaries and section_name == "documents" %}
+      <div class="fk-summary-section">
+        <h3 class="fk-summary-section-title">OCR kopsavilkums</h3>
+        {% for doc_kind, summary in ocr_decrypted_summaries.items %}
+          {% if summary %}
+            <p><strong>{{ doc_kind }}:</strong> {{ summary }}</p>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
   </div>
 </section>
 {% endfor %}
