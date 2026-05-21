@@ -324,3 +324,89 @@ class TestSameSiteCookieAttrsHttps:
             f"CSRF_COOKIE_SAMESITE={snapshot['csrf_cookie_samesite']!r}, "
             "expected 'None' for https:// SITE_URL."
         )
+
+
+# ---------------------------------------------------------------------------
+# Test: OCR settings exposed as Django settings attributes
+# ---------------------------------------------------------------------------
+
+class TestOcrSettingsExposed:
+    """OCR env vars must be exported as Django settings attributes.
+
+    Bug: fk_cesis_mms.settings loads OCR env vars into os.environ via
+    load_dotenv() but does NOT expose them as module-level attributes
+    that django.conf.settings can read.  apps.integrations.ocr falls
+    back to "stub" because getattr(settings, "OCR_PROVIDER_MODE", "stub")
+    always hits the default.
+    """
+
+    def _ocr_env(self, tmp_path) -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://ocr-test.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n"
+            "OCR_PROVIDER_MODE=tiny_idp\n"
+            "TINY_IDP_API_URL=http://tiny-idp.local/api\n"
+            "TINY_IDP_API_KEY=tiny-key-12345\n"
+            "OCR_ENCRYPTION_KEY=enc-key-abcdef0123456789\n"
+        )
+        return _run_helper(tmp_path)
+
+    def test_ocr_provider_mode_from_env(self, tmp_path):
+        """OCR_PROVIDER_MODE must be exported as settings.OCR_PROVIDER_MODE."""
+        snapshot = self._ocr_env(tmp_path)
+        assert snapshot["ocr_provider_mode"] == "tiny_idp", (
+            f"settings.OCR_PROVIDER_MODE not exposed. Got {snapshot['ocr_provider_mode']!r}. "
+            "Expected 'tiny_idp' from OCR_PROVIDER_MODE env var."
+        )
+
+    def test_tiny_idp_api_url_from_env(self, tmp_path):
+        """TINY_IDP_API_URL must be exported as settings.TINY_IDP_API_URL."""
+        snapshot = self._ocr_env(tmp_path)
+        assert snapshot["tiny_idp_api_url"] == "http://tiny-idp.local/api", (
+            f"settings.TINY_IDP_API_URL not exposed. Got {snapshot['tiny_idp_api_url']!r}. "
+            "Expected 'http://tiny-idp.local/api' from TINY_IDP_API_URL env var."
+        )
+
+    def test_tiny_idp_api_key_from_env(self, tmp_path):
+        """TINY_IDP_API_KEY must be exported as settings.TINY_IDP_API_KEY."""
+        snapshot = self._ocr_env(tmp_path)
+        assert snapshot["tiny_idp_api_key"] == "tiny-key-12345", (
+            f"settings.TINY_IDP_API_KEY not exposed. Got {snapshot['tiny_idp_api_key']!r}. "
+            "Expected 'tiny-key-12345' from TINY_IDP_API_KEY env var."
+        )
+
+    def test_ocr_encryption_key_from_env(self, tmp_path):
+        """OCR_ENCRYPTION_KEY must be exported as settings.OCR_ENCRYPTION_KEY."""
+        snapshot = self._ocr_env(tmp_path)
+        assert snapshot["ocr_encryption_key"] == "enc-key-abcdef0123456789", (
+            f"settings.OCR_ENCRYPTION_KEY not exposed. Got {snapshot['ocr_encryption_key']!r}. "
+            "Expected 'enc-key-abcdef0123456789' from OCR_ENCRYPTION_KEY env var."
+        )
+
+    def test_ocr_settings_defaults_without_env(self, tmp_path):
+        """When OCR env vars are absent, settings must export sensible defaults."""
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://no-ocr.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n"
+            # Explicitly blank OCR vars so they are present in os.environ
+            # before the project .env loads; override=False preserves them.
+            "OCR_PROVIDER_MODE=\n"
+            "TINY_IDP_API_URL=\n"
+            "TINY_IDP_API_KEY=\n"
+            "OCR_ENCRYPTION_KEY=\n"
+        )
+        snapshot = _run_helper(tmp_path)
+        assert snapshot["ocr_provider_mode"] == "stub", (
+            f"Expected ocr_provider_mode='stub' default, got {snapshot['ocr_provider_mode']!r}."
+        )
+        assert snapshot["tiny_idp_api_url"] == "", (
+            f"Expected tiny_idp_api_url='' default, got {snapshot['tiny_idp_api_url']!r}."
+        )
+        assert snapshot["tiny_idp_api_key"] == "", (
+            f"Expected tiny_idp_api_key='' default, got {snapshot['tiny_idp_api_key']!r}."
+        )
+        assert snapshot["ocr_encryption_key"] == "", (
+            f"Expected ocr_encryption_key='' default, got {snapshot['ocr_encryption_key']!r}."
+        )

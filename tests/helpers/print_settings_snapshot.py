@@ -36,6 +36,10 @@ _ENV_ISOLATION_KEYS = frozenset((
     "SECURE_PROXY_SSL_HEADER",
     "USE_X_FORWARDED_HOST",
     "DJANGO_SETTINGS_MODULE",
+    "OCR_PROVIDER_MODE",
+    "TINY_IDP_API_URL",
+    "TINY_IDP_API_KEY",
+    "OCR_ENCRYPTION_KEY",
 ))
 
 # Ensure the project root is on sys.path so the subprocess can import
@@ -94,6 +98,10 @@ def main():
         "session_cookie_samesite": getattr(settings, "SESSION_COOKIE_SAMESITE", None),
         "csrf_cookie_samesite": getattr(settings, "CSRF_COOKIE_SAMESITE", None),
         "hostname": parsed.hostname if parsed.hostname else "",
+        "ocr_provider_mode": getattr(settings, "OCR_PROVIDER_MODE", "__MISSING__"),
+        "tiny_idp_api_url": getattr(settings, "TINY_IDP_API_URL", "__MISSING__"),
+        "tiny_idp_api_key": getattr(settings, "TINY_IDP_API_KEY", "__MISSING__"),
+        "ocr_encryption_key": getattr(settings, "OCR_ENCRYPTION_KEY", "__MISSING__"),
     }
 
     print(json.dumps(snapshot))

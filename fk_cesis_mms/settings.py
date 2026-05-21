@@ -14,7 +14,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Auto-load .env from project root (one level above this file's parent).
-load_dotenv(dotenv_path=BASE_DIR / ".env")
+load_dotenv(dotenv_path=BASE_DIR / ".env", override=False)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get(
@@ -133,3 +133,10 @@ MAGIC_LINK_RATE_LIMIT_PER_MINUTE = 5
 # One-time code auth (registration entry)
 ONE_TIME_CODE_RATE_LIMIT_PER_MINUTE = 3
 ONE_TIME_CODE_TTL_SECONDS = 300
+
+# OCR integration — env vars loaded by load_dotenv(), exported here for
+# apps.integrations.ocr to read via django.conf.settings.
+OCR_PROVIDER_MODE = os.environ.get("OCR_PROVIDER_MODE") or "stub"
+TINY_IDP_API_URL = os.environ.get("TINY_IDP_API_URL", "")
+TINY_IDP_API_KEY = os.environ.get("TINY_IDP_API_KEY", "")
+OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
