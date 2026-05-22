@@ -37,6 +37,10 @@ DJANGO_SECRET_KEY=change-me uv run python manage.py migrate
 
 # 4. Start the development server
 DJANGO_SECRET_KEY=change-me uv run python manage.py runserver 0.0.0.0:8000
+
+# 5. In a separate terminal, start the background-job worker
+#    (required for OCR extraction once P3.5 lands; harmless to run now).
+DJANGO_SECRET_KEY=change-me uv run python manage.py qcluster
 ```
 
 ### Database
