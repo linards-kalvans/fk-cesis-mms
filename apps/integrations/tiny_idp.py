@@ -1,5 +1,16 @@
 """tiny-IDP provider runtime — config validation, HTTP transport, normalization.
 
+Targets the real generic-id-document extractor at api.tiny-idp.com:
+
+    POST {TINY_IDP_API_URL}
+        headers: {"x-api-key": <api_key>}
+        files:   {"files": (file_name, content, content_type)}
+
+    Success response:
+        {"success": true, "data": {...}, "balance": float, "cost": float}
+    Failure response:
+        {"success": false, "cost": 0}
+
 Exception hierarchy:
 
     TinyIdpError (base)
@@ -11,9 +22,10 @@ Exception hierarchy:
     └── InvalidResponseError
 
 Public API:
-    - normalize_tiny_idp_response(kind, payload) — adapter (unchanged)
+    - normalize_tiny_idp_response(kind, payload) — adapter
     - validate_tiny_idp_config() — raises on missing config
-    - extract_document(kind, file_name, content, content_type) — HTTP transport
+    - post_document(...) — HTTP transport, returns raw payload
+    - extract_document(kind, file_name, content, content_type) — transport + normalize
 """
 
 from __future__ import annotations
@@ -116,8 +128,8 @@ def post_document(
     api_url = settings.TINY_IDP_API_URL  # type: ignore[attr-defined]
     api_key = settings.TINY_IDP_API_KEY  # type: ignore[attr-defined]
 
-    files = {"file": (file_name, content, content_type)}
-    headers = {"Authorization": f"Bearer {api_key}"}
+    files = {"files": (file_name, content, content_type)}
+    headers = {"x-api-key": api_key}
 
     try:
         resp = requests.post(api_url, files=files, headers=headers)
@@ -161,7 +173,9 @@ def extract_document(
     Thin wrapper over `post_document` + `normalize_tiny_idp_response`.
 
     Raises:
-        See `post_document` for the full exception list.
+        See `post_document` for the full exception list, plus
+        InvalidResponseError from the normalizer for success=false or
+        missing data field.
     """
     payload = post_document(
         file_name=file_name,
@@ -172,22 +186,36 @@ def extract_document(
 
 
 # ---------------------------------------------------------------------------
-# Normalizer (unchanged)
+# Normalizer
 # ---------------------------------------------------------------------------
 
-# Mapping from provider entity fields to normalized keys
+# Mapping from provider person-field keys (under data.) to normalized keys.
 _PERSON_FIELD_MAP = {
-    "first_name": "first_name",
-    "last_name": "last_name",
-    "personal_id": "personal_id",
+    "given_names": "first_name",
+    "first_surname": "last_name",
+    "personal_number": "personal_id",
+    "date_of_birth": "date_of_birth",
 }
 
-# Mapping from provider document fields to normalized keys
+# Mapping from provider document-field keys (under data.) to normalized keys.
 _DOCUMENT_FIELD_MAP = {
     "document_number": "document_number",
-    "issuer": "issuer",
-    "issuance_date": "issuance_date",
+    "issuing_authority": "issuer",
+    "issuing_date": "issuance_date",
     "expiry_date": "expiry_date",
+}
+
+# Provider key → verified-flag key, used to derive confidence.
+# Only fields the provider reports a *_verified bool for are included.
+_VERIFIED_FLAG_MAP = {
+    "given_names": "given_names_verified",
+    "first_surname": "first_surname_verified",
+    "personal_number": "personal_number_verified",
+    "date_of_birth": "date_of_birth_verified",
+    "document_number": "document_number_verified",
+    "issuing_date": "issuing_date_verified",
+    "expiry_date": "expiry_date_verified",
+    # issuing_authority has no *_verified flag in the real spec.
 }
 
 
@@ -199,42 +227,58 @@ def normalize_tiny_idp_response(
 
     Args:
         kind: Document kind (e.g. "guardian_identity", "member_identity").
-        payload: Raw JSON response from tiny-IDP provider.
+        payload: Raw JSON response from tiny-IDP provider (real shape).
 
     Returns:
         OCRExtractionResult with normalized fields.
+
+    Raises:
+        InvalidResponseError: If payload signals success=false or omits the
+            "data" field.
     """
+    if payload.get("success") is False:
+        raise InvalidResponseError("tiny-IDP returned success=false")
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        raise InvalidResponseError("tiny-IDP missing data field")
+
     subject = kind.split("_")[0]
 
-    # Extract person fields
+    # Extract person fields — skip empty strings ("not extracted").
     person_fields: dict[str, str] = {}
-    entities = payload.get("entities", [])
-    for entity in entities:
-        if entity.get("type") == "person":
-            raw_fields = entity.get("fields", {})
-            for provider_key, normalized_key in _PERSON_FIELD_MAP.items():
-                value = raw_fields.get(provider_key)
-                if value is not None:
-                    person_fields[normalized_key] = str(value)
+    for provider_key, normalized_key in _PERSON_FIELD_MAP.items():
+        value = data.get(provider_key)
+        if isinstance(value, str) and value != "":
+            person_fields[normalized_key] = value
 
-    # Extract document metadata
+    # Extract document metadata — skip empty strings.
     document_metadata: dict[str, str] = {}
-    doc_info = payload.get("document", {})
     for provider_key, normalized_key in _DOCUMENT_FIELD_MAP.items():
-        value = doc_info.get(provider_key)
-        if value is not None:
-            document_metadata[normalized_key] = str(value)
+        value = data.get(provider_key)
+        if isinstance(value, str) and value != "":
+            document_metadata[normalized_key] = value
 
-    # Confidence — pass through as-is
-    confidence = payload.get("confidence", {})
+    # Confidence — derive from *_verified flags. Only emit confidence for
+    # fields whose value is present (non-empty), and that we actually map.
+    confidence: dict[str, float] = {}
+    combined_map = {**_PERSON_FIELD_MAP, **_DOCUMENT_FIELD_MAP}
+    for provider_key, normalized_key in combined_map.items():
+        flag_key = _VERIFIED_FLAG_MAP.get(provider_key)
+        if flag_key is None:
+            continue
+        value = data.get(provider_key)
+        if not isinstance(value, str) or value == "":
+            continue
+        verified = bool(data.get(flag_key))
+        confidence[normalized_key] = 1.0 if verified else 0.0
 
-    # Flags — pass through as-is
-    flags = payload.get("flags", [])
+    # No analogue for flags in real API.
+    flags: list[dict[str, Any]] = []
 
-    # Raw reference
     raw_reference = {
         "provider": "tiny_idp",
-        "provider_version": payload.get("model_version", ""),
+        "provider_version": "",
     }
 
     return OCRExtractionResult(
