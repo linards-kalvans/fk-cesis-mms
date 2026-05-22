@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 
 def _bootstrap_django() -> None:
     """Configure Django from .env so we can read tiny-IDP settings."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fk_cesis_mms.settings")
     import django
 
     django.setup()
