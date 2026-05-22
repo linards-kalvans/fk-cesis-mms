@@ -67,7 +67,6 @@ Do **not** use archived implementation plans for current planning unless user ex
 - OCR metadata must be protected with same posture as raw identity documents
 - OCR mode must be configurable between real provider and stub/dummy provider
 - preferred OCR direction: **tiny-IDP** (only provider)
-- live sample-document validation required before implementation sign-off
 
 ### Agreement handling
 - after approval, generate agreement
@@ -134,19 +133,18 @@ Do **not** use archived implementation plans for current planning unless user ex
 - parent flow matches style guide and approved visual direction
 
 ### P3 — OCR integration + secure extracted metadata
-**Status:** implemented in code, live validation pending final sign-off
+**Status:** complete — live validation evidence in `docs/p3_tiny_idp_validation.md` (2026-05-22)
 
 **Provider decision (2026-05-15):**
 - Provider: **tiny-IDP** (only provider)
-- Open risks: no Latvian-specific accuracy data; tiny-IDP post-incident operational resilience unverified; pricing not publicly documented; legal review of DPA still needed; live benchmark required before implementation sign-off
-- Live sample-document validation still required before implementation sign-off
+- Open risks: no Latvian-specific accuracy data; tiny-IDP post-incident operational resilience unverified; pricing not publicly documented; legal review of DPA still needed
 
 **Why third**
 - depends on final field model and stable registration flow
 - introduces real extraction and sensitive metadata handling
 
 **Delivered code outcome**
-- stub/real OCR provider boundary exists in `apps/integrations/ocr.py`
+- stub/real OCR provider boundary exists in `apps/integrations/ocr.py` with real tiny-IDP runtime
 - identity uploads for `guardian_identity` and `member_identity` trigger synchronous OCR in draft flow
 - `member_portrait` stays outside OCR scope
 - OCR success persists encrypted payload and encrypted summary in `DocumentExtraction`
@@ -154,14 +152,15 @@ Do **not** use archived implementation plans for current planning unless user ex
 - parent workspace shows OCR source markers and decrypted OCR summaries
 - admin review detail shows separate guardian/member preview sections, decrypted OCR summaries, and confidence values when provider returns them
 - non-blocking OCR failure path is covered in tests
+- classified exception mapping: `_classify_exception()` in `safe_extract_document_data` maps typed OCR errors (`provider_misconfigured`, `auth_failed`, `rate_limited`, `request_timeout`, `provider_unavailable`, `invalid_response`) to `Document.ocr_error_code`; unknown exceptions fall back to `provider_unavailable`
+- canonical config names: `OCR_PROVIDER_MODE` (`stub` / `tiny_idp`), `TINY_IDP_API_URL`, `TINY_IDP_API_KEY`, `OCR_ENCRYPTION_KEY`
 
 **Verification evidence**
-- full suite green: `584 passed`
+- full suite green: `638 passed`
 - lint green: `uv run ruff check .`
 - types green: `uv run mypy .`
-
-**Remaining sign-off work**
-- run live tiny-IDP sample-document validation and record evidence before calling P3 complete
+- live validation harness: `scripts/validate_tiny_idp/`, evidence in `docs/p3_tiny_idp_validation.md`
+- live run on 2026-05-22 against `api.tiny-idp.com` surfaced and fixed three integration bugs (auth header, multipart field, response shape) before sign-off
 
 ### P4 — Approval-to-agreement flow
 **Why fourth**
@@ -307,7 +306,7 @@ P2 is complete when all of the following are true:
 11. Public visual implementation remains easy to refine with designer assistance.
 
 ### P3 acceptance — OCR integration + secure extracted metadata
-**Status:** implemented in code; live validation still pending
+**Status:** complete (2026-05-22) — live validation evidence in `docs/p3_tiny_idp_validation.md`
 
 P3 is complete when all of the following are true:
 

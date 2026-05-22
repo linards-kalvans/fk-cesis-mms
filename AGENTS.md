@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–6 complete in current worktree, P1 + P2 are complete, and P3 implementation baseline is now landed in code.** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, guardian-email-first verified registration gate, and OCR-backed parent/admin review flow are operational. P3 still requires live sample-document validation before implementation sign-off.
+**Tasks 1–6 complete in current worktree, P1 + P2 are complete, and P3 is signed off (live validation evidence in `docs/p3_tiny_idp_validation.md`).** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, guardian-email-first verified registration gate, and OCR-backed parent/admin review flow are operational.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -79,14 +79,18 @@ Target Django monolith with domain apps:
 - Admin review detail shows separate guardian/member document preview sections, decrypted OCR summaries, and confidence values when provider returns them.
 - Test-client file upload workaround in `tests/conftest.py` supports Django 6 multipart posts with `files=`.
 - Full repo verification after P3 landing: `uv run pytest -q` → `584 passed`, `uv run ruff check .` → passed, `uv run mypy .` → passed.
-- Live sample-document validation is still required before final implementation sign-off.
+- Classified exception mapping in `safe_extract_document_data`: `_classify_exception()` maps typed OCR errors (`provider_misconfigured`, `auth_failed`, `rate_limited`, `request_timeout`, `provider_unavailable`, `invalid_response`) to `Document.ocr_error_code` for admin review. Unknown exceptions fall back to `provider_unavailable`.
+- Real tiny-IDP runtime is landed; `TINY_IDP_API_URL` and `TINY_IDP_API_KEY` are the canonical config names. `OCR_ENCRYPTION_KEY` is required for OCR payload/summary encryption.
+- Live sample-document validation evidence captured in `docs/p3_tiny_idp_validation.md` (run via `uv run python -m scripts.validate_tiny_idp`). P3 signed off 2026-05-22.
+- Live validation surfaced and fixed three integration bugs against the real `api.tiny-idp.com` generic-id-document API: (1) auth header is `x-api-key`, not `Authorization: Bearer`; (2) multipart field name is `files`, not `file`; (3) response is `{success, data: {...}, balance, cost}` — adapter and tests had been built against a fictional `{entities, document, confidence}` shape. Normalizer now maps `data.given_names`→`first_name`, `data.first_surname`→`last_name`, `data.personal_number`→`personal_id`, `data.issuing_authority`→`issuer`, `data.issuing_date`→`issuance_date`, `data.date_of_birth`→`date_of_birth`, and derives `confidence` from `*_verified` booleans. Auth failure with malformed key returns HTTP 200 + `{"code": "API_KEY_REQUIRED"}` body, which `post_document` now classifies as `AuthError`.
 
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 - Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
 - Training group assignment on approval (currently left empty).
 - Admin activity audit entries for review actions.
-- Run real tiny-IDP sample-document validation and capture evidence before calling P3 fully signed off.
+- **DOB-driven member-form prefill.** Normalizer now surfaces `data.date_of_birth` (validated live on 2026-05-22), so `DocumentExtraction.summary` carries DOB. Outstanding: wire OCR-derived DOB into the member form prefill with the same source-badge treatment as other identity fields.
+- **Surname normalization for Latvian IDs.** Live validation showed `data.first_surname` alone does not always match the manifest last name (likely diacritic / two-surname cases on guardian samples); consider folding `data.second_surname` and harmonizing diacritics before scoring downstream.
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).
