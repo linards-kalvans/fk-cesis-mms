@@ -92,14 +92,16 @@ def validate_tiny_idp_config() -> None:
 # ---------------------------------------------------------------------------
 
 
-def extract_document(
+def post_document(
     *,
-    kind: str,
     file_name: str,
     content: bytes,
     content_type: str,
-) -> OCRExtractionResult:
-    """Post a document to tiny-IDP and return normalized extraction result.
+) -> dict[str, Any]:
+    """Post a document to tiny-IDP and return the raw JSON payload.
+
+    HTTP-only entrypoint: does not normalize. Intended for callers that need
+    direct access to provider output (e.g. the live-validation harness).
 
     Raises:
         ProviderMisconfigurationError: If config is missing.
@@ -138,12 +140,34 @@ def extract_document(
         ) from exc
 
     try:
-        payload = resp.json()
+        payload: dict[str, Any] = resp.json()
     except ValueError as exc:
         raise InvalidResponseError(
             f"Malformed JSON response: {exc}"
         ) from exc
 
+    return payload
+
+
+def extract_document(
+    *,
+    kind: str,
+    file_name: str,
+    content: bytes,
+    content_type: str,
+) -> OCRExtractionResult:
+    """Post a document to tiny-IDP and return the normalized extraction result.
+
+    Thin wrapper over `post_document` + `normalize_tiny_idp_response`.
+
+    Raises:
+        See `post_document` for the full exception list.
+    """
+    payload = post_document(
+        file_name=file_name,
+        content=content,
+        content_type=content_type,
+    )
     return normalize_tiny_idp_response(kind, payload)
 
 
