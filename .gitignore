@@ -72,3 +72,6 @@ uv.lock
 # Local-only tiny-IDP validation inputs and evidence (real PII, never commit)
 /tmp/
 
+# Playwright MCP debug snapshots
+.playwright-mcp/
+
