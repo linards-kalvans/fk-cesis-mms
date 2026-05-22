@@ -111,13 +111,14 @@ def _parent_can_view_application(
 
 
 def new_application(request: HttpRequest) -> HttpResponse:
-    """GET /applications/new/ — bootstrap draft + redirect to workspace.
+    """GET /applications/new/ — bootstrap a fresh draft + redirect to workspace.
 
     P3.5: file uploads need an application_id (async endpoint scope), so
-    /applications/new/ no longer renders its own form. On GET we either
-    surface the verified user's existing draft or auto-create a blank
-    one (with guardian prefill from prior apps + reusable guardian doc
-    copy) and redirect to /applications/<id>/, where async uploads work.
+    /applications/new/ no longer renders its own form. On GET we always
+    create a new blank draft (with guardian prefill from prior apps +
+    reusable guardian doc copy) and redirect to /applications/<id>/, where
+    async uploads work. Continuing an existing draft is the parent portal's
+    job — this route is the explicit "start fresh" action.
 
     The synchronous POST path is retained as a no-JS fallback for clients
     that POST directly to this route (legacy bookmarks etc.).
@@ -154,14 +155,9 @@ def new_application(request: HttpRequest) -> HttpResponse:
             },
         )
 
-    # GET: redirect to the verified user's existing draft if one is open,
-    # otherwise auto-create a blank draft + redirect to its workspace.
-    existing_draft = _portal_primary_application(account)
-    if existing_draft is not None:
-        return redirect(
-            "registrations:application-workspace", application_id=existing_draft.id
-        )
-
+    # GET: always create a fresh blank draft and redirect to its workspace.
+    # "New registration" must be unconditional — continuing an existing draft
+    # is the parent portal's job, not this route's.
     prefill = get_application_prefill(account)
     application = create_or_update_draft(
         data=prefill,
