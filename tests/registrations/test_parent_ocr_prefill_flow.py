@@ -150,7 +150,7 @@ class TestManualFallbackOnOcrFailure:
             return (None, "provider_unavailable")
 
         monkeypatch.setattr(
-            "apps.registrations.services.safe_extract_document_data",
+            "apps.integrations.tasks.safe_extract_document_data",
             _ocr_fails,
         )
         settings.OCR_PROVIDER_MODE = "tiny_idp"
@@ -471,7 +471,7 @@ class TestOcrFailurePersistence:
             return (None, "auth_failed")
 
         monkeypatch.setattr(
-            "apps.registrations.services.safe_extract_document_data",
+            "apps.integrations.tasks.safe_extract_document_data",
             _ocr_fails,
         )
 
@@ -512,7 +512,7 @@ class TestOcrFailurePersistence:
             return (None, "request_timeout")
 
         monkeypatch.setattr(
-            "apps.registrations.services.safe_extract_document_data",
+            "apps.integrations.tasks.safe_extract_document_data",
             _ocr_fails,
         )
 
@@ -552,7 +552,7 @@ class TestOcrFailurePersistence:
             return (None, "invalid_response")
 
         monkeypatch.setattr(
-            "apps.registrations.services.safe_extract_document_data",
+            "apps.integrations.tasks.safe_extract_document_data",
             _ocr_fails_identity,
         )
 

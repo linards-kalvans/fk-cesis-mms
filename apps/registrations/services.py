@@ -9,9 +9,9 @@ from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
 from apps.documents.models import Document, DocumentExtraction
-from apps.documents.ocr import encrypt_json
 from apps.integrations import ocr as _ocr
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
+from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import Guardian, KitSizeOption, Member
 from apps.registrations.models import RegistrationApplication
 
@@ -205,7 +205,12 @@ def can_edit_application(application: RegistrationApplication, actor_account: Pa
 
 
 def _set_ocr_field_sources(application: RegistrationApplication, kind: str) -> None:
-    """Persist OCR source values for fields affected by *kind*."""
+    """Mark person fields as OCR-sourced.
+
+    Used by the guardian-document-reuse path (synchronous copy of prior
+    extraction). The OCR job in apps.integrations.tasks does its own
+    field-source tagging at the end of a successful extraction.
+    """
     sources = dict(application.field_sources) if application.field_sources else {}
     if kind == Document.Kind.GUARDIAN_IDENTITY:
         sources["guardian_full_name"] = "ocr_guardian_identity"
@@ -218,7 +223,10 @@ def _set_ocr_field_sources(application: RegistrationApplication, kind: str) -> N
 
 
 def _handle_document_upload(application: RegistrationApplication, upload, kind: str) -> None:
-    """Soft-delete existing active docs of the same kind, create new one, run OCR."""
+    """Soft-delete existing active docs of the same kind, create the new one, enqueue OCR.
+
+    OCR runs in a django-q2 background job (see apps.integrations.tasks).
+    """
     existing = application.documents.filter(
         kind=kind,
         deleted_at__isnull=True,
@@ -230,6 +238,11 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
     from django.core.files.base import ContentFile
 
     upload_bytes = upload.read()
+    initial_status = (
+        Document.OcrStatus.PENDING
+        if kind in OCR_SUPPORTED_KINDS
+        else Document.OcrStatus.NOT_REQUESTED
+    )
     document = Document.objects.create(
         application=application,
         kind=kind,
@@ -237,54 +250,11 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
         original_filename=upload.name,
         content_type=getattr(upload, "content_type", "application/octet-stream"),
         file_size=upload.size,
-        ocr_status=Document.OcrStatus.NOT_REQUESTED,
+        ocr_status=initial_status,
     )
 
-    if kind not in OCR_SUPPORTED_KINDS:
-        return
-
-    result, error_code = safe_extract_document_data(
-        kind=kind,
-        file_name=upload.name,
-        content=upload_bytes,
-        content_type=getattr(upload, "content_type", "application/octet-stream"),
-    )
-    if result is None:
-        document.ocr_status = Document.OcrStatus.FAILED
-        document.ocr_error_code = error_code or "provider_unavailable"
-        document.save(update_fields=["ocr_status", "ocr_error_code", "updated_at"])
-        return
-
-    encrypted_payload = encrypt_json(
-        {
-            "subject": result.subject,
-            "person_fields": result.person_fields,
-            "document_metadata": result.document_metadata,
-            "confidence": result.confidence,
-            "flags": result.flags,
-            "raw_reference": result.raw_reference,
-        }
-    )
-    summary_lines = []
-    for key, value in result.person_fields.items():
-        summary_lines.append(f"{key}: {value}")
-    for key, value in result.document_metadata.items():
-        summary_lines.append(f"{key}: {value}")
-    encrypted_summary = encrypt_json("\n".join(summary_lines))
-
-    DocumentExtraction.objects.create(
-        document=document,
-        subject_role=result.subject,
-        provider=str(result.raw_reference.get("provider", "")),
-        extraction_schema_version="v1",
-        encrypted_payload=encrypted_payload,
-        encrypted_summary=encrypted_summary,
-    )
-    document.ocr_status = Document.OcrStatus.COMPLETED
-    document.ocr_provider = str(result.raw_reference.get("provider", ""))
-    document.ocr_last_processed_at = timezone.now()
-    document.save(update_fields=["ocr_status", "ocr_provider", "ocr_last_processed_at", "updated_at"])
-    _set_ocr_field_sources(application, kind)
+    if kind in OCR_SUPPORTED_KINDS:
+        enqueue_ocr_job(document.id)
 
 
 def _apply_same_address_logic(application: RegistrationApplication, data: Mapping[str, Any]) -> None:
@@ -506,9 +476,12 @@ def create_or_update_draft(
     if portrait_doc is not None:
         _handle_document_upload(application, portrait_doc, "member_portrait")
 
-    # Persist field_sources after all upload processing
+    # The OCR job (when it runs synchronously in tests or completes
+    # before this point in dev) writes field_sources directly to the DB,
+    # so reload to avoid clobbering its update with the stale in-memory
+    # copy.
     if application.pk is not None:
-        application.save(update_fields=["field_sources", "updated_at"])
+        application.refresh_from_db(fields=["field_sources"])
 
     return application
 

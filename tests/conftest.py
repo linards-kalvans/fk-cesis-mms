@@ -3,6 +3,10 @@
 import os
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fk_cesis_mms.settings")
+# Run django-q2 jobs in-process during tests so OCR-after-upload tests
+# (which used to exercise a synchronous code path) keep their existing
+# observable behavior under the Phase 1 async refactor.
+os.environ.setdefault("Q_CLUSTER_SYNC", "1")
 
 
 def pytest_configure(config):

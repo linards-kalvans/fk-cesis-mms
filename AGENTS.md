@@ -153,8 +153,10 @@ The web process and the worker process must both be running in local dev — the
 - **Worker env:** the qcluster process must have the same `.env` as the web process (specifically `OCR_ENCRYPTION_KEY`, `TINY_IDP_API_URL`, `TINY_IDP_API_KEY`). Missing keys cause job failures inside the worker, not at boot.
 - **Retry policy:** `Q_CLUSTER.max_attempts = 2`. Jobs that *raise* are retried once; jobs that return normally (including OCR jobs that persist a classified FAILED state) are not retried.
 - **Inspection:** Django admin → "Failed tasks" and "Successful tasks" (django_q models). For ad-hoc inspection: `uv run python manage.py shell` then `from django_q.models import Task; Task.objects.filter(success=False)`.
-- **Tests:** Use the `Q_CLUSTER_SYNC=1` env var (or pass `sync=True` to `async_task`) to run jobs in-process during pytest. No real cluster needed for the test suite.
-- **Jobs registered:** (none yet — P3.5 Phase 1 will add `apps.integrations.tasks.ocr_extract_job`).
+- **Tests:** `tests/conftest.py` sets `Q_CLUSTER_SYNC=1` so jobs run in-process during pytest. No real cluster needed for the test suite.
+- **Jobs registered:**
+  - `apps.integrations.tasks.ocr_extract_job(document_id)` — runs OCR via the existing `safe_extract_document_data` wrapper, persists `DocumentExtraction` + updates `Document.ocr_status` + tags `field_sources`. Enqueued by `apps.integrations.tasks.enqueue_ocr_job(document_id)`.
+  - Retry semantics: raises `RetryableOCRError` for transient classified codes (`request_timeout`, `provider_unavailable`, `rate_limited`) so django-q2 retries once. Terminal codes (`auth_failed`, `invalid_response`, `provider_misconfigured`) persist FAILED and return — no retry.
 
 ## Coding Conventions
 - **TDD first** — write failing test, then implementation, then verify.
