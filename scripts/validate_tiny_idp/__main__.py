@@ -26,6 +26,7 @@ malformed, or the negative case does NOT classify as auth_failed.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -71,7 +72,20 @@ def main(argv: list[str] | None = None) -> int:
         default=Path("docs/p3_tiny_idp_validation.md"),
         help="Markdown report output path.",
     )
+    parser.add_argument(
+        "--dump-raw",
+        type=Path,
+        default=Path("tmp/tiny_idp_samples/raw_responses"),
+        help=(
+            "Directory to write raw provider JSON responses to "
+            "(one <sha-prefix>.json per sample). Set to empty string to disable."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    dump_dir: Path | None = args.dump_raw if str(args.dump_raw) else None
+    if dump_dir is not None:
+        dump_dir.mkdir(parents=True, exist_ok=True)
 
     _bootstrap_django()
 
@@ -130,6 +144,12 @@ def main(argv: list[str] | None = None) -> int:
             normalized_dict = _normalized_to_dict(normalized)
         except Exception as exc:  # noqa: BLE001 - script-level catch-all is fine
             error_code = _classify_exception(exc)
+
+        if dump_dir is not None and raw_payload is not None:
+            (dump_dir / f"{sha_prefix}.json").write_text(
+                json.dumps(raw_payload, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
         latency_ms = int((time.monotonic() - start) * 1000)
 
