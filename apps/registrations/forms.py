@@ -111,6 +111,16 @@ class RegistrationApplicationForm(forms.Form):
 
         self.fields["member_actual_address"].widget.attrs["data-sync-address-for"] = "id_member_same_address_as_guardian"
 
+        # P3.5: tag file inputs so static/js/async_upload.js can bind to them.
+        # The progress slot id mirrors id_for_label so the template can render
+        # an adjacent <span> with the same id + "_progress".
+        self.fields["guardian_identity_document"].widget.attrs["data-async-upload"] = "guardian_identity"
+        self.fields["guardian_identity_document"].widget.attrs["data-progress-slot"] = "id_guardian_identity_document_progress"
+        self.fields["member_identity_document"].widget.attrs["data-async-upload"] = "member_identity"
+        self.fields["member_identity_document"].widget.attrs["data-progress-slot"] = "id_member_identity_document_progress"
+        self.fields["member_portrait_document"].widget.attrs["data-async-upload"] = "member_portrait"
+        self.fields["member_portrait_document"].widget.attrs["data-progress-slot"] = "id_member_portrait_document_progress"
+
     def clean(self):
         cleaned_data = super().clean()
         if not self.is_submit:

@@ -65,3 +65,25 @@ def source_label(source_value: str | None) -> str | None:
     if source_value is None:
         return None
     return SOURCE_LABEL_MAP.get(source_value)
+
+
+def classify_field_action(current_value: str | None, ocr_value: str | None) -> str:
+    """Decide what OCR should do with a field that has *current_value*.
+
+    Mirror of static/js/async_upload.js::classifyFieldAction so server-side
+    rendering and client-side rendering stay in sync.
+
+    Returns one of:
+      - "prefill": fill the field (current is empty/whitespace, OCR has a value)
+      - "suggest": surface a chip beside the field for the user to accept
+      - "noop":    do nothing (no OCR value, or values already match)
+    """
+    cur = (current_value or "").strip()
+    ocr = (ocr_value or "").strip()
+    if not ocr:
+        return "noop"
+    if not cur:
+        return "prefill"
+    if cur.casefold() == ocr.casefold():
+        return "noop"
+    return "suggest"
