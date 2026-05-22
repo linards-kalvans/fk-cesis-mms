@@ -390,10 +390,11 @@ class TestDraftAllowsIncompleteFields:
 class TestUploadCreatesDocument:
     """Uploading guardian/member documents should create Document records."""
 
-    def test_upload_creates_guardian_identity_document(self):
+    def test_upload_creates_guardian_identity_document(self, settings):
         from apps.registrations.services import create_or_update_draft
         from apps.documents.models import Document
 
+        settings.OCR_PROVIDER_MODE = "stub"
         app = create_or_update_draft(
             data={
                 "guardian_email": "upload@example.com",
