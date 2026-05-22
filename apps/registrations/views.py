@@ -2,14 +2,25 @@
 
 from typing import cast
 
-from django.http import Http404, HttpRequest, HttpResponse
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.http import (
+    Http404,
+    HttpRequest,
+    HttpResponse,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
+from apps.integrations.ocr import OCR_SUPPORTED_KINDS
+from apps.integrations.tasks import enqueue_ocr_job
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.presentation import (
@@ -524,3 +535,90 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
             return redirect("registrations:admin-review-queue")
 
     return render(request, "registrations/admin_review_detail.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Async document upload (P3.5)
+# ---------------------------------------------------------------------------
+
+
+_VALID_DOCUMENT_KINDS = frozenset(value for value, _label in Document.Kind.choices)
+
+
+def _json_error(code: str, status: int, **extra: object) -> JsonResponse:
+    payload: dict[str, object] = {"error": code, **extra}
+    return JsonResponse(payload, status=status)
+
+
+@require_POST
+def async_document_upload(
+    request: HttpRequest, application_id: int
+) -> HttpResponse:
+    """POST /applications/<id>/documents/ — async upload + enqueue OCR.
+
+    Returns 201 with JSON {document_id, kind, ocr_status} on success.
+    """
+    account = _current_parent_account(request)
+    if account is None:
+        return _json_error("not_authenticated", status=401)
+
+    application = RegistrationApplication.objects.filter(pk=application_id).first()
+    if application is None or application.parent_account_id != account.id:
+        return _json_error("not_found", status=404)
+
+    kind = request.POST.get("kind", "").strip()
+    if kind not in _VALID_DOCUMENT_KINDS:
+        return _json_error("invalid_kind", status=400)
+
+    upload = request.FILES.get("file")
+    if upload is None:
+        return _json_error("missing_file", status=400)
+
+    max_bytes = getattr(settings, "DOCUMENT_UPLOAD_MAX_BYTES", 8 * 1024 * 1024)
+    if upload.size > max_bytes:
+        return _json_error("file_too_large", status=413, max_bytes=max_bytes)
+
+    allowed_types = getattr(
+        settings,
+        "DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES",
+        ("image/jpeg", "image/png", "image/webp", "application/pdf"),
+    )
+    content_type = getattr(upload, "content_type", "") or ""
+    if content_type not in allowed_types:
+        return _json_error("invalid_content_type", status=400)
+
+    # Soft-delete prior active doc of the same kind.
+    prior = application.documents.filter(
+        kind=kind, deleted_at__isnull=True
+    ).first()
+    if prior is not None:
+        prior.deleted_at = timezone.now()
+        prior.save(update_fields=["deleted_at", "updated_at"])
+
+    initial_status = (
+        Document.OcrStatus.PENDING
+        if kind in OCR_SUPPORTED_KINDS
+        else Document.OcrStatus.NOT_REQUESTED
+    )
+    upload_bytes = upload.read()
+    document = Document.objects.create(
+        application=application,
+        kind=kind,
+        file=ContentFile(upload_bytes, name=upload.name),
+        original_filename=upload.name,
+        content_type=content_type,
+        file_size=upload.size,
+        ocr_status=initial_status,
+    )
+
+    if kind in OCR_SUPPORTED_KINDS:
+        enqueue_ocr_job(document.id)
+
+    return JsonResponse(
+        {
+            "document_id": document.id,
+            "kind": document.kind,
+            "ocr_status": document.ocr_status,
+        },
+        status=201,
+    )

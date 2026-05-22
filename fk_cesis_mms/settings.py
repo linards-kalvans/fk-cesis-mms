@@ -143,6 +143,17 @@ TINY_IDP_API_URL = os.environ.get("TINY_IDP_API_URL", "")
 TINY_IDP_API_KEY = os.environ.get("TINY_IDP_API_KEY", "")
 OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
+# Document upload constraints (used by the async upload endpoint, P3.5).
+DOCUMENT_UPLOAD_MAX_BYTES = int(
+    os.environ.get("DOCUMENT_UPLOAD_MAX_BYTES", str(8 * 1024 * 1024))  # 8 MiB
+)
+DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+)
+
 # Background-job runner (django-q2) — uses the Django DB as broker so we
 # don't need Redis for this single-instance app. Worker starts with
 # `uv run python manage.py qcluster`.
