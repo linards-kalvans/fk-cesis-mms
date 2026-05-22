@@ -226,6 +226,16 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         except Exception:
             ocr_decrypted_summaries[doc.kind] = None
 
+    import json as _json
+
+    pending_docs_qs = application.documents.filter(
+        deleted_at__isnull=True,
+        ocr_status=Document.OcrStatus.PENDING,
+    )
+    pending_by_kind = {doc.kind: doc.id for doc in pending_docs_qs}
+    pending_document_ids_csv = ",".join(str(i) for i in pending_by_kind.values())
+    pending_by_kind_json = _json.dumps(pending_by_kind)
+
     return render(
         request,
         "registrations/application_workspace.html",
@@ -243,6 +253,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 for name, value in (application.field_sources or {}).items()
             },
             "ocr_decrypted_summaries": ocr_decrypted_summaries,
+            "pending_document_ids_csv": pending_document_ids_csv,
+            "pending_by_kind_json": pending_by_kind_json,
         },
     )
 

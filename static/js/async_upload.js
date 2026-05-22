@@ -207,6 +207,31 @@
     bindFileInput
   );
 
+  // On page load, start polling any documents that arrived already in
+  // PENDING state — typically because the parent saved a draft on
+  // /applications/new/ (synchronous form path) and OCR is still running
+  // in the worker by the time the workspace renders.
+  (function pollPendingDocumentsOnLoad() {
+    var raw = ROOT.getAttribute('data-pending-by-kind') || '{}';
+    var pendingByKind;
+    try { pendingByKind = JSON.parse(raw); } catch (e) { return; }
+    Object.keys(pendingByKind).forEach(function (kind) {
+      var docId = pendingByKind[kind];
+      if (!docId) return;
+      var input = document.querySelector(
+        'input[type="file"][data-async-upload="' + kind + '"]'
+      );
+      var slot = null;
+      if (input) {
+        var slotId = input.getAttribute('data-progress-slot');
+        slot = slotId ? document.getElementById(slotId) : null;
+      }
+      if (!slot) return;
+      setProgressLabel(slot, 'OCR notiek…');
+      pollStatus(docId, slot, Date.now() + POLL_DEADLINE_MS, POLL_INITIAL_MS);
+    });
+  })();
+
   // Expose for tests / inline scripts that want to call directly.
   window.__fkAsyncUpload = {
     classifyFieldAction: classifyFieldAction,
