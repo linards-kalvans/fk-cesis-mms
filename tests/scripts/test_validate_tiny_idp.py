@@ -58,13 +58,42 @@ def test_load_manifest_returns_per_file_expectations(tmp_path):
     }
 
 
-def test_load_manifest_rejects_missing_kind(tmp_path):
+def test_load_manifest_translates_uppercase_provider_keys(tmp_path):
+    """UPPERCASE provider keys must be normalized to internal field names."""
     manifest = tmp_path / "expected.yaml"
     manifest.write_text(
-        "guardian/a.jpg:\n  first_name: Anna\n",
+        "guardian/a.jpg:\n"
+        "  GIVEN_NAME: \"Anna\"\n"
+        "  SURNAME: \"Bērziņa\"\n"
+        "  PERSONAL_ID: \"010101-12345\"\n"
+        "  DOCUMENT_NUMBER: \"AB1234567\"\n"
+        "  DATE_OF_ISSUE: \"2020-01-01\"\n"
+        "  DATE_OF_EXPIRY: \"2030-01-01\"\n"
+        "  DATE_OF_BIRTH: \"1980-01-01\"\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="missing required field 'kind'"):
+    parsed = load_manifest(manifest)
+    assert parsed == {
+        "guardian/a.jpg": {
+            "first_name": "Anna",
+            "last_name": "Bērziņa",
+            "personal_id": "010101-12345",
+            "document_number": "AB1234567",
+            "issuance_date": "2020-01-01",
+            "expiry_date": "2030-01-01",
+            "date_of_birth": "1980-01-01",
+        },
+    }
+
+
+def test_load_manifest_rejects_unknown_field(tmp_path):
+    """Unknown field keys must surface as an error, not be silently dropped."""
+    manifest = tmp_path / "expected.yaml"
+    manifest.write_text(
+        "guardian/a.jpg:\n  not_a_real_field: Anna\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="unknown field"):
         load_manifest(manifest)
 
 

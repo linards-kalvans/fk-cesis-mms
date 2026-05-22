@@ -100,11 +100,42 @@ def sha256_prefix(content: bytes, length: int = 12) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Manifest field aliases: accept both provider keys (UPPERCASE, what users see
+# in the raw response dump) and the normalized internal keys. Translation
+# happens at load time so downstream scoring sees normalized keys only.
+_MANIFEST_KEY_ALIASES = {
+    "GIVEN_NAME": "first_name",
+    "given_name": "first_name",
+    "first_name": "first_name",
+    "SURNAME": "last_name",
+    "surname": "last_name",
+    "last_name": "last_name",
+    "PERSONAL_ID": "personal_id",
+    "personal_id": "personal_id",
+    "DOCUMENT_NUMBER": "document_number",
+    "document_number": "document_number",
+    "DATE_OF_ISSUE": "issuance_date",
+    "issuance_date": "issuance_date",
+    "DATE_OF_EXPIRY": "expiry_date",
+    "expiry_date": "expiry_date",
+    "DATE_OF_BIRTH": "date_of_birth",
+    "date_of_birth": "date_of_birth",
+    "kind": "kind",
+    "issuer": "issuer",
+}
+
+
 def load_manifest(path: Path) -> dict[str, dict[str, Any]]:
     """Parse the ground-truth YAML manifest.
 
+    Both provider keys (UPPERCASE, e.g. SURNAME) and normalized internal
+    keys (lowercase, e.g. last_name) are accepted per entry; provider keys
+    are translated to normalized at load time.
+
     Raises:
-        ValueError: If any entry is missing the required 'kind' field.
+        ValueError: If the manifest root is not a mapping, an entry is not
+            a mapping, or an entry contains a key that is neither a known
+            provider key nor a known normalized key.
     """
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
@@ -114,11 +145,15 @@ def load_manifest(path: Path) -> dict[str, dict[str, Any]]:
     for key, value in raw.items():
         if not isinstance(value, dict):
             raise ValueError(f"manifest entry {key!r} must be a mapping")
-        if "kind" not in value:
-            raise ValueError(
-                f"manifest entry {key!r} missing required field 'kind'"
-            )
-        out[str(key)] = {k: v for k, v in value.items()}
+        translated: dict[str, Any] = {}
+        for field_key, field_value in value.items():
+            canonical = _MANIFEST_KEY_ALIASES.get(field_key)
+            if canonical is None:
+                raise ValueError(
+                    f"manifest entry {key!r} has unknown field {field_key!r}"
+                )
+            translated[canonical] = field_value
+        out[str(key)] = translated
     return out
 
 
