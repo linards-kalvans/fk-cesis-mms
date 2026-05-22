@@ -45,7 +45,7 @@
 {% if workspace_mode == "editable" %}
 
 {# ── Multi-step wizard form ── #}
-<form method="post" enctype="multipart/form-data" class="fk-workspace-form" data-wizard-start="{{ form.grouped_fields|length }}"
+<form method="post" enctype="multipart/form-data" class="fk-workspace-form" data-wizard-start="0"
       data-async-upload-root
       data-application-id="{{ application.id }}"
       data-upload-url="{% url 'registrations:async-document-upload' application_id=application.id %}"
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded',function(){
   {% endfor %}
 
   {# ── Review step ── #}
-  <div class="fk-wizard-step fk-wizard-step--active" data-step="{{ form.grouped_fields|length }}">
+  <div class="fk-wizard-step" data-step="{{ form.grouped_fields|length }}">
     <section class="fk-section-card">
       <div class="fk-section-header">
         <div class="fk-section-title-wrap">
