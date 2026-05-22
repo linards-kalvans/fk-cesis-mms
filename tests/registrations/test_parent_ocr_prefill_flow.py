@@ -7,6 +7,7 @@ Extended coverage:
 - Non-owner cannot see OCR-extracted values in workspace
 - Submitted app workspace is read-only and shows OCR source badges
 - field_sources reflected in workspace context
+- OCR failure persistence: classified error code from safe wrapper
 """
 
 import pytest
@@ -15,7 +16,7 @@ from django.test import Client
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import issue_magic_link
-from apps.documents.models import Document
+from apps.documents.models import Document, DocumentExtraction
 from apps.registrations.services import create_or_update_draft, submit_application
 from apps.registrations.models import RegistrationApplication
 from apps.members.models import KitSizeOption
@@ -146,10 +147,10 @@ class TestManualFallbackOnOcrFailure:
         """When OCR fails, document ocr_status must be FAILED."""
 
         def _ocr_fails(**kwargs):
-            raise RuntimeError("OCR provider timeout")
+            return (None, "provider_unavailable")
 
         monkeypatch.setattr(
-            "apps.registrations.services.extract_document_data",
+            "apps.registrations.services.safe_extract_document_data",
             _ocr_fails,
         )
         settings.OCR_PROVIDER_MODE = "tiny_idp"
@@ -438,3 +439,149 @@ class TestSubmittedOcrWorkspaceReadOnly:
             or "pārbaudiet" in content.lower()
         )
         assert has_ocr, "Submitted workspace must show OCR source indicators."
+
+
+# ===========================================================================
+# Registration document upload — OCR failure persistence
+# ===========================================================================
+
+
+class TestOcrFailurePersistence:
+    """When OCR fails during registration upload, classified metadata must persist.
+
+    The workflow consumes safe_extract_document_data(...), whose contract is
+    returning (result, error_code) — not raising provider exceptions.
+    Tests patch safe_extract_document_data to return (None, <classified_code>)
+    for failure paths and assert the persistence contract.
+    """
+
+    def test_ocr_failure_persists_classified_error_code(
+        self, monkeypatch, settings
+    ):
+        """classified code from safe wrapper persists to Document.ocr_error_code."""
+        settings.OCR_PROVIDER_MODE = "tiny_idp"
+        settings.OCR_ENCRYPTION_KEY = "Y14NJYvOnvr0FLs41cks5xUkk8j95dwHcT3xsp-LkbY="
+
+        account = ParentAccount.objects.create(
+            email="errcode@example.com",
+            phone="+37129999990",
+        )
+
+        def _ocr_fails(**kwargs):
+            return (None, "auth_failed")
+
+        monkeypatch.setattr(
+            "apps.registrations.services.safe_extract_document_data",
+            _ocr_fails,
+        )
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": account.email,
+                "guardian_full_name": "ErrCode Parent",
+                "guardian_personal_id": "010101-99990",
+                "guardian_phone": "+37129999990",
+                "guardian_declared_address": "Riga 990",
+                "member_full_name": "ErrCode Child",
+                "member_personal_id": "010125-99990",
+                "member_birth_date": "2025-01-01",
+            },
+            files={"guardian_identity_document": _make_png("errcode.png")},
+            verified_account=account,
+        )
+
+        doc = app.documents.get(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        )
+        assert doc.ocr_status == Document.OcrStatus.FAILED
+        assert doc.ocr_error_code == "auth_failed"
+
+    def test_ocr_failure_no_extraction_row_created(
+        self, monkeypatch, settings
+    ):
+        """No DocumentExtraction row must be created when OCR fails."""
+        settings.OCR_PROVIDER_MODE = "tiny_idp"
+        settings.OCR_ENCRYPTION_KEY = "Y14NJYvOnvr0FLs41cks5xUkk8j95dwHcT3xsp-LkbY="
+
+        account = ParentAccount.objects.create(
+            email="noextraction@example.com",
+            phone="+37129999992",
+        )
+
+        def _ocr_fails(**kwargs):
+            return (None, "request_timeout")
+
+        monkeypatch.setattr(
+            "apps.registrations.services.safe_extract_document_data",
+            _ocr_fails,
+        )
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": account.email,
+                "guardian_full_name": "NoExtraction Parent",
+                "guardian_personal_id": "010101-99992",
+                "guardian_phone": "+37129999992",
+                "guardian_declared_address": "Riga 992",
+                "member_full_name": "NoExtraction Child",
+                "member_personal_id": "010125-99992",
+                "member_birth_date": "2025-01-01",
+            },
+            files={"guardian_identity_document": _make_png("noext.png")},
+            verified_account=account,
+        )
+
+        doc = app.documents.get(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        )
+        assert doc.ocr_status == Document.OcrStatus.FAILED
+        assert doc.ocr_error_code == "request_timeout"
+        assert not DocumentExtraction.objects.filter(document=doc).exists()
+
+    def test_member_portrait_outside_ocr_scope(self, monkeypatch, settings):
+        """member_portrait upload must not be affected by OCR failure on identity."""
+        settings.OCR_PROVIDER_MODE = "tiny_idp"
+        settings.OCR_ENCRYPTION_KEY = "Y14NJYvOnvr0FLs41cks5xUkk8j95dwHcT3xsp-LkbY="
+
+        account = ParentAccount.objects.create(
+            email="portrait@example.com",
+            phone="+37129999994",
+        )
+
+        def _ocr_fails_identity(**kwargs):
+            return (None, "invalid_response")
+
+        monkeypatch.setattr(
+            "apps.registrations.services.safe_extract_document_data",
+            _ocr_fails_identity,
+        )
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": account.email,
+                "guardian_full_name": "Portrait Parent",
+                "guardian_personal_id": "010101-99994",
+                "guardian_phone": "+37129999994",
+                "guardian_declared_address": "Riga 994",
+                "member_full_name": "Portrait Child",
+                "member_personal_id": "010125-99994",
+                "member_birth_date": "2025-01-01",
+            },
+            files={
+                "guardian_identity_document": _make_png("fail.png"),
+                "member_portrait_document": _make_png("portrait.png"),
+            },
+            verified_account=account,
+        )
+
+        portrait_doc = app.documents.get(
+            kind=Document.Kind.MEMBER_PORTRAIT, deleted_at__isnull=True
+        )
+        # Portrait must NOT have FAILED status (it is outside OCR scope)
+        assert portrait_doc.ocr_status != Document.OcrStatus.FAILED
+        # Identity doc must still have FAILED status
+        identity_doc = app.documents.get(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        )
+        assert identity_doc.ocr_status == Document.OcrStatus.FAILED
+        assert identity_doc.ocr_error_code == "invalid_response"
