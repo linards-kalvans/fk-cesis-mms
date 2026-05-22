@@ -1,0 +1,1 @@
+See [`AGENTS.md`](./AGENTS.md) for project guidance. It is the authoritative source for stack, architecture, current status, commands, coding conventions, security rules, scope, and skills/workflows. Keep AGENTS.md updated after major changes; do not duplicate its content here.
