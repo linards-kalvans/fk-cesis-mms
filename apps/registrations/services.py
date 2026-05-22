@@ -325,15 +325,19 @@ def _handle_guardian_doc_reuse(
         return
 
     try:
+        import os
         from django.core.files.base import ContentFile
         file_content = prior_doc.file.read()
     except FileNotFoundError:
         return
 
+    # Use only the basename — Document.file has upload_to="private/documents/"
+    # which prepends the prefix again. Passing prior_doc.file.name (which
+    # already includes the prefix) would double it on every reuse.
     new_doc = Document.objects.create(
         application=application,
         kind=prior_doc.kind,
-        file=ContentFile(file_content, name=prior_doc.file.name),
+        file=ContentFile(file_content, name=os.path.basename(prior_doc.original_filename or prior_doc.file.name)),
         original_filename=prior_doc.original_filename,
         content_type=prior_doc.content_type,
         file_size=prior_doc.file_size,
