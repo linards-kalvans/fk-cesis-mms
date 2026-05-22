@@ -24,16 +24,14 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 # Fields the tiny-IDP normalizer currently maps. Anything else expected by the
 # manifest but absent from the normalized result is searched for in the raw
 # payload (signals normalizer gap = tech debt).
-NORMALIZED_PERSON_FIELDS = {"first_name", "last_name", "personal_id"}
+NORMALIZED_PERSON_FIELDS = {"first_name", "last_name", "personal_id", "date_of_birth"}
 NORMALIZED_DOCUMENT_FIELDS = {
     "document_number",
     "issuer",
     "issuance_date",
     "expiry_date",
 }
-SCORABLE_FIELDS = NORMALIZED_PERSON_FIELDS | NORMALIZED_DOCUMENT_FIELDS | {
-    "date_of_birth",
-}
+SCORABLE_FIELDS = NORMALIZED_PERSON_FIELDS | NORMALIZED_DOCUMENT_FIELDS
 # `kind` is metadata about the document subtype, not a value to score against
 # the OCR output. It exists in the manifest so we can later validate the
 # normalizer's kind-classification once it is wired up.
