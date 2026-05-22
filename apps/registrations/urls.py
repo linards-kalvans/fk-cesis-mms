@@ -16,6 +16,12 @@ urlpatterns = [
     path("applications/<int:application_id>/summary/", views.redirect_to_workspace, name="view-registration-summary"),
     path("applications/<int:application_id>/detail/", views.redirect_to_workspace, name="view-registration-detail"),
     path("applications/<int:application_id>/submit/", views.submit_registration, name="submit-registration"),
+    # P3.5 async upload endpoint
+    path(
+        "applications/<int:application_id>/documents/",
+        views.async_document_upload,
+        name="async-document-upload",
+    ),
     path("portal/", views.parent_portal, name="parent-portal"),
     # Staff review
     path("admin/review/applications/", views.admin_review_queue, name="admin-review-queue"),
