@@ -7,46 +7,46 @@ Samples processed: 3
 
 ## Sample 1: `63653b5ce54b` (guardian_identity)
 
-- expected kind: `id_card`
+- expected kind: ``
 - provider kind: `—`
-- latency: 6663 ms
+- latency: 9609 ms
 
 | Field | Outcome | Raw path (if dropped by normalizer) |
 |---|---|---|
 | `date_of_birth` | `hit` | — |
-| `document_number` | `hit` | — |
+| `document_number` | `missing_everywhere` | — |
 | `expiry_date` | `hit` | — |
 | `first_name` | `hit` | — |
-| `last_name` | `miss` | — |
+| `last_name` | `hit` | — |
 | `personal_id` | `hit` | — |
 
 ## Sample 2: `8537116a2095` (guardian_identity)
 
-- expected kind: `passport`
+- expected kind: ``
 - provider kind: `—`
-- latency: 6909 ms
+- latency: 8566 ms
 
 | Field | Outcome | Raw path (if dropped by normalizer) |
 |---|---|---|
 | `date_of_birth` | `hit` | — |
 | `document_number` | `hit` | — |
-| `expiry_date` | `hit` | — |
+| `expiry_date` | `missing_everywhere` | — |
 | `first_name` | `hit` | — |
 | `last_name` | `miss` | — |
 | `personal_id` | `hit` | — |
 
 ## Sample 3: `98c3c2bdf895` (member_identity)
 
-- expected kind: `id_card`
+- expected kind: ``
 - provider kind: `—`
-- latency: 2190 ms
+- latency: 4182 ms
 
 | Field | Outcome | Raw path (if dropped by normalizer) |
 |---|---|---|
-| `date_of_birth` | `hit` | — |
+| `date_of_birth` | `missing_everywhere` | — |
 | `document_number` | `hit` | — |
-| `expiry_date` | `hit` | — |
-| `first_name` | `miss` | — |
-| `last_name` | `hit` | — |
-| `personal_id` | `miss` | — |
+| `expiry_date` | `missing_everywhere` | — |
+| `first_name` | `missing_everywhere` | — |
+| `last_name` | `missing_everywhere` | — |
+| `personal_id` | `missing_everywhere` | — |
 
