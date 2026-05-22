@@ -74,12 +74,9 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ### Security and architecture gaps
 - audit/event baseline still incomplete (P6 target)
-- background-job baseline not in place (P3.5 target)
 
 ### Registration UX gaps
 - unnecessary re-upload can replace earlier file and create confusing admin rows (P6 target)
-- document upload + OCR run synchronously inside the form submit cycle (P3.5 target)
-- OCR results overwrite user-typed values rather than offering a suggestion (P3.5 target)
 
 ### Admin UX gaps
 - admin review should show inline identity-document previews beside applicant data (P4 target)
@@ -157,7 +154,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - live run on 2026-05-22 against `api.tiny-idp.com` surfaced and fixed three integration bugs (auth header, multipart field, response shape) before sign-off
 
 ### P3.5 — Async OCR UX + background-job baseline
-**Status:** planned
+**Status:** complete (2026-05-22)
 
 **Why between P3 and P4**
 - P3 delivered real OCR but kept it synchronous: the form blocks for ~4–10 s per upload (live runs showed 4182–9609 ms on tiny-IDP). That latency dominates parent-facing UX.
@@ -356,6 +353,8 @@ P3 is complete when all of the following are true:
    - secure handling expectations where testable
 
 ### P3.5 acceptance — Async OCR UX + background-job baseline
+**Status:** complete (2026-05-22) — plan archived at `docs/superpowers/plans/2026-05-22-p3.5-async-ocr-ux.md`.
+
 P3.5 is complete when all of the following are true:
 
 1. Background-job runner is in place:
@@ -551,10 +550,11 @@ P7 is complete when all of the following are true:
 ## 7. Milestone map
 
 ### M1 — Security and foundation completion
+Delivered:
+- background-job baseline (django-q2, delivered in P3.5)
+- OCR metadata security posture (delivered in P3)
 Remaining focus:
-- background-job baseline (django-q2, delivered as part of P3.5)
 - audit baseline
-- OCR metadata security posture
 
 ### M2 — Parent intake completion
 Remaining focus:
