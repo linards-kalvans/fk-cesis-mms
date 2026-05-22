@@ -86,6 +86,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 ### Registration UX gaps
 - guardian/child-player field visual presentation needs polish (fields finalized in P1)
 - unnecessary re-upload can replace earlier file and create confusing admin rows
+- document upload + OCR run synchronously inside the form submit cycle (P3.5 target)
+- OCR results overwrite user-typed values rather than offering a suggestion (P3.5 target)
 
 ### Admin UX gaps
 - admin review should show inline identity-document previews beside applicant data
@@ -161,6 +163,22 @@ Do **not** use archived implementation plans for current planning unless user ex
 - types green: `uv run mypy .`
 - live validation harness: `scripts/validate_tiny_idp/`, evidence in `docs/p3_tiny_idp_validation.md`
 - live run on 2026-05-22 against `api.tiny-idp.com` surfaced and fixed three integration bugs (auth header, multipart field, response shape) before sign-off
+
+### P3.5 — Async OCR UX + background-job baseline
+**Status:** planned
+
+**Why between P3 and P4**
+- P3 delivered real OCR but kept it synchronous: the form blocks for ~4–10 s per upload (live runs showed 4182–9609 ms on tiny-IDP). That latency dominates parent-facing UX.
+- M1 already flags background-job baseline as missing. Pulling it forward here unblocks future async work (agreement-state sync in P4, billing sync in P5).
+- Belongs before P4 because the agreement-platform sync introduced in P4 should be built on the same job runner, not bolted on later.
+
+**Target outcome**
+- Documents upload immediately on file selection (before form submit), in background.
+- OCR runs in background after upload completes; the form remains interactive throughout.
+- Per-document progress states are visible: `uploading`, `uploaded`, `ocr_running`, `ocr_done`, `ocr_failed`.
+- Empty/whitespace fields auto-fill from OCR when it completes; fields that already contain a value display an inline OCR suggestion the user can accept or dismiss.
+- Background-job runner adopted: **django-q2** (DB-broker default, single-instance friendly). Worker process documented in `AGENTS.md` run instructions.
+- No regression of P3 secure-storage posture: encrypted payload + summary still persisted; non-blocking failure path preserved.
 
 ### P4 — Approval-to-agreement flow
 **Why fourth**
@@ -345,6 +363,53 @@ P3 is complete when all of the following are true:
    - admin retry/review behavior
    - secure handling expectations where testable
 
+### P3.5 acceptance — Async OCR UX + background-job baseline
+P3.5 is complete when all of the following are true:
+
+1. Background-job runner is in place:
+   - **django-q2** added via `uv add`, configured against the Django DB broker
+   - worker entry point documented in `AGENTS.md` (how to start, how to stop, how it behaves in dev vs prod)
+   - at-least-once retry policy defined for OCR jobs
+   - failure visibility: failed jobs surface in Django admin or equivalent inspection point
+2. Document upload is async on the parent registration page:
+   - selecting a file POSTs it immediately, without waiting for form submit
+   - upload endpoint returns a document ID and initial status
+   - failed uploads (size limit, type rejection, network error) surface clear inline errors and do not block other fields
+3. OCR is enqueued automatically after upload completes:
+   - synchronous OCR path is removed from the upload request/response cycle
+   - encrypted payload + summary persistence remains identical to P3
+   - classified exception mapping (`provider_misconfigured`, `auth_failed`, `rate_limited`, `request_timeout`, `provider_unavailable`, `invalid_response`) still applies inside the job
+4. Per-document progress states are visible to the parent:
+   - states: `uploading`, `uploaded`, `ocr_running`, `ocr_done`, `ocr_failed`
+   - frontend polls (or receives via SSE) until terminal state reached
+   - polling stops on terminal state; no zombie polling loops
+   - `ocr_failed` shows a non-blocking message; the parent can still submit
+5. Prefill vs suggestion rule is implemented:
+   - on `ocr_done`, fields whose current value is empty or whitespace-only are auto-filled and tagged with the existing OCR source badge
+   - fields whose current value is non-empty (including `derived_system_filled` from guardian-reuse) show an inline OCR suggestion chip beside the field
+   - accepting a suggestion overwrites the value and updates the source badge to OCR
+   - dismissing a suggestion hides the chip; the dismissal is not persisted across sessions (acceptable for first slice)
+6. Admin and audit posture preserved:
+   - admin OCR review screens still show extracted data and confidence values
+   - admin-triggered re-OCR still works (enqueues a new job)
+   - private-document access controls unchanged
+7. No workflow regression:
+   - verified entry, chooser, continue draft, start new, save draft, submit still work
+   - parent can submit the application even if OCR is still running (submitted application records the pending OCR state)
+   - non-blocking OCR failure path still passes its test
+8. Tests cover:
+   - async upload endpoint (success + validation failure)
+   - job enqueue on upload completion
+   - job success path persists encrypted payload + summary as before
+   - job failure path sets `ocr_failed` and records `ocr_error_code`
+   - prefill rule: empty field is filled, non-empty field gets a suggestion
+   - suggestion accept/dismiss interactions
+   - submit-while-OCR-pending behavior
+   - admin re-OCR enqueue
+9. Documentation updated:
+   - `AGENTS.md` describes the worker process, the job lifecycle, and how OCR fits in
+   - `README.md` includes worker startup in the local-dev quickstart
+
 ### P4 acceptance — Approval-to-agreement flow
 P4 is complete when all of the following are true:
 
@@ -495,7 +560,7 @@ P7 is complete when all of the following are true:
 
 ### M1 — Security and foundation completion
 Remaining focus:
-- background-job baseline where still missing
+- background-job baseline (django-q2, delivered as part of P3.5)
 - audit baseline
 - OCR metadata security posture
 
