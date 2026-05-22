@@ -2,7 +2,7 @@
 {% load static %}
 {% load reg_filters %}
 
-{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script><script src="{% static 'js/async_upload.js' %}" defer></script>{% endblock %}
 
 {% block page_content %}
 
@@ -45,7 +45,11 @@
 {% if workspace_mode == "editable" %}
 
 {# ── Multi-step wizard form ── #}
-<form method="post" enctype="multipart/form-data" class="fk-workspace-form" data-wizard-start="{{ form.grouped_fields|length }}">
+<form method="post" enctype="multipart/form-data" class="fk-workspace-form" data-wizard-start="{{ form.grouped_fields|length }}"
+      data-async-upload-root
+      data-application-id="{{ application.id }}"
+      data-upload-url="{% url 'registrations:async-document-upload' application_id=application.id %}"
+      data-status-url-template="/applications/{{ application.id }}/documents/__document_id__/status/">
   {% csrf_token %}
 
   {% for section_name, bound_fields in form.grouped_fields %}

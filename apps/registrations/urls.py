@@ -22,6 +22,11 @@ urlpatterns = [
         views.async_document_upload,
         name="async-document-upload",
     ),
+    path(
+        "applications/<int:application_id>/documents/<int:document_id>/status/",
+        views.document_ocr_status,
+        name="document-ocr-status",
+    ),
     path("portal/", views.parent_portal, name="parent-portal"),
     # Staff review
     path("admin/review/applications/", views.admin_review_queue, name="admin-review-queue"),

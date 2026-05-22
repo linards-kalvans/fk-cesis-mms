@@ -538,11 +538,45 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
 
 
 # ---------------------------------------------------------------------------
-# Async document upload (P3.5)
+# Async document upload + status polling (P3.5)
 # ---------------------------------------------------------------------------
 
 
 _VALID_DOCUMENT_KINDS = frozenset(value for value, _label in Document.Kind.choices)
+
+
+def _ocr_extracted_fields(document: Document) -> dict[str, str]:
+    """Map a completed Document's extraction to form-field-keyed values."""
+    extraction = getattr(document, "extraction", None)
+    if extraction is None:
+        return {}
+    try:
+        payload = decrypt_json(extraction.encrypted_payload)
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    person_fields = payload.get("person_fields") or {}
+    if not isinstance(person_fields, dict):
+        return {}
+
+    first = str(person_fields.get("first_name", "")).strip()
+    last = str(person_fields.get("last_name", "")).strip()
+    pid = str(person_fields.get("personal_id", "")).strip()
+    full_name = " ".join(part for part in (first, last) if part)
+
+    fields: dict[str, str] = {}
+    if document.kind == Document.Kind.GUARDIAN_IDENTITY:
+        if full_name:
+            fields["guardian_full_name"] = full_name
+        if pid:
+            fields["guardian_personal_id"] = pid
+    elif document.kind == Document.Kind.MEMBER_IDENTITY:
+        if full_name:
+            fields["member_full_name"] = full_name
+        if pid:
+            fields["member_personal_id"] = pid
+    return fields
 
 
 def _json_error(code: str, status: int, **extra: object) -> JsonResponse:
@@ -622,3 +656,30 @@ def async_document_upload(
         },
         status=201,
     )
+
+
+def document_ocr_status(
+    request: HttpRequest, application_id: int, document_id: int
+) -> HttpResponse:
+    """GET /applications/<id>/documents/<doc_id>/status/ — polling endpoint."""
+    account = _current_parent_account(request)
+    if account is None:
+        return _json_error("not_authenticated", status=401)
+
+    document = (
+        Document.objects.select_related("application", "extraction")
+        .filter(pk=document_id, application_id=application_id)
+        .first()
+    )
+    if document is None or document.application.parent_account_id != account.id:
+        return _json_error("not_found", status=404)
+
+    payload: dict[str, object] = {
+        "ocr_status": document.ocr_status,
+        "extracted_fields": _ocr_extracted_fields(document)
+        if document.ocr_status == Document.OcrStatus.COMPLETED
+        else {},
+    }
+    if document.ocr_status == Document.OcrStatus.FAILED and document.ocr_error_code:
+        payload["ocr_error_code"] = document.ocr_error_code
+    return JsonResponse(payload)
