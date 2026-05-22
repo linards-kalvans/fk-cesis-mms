@@ -29,6 +29,7 @@
   </label>
   {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
   {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
+  <p id="{{ field.id_for_label }}_progress" class="fk-form-progress" data-state="idle" hidden></p>
 </div>
 {% else %}
 <div class="fk-form-field{% if field.errors %} fk-form-field--error{% endif %}">
