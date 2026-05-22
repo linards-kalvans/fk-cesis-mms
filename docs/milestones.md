@@ -41,13 +41,15 @@ Do **not** use archived implementation plans for current planning unless user ex
 - `RegistrationApplication` workflow with `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
 - `fix_requested` save preserves status
 
-### Documents
+### Documents and OCR
 - `Document` model exists
 - private storage root `PRIVATE_DOCUMENTS_ROOT` / `private-uploads/` exists
 - admin-only protected preview/download endpoints exist
 - anonymous users redirect to admin login
 - authenticated non-admin users receive `404`
-- placeholder OCR status exists on documents
+- real OCR integration delivered (P3): tiny-IDP provider behind stub/real adapter; synchronous extraction on guardian/member identity uploads; encrypted payload + summary in `DocumentExtraction`; classified error code persistence
+- `OCR_PROVIDER_MODE` (`stub` / `tiny_idp`), `TINY_IDP_API_URL`, `TINY_IDP_API_KEY`, `OCR_ENCRYPTION_KEY` are the canonical config names
+- live validation evidence committed at `docs/p3_tiny_idp_validation.md`
 
 ### Admin review and member creation
 - admin review queue/detail baseline exists
@@ -58,15 +60,6 @@ Do **not** use archived implementation plans for current planning unless user ex
 ---
 
 ## 3. Confirmed target direction not yet implemented
-
-### Documents and OCR
-- registration should handle both `guardian_identity` and `member_identity` documents
-- existing verified guardian should reuse active guardian document by default, with optional refresh/replacement
-- OCR should prefill person data from uploaded documents
-- OCR should also store serialized sensitive metadata such as document number, issuer, issuance date, expiry, and similar fields
-- OCR metadata must be protected with same posture as raw identity documents
-- OCR mode must be configurable between real provider and stub/dummy provider
-- preferred OCR direction: **tiny-IDP** (only provider)
 
 ### Agreement handling
 - after approval, generate agreement
@@ -80,25 +73,24 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 4. Open gaps and debt
 
 ### Security and architecture gaps
-- audit/event baseline still incomplete
-- OCR extracted metadata storage/security not implemented yet
+- audit/event baseline still incomplete (P6 target)
+- background-job baseline not in place (P3.5 target)
 
 ### Registration UX gaps
-- guardian/child-player field visual presentation needs polish (fields finalized in P1)
-- unnecessary re-upload can replace earlier file and create confusing admin rows
+- unnecessary re-upload can replace earlier file and create confusing admin rows (P6 target)
 - document upload + OCR run synchronously inside the form submit cycle (P3.5 target)
 - OCR results overwrite user-typed values rather than offering a suggestion (P3.5 target)
 
 ### Admin UX gaps
-- admin review should show inline identity-document previews beside applicant data
-- admin document UX should better distinguish active vs replaced documents
-- training-group assignment flow still incomplete
-- review-action audit entries still incomplete
+- admin review should show inline identity-document previews beside applicant data (P4 target)
+- admin document UX should better distinguish active vs replaced documents (P6 target)
+- training-group assignment flow still incomplete (P4 target)
+- review-action audit entries still incomplete (P6 target)
 
 ### Business workflow gaps
-- agreement generation / manual-signing flow not implemented yet
-- billing / Invoice Ninja sync not implemented yet
-- admin export and operations polish still pending
+- agreement generation / manual-signing flow not implemented yet (P4 target)
+- billing / Invoice Ninja sync not implemented yet (P5 target)
+- admin export and operations polish still pending (P6 target)
 
 ---
 
