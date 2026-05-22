@@ -92,7 +92,7 @@ class TestNewRegistrationCheckboxHooks:
 
     def test_checkbox_has_id_and_label(self):
         """Checkbox must have id='id_member_same_address_as_guardian' and label text."""
-        resp = self.client.get("/applications/new/")
+        resp = self.client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
         content = resp.content.decode()
         assert 'id="id_member_same_address_as_guardian"' in content
@@ -100,7 +100,7 @@ class TestNewRegistrationCheckboxHooks:
 
     def test_member_address_field_has_data_attribute(self):
         """Member address input must have data attribute linking to checkbox."""
-        resp = self.client.get("/applications/new/")
+        resp = self.client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
         content = resp.content.decode()
         assert 'data-sync-address-for="id_member_same_address_as_guardian"' in content, (
@@ -110,7 +110,7 @@ class TestNewRegistrationCheckboxHooks:
 
     def test_hidden_previous_address_input_present(self):
         """Hidden input must exist to store previous manual address value."""
-        resp = self.client.get("/applications/new/")
+        resp = self.client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
         content = resp.content.decode()
         assert 'id="member_actual_address_previous"' in content, (
@@ -120,7 +120,7 @@ class TestNewRegistrationCheckboxHooks:
 
     def test_initialization_script_present(self):
         """Initialization script must be present in the page to wire up sync."""
-        resp = self.client.get("/applications/new/")
+        resp = self.client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "SameAddressSync" in content or "same-address-sync" in content, (
@@ -264,7 +264,7 @@ class TestDOMAttributeContract:
     def test_new_registration_has_all_dom_hooks(self):
         """new_registration.html must expose all required DOM hooks."""
         client, _account = _create_and_login("sameaddr-contract@example.com")
-        resp = client.get("/applications/new/")
+        resp = client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
         hooks = self._collect_dom_hooks(resp.content.decode())
         expected = {

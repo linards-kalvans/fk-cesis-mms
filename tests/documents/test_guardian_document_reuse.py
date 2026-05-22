@@ -322,7 +322,7 @@ class TestGuardianReuseAuthRegression:
         client = Client()
         _login(client, stranger)
 
-        resp = client.get("/applications/new/")
+        resp = client.get("/applications/new/", follow=True)
 
         assert resp.status_code == 200
         content = resp.content.decode()

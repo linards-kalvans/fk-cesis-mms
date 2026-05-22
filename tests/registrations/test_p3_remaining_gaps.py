@@ -112,7 +112,7 @@ class TestGuardianAutoReuseDefault:
         client = Client()
         _login(client, account)
 
-        resp = client.get("/applications/new/")
+        resp = client.get("/applications/new/", follow=True)
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -133,7 +133,7 @@ class TestGuardianAutoReuseDefault:
         client = Client()
         _login(client, account)
 
-        resp = client.get("/applications/new/")
+        resp = client.get("/applications/new/", follow=True)
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -143,7 +143,12 @@ class TestGuardianAutoReuseDefault:
         )
 
     def test_new_app_form_shows_reusable_hint_when_extraction_exists(self, settings):
-        """GET /applications/new/ must show reusable guardian doc hint when extraction exists."""
+        """GET /applications/new/ must reuse the prior guardian identity doc when extraction exists.
+
+        P3.5 redirect: /applications/new/ now redirects straight into the
+        workspace, so the reuse signal moved from a hint label to an
+        actual active guardian_identity Document on the new draft.
+        """
         settings.OCR_PROVIDER_MODE = "stub"
         settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
 
@@ -153,21 +158,25 @@ class TestGuardianAutoReuseDefault:
         client = Client()
         _login(client, account)
 
-        resp = client.get("/applications/new/")
-
+        resp = client.get("/applications/new/", follow=True)
         assert resp.status_code == 200
-        content = resp.content.decode()
-        # Template passes has_reusable_guardian_document=True
-        # Must show a reusable hint in the page
-        has_reusable_hint = (
-            "Izmanto iepriekš" in content
-            or "reusable" in content.lower()
-            or "prior" in content.lower()
-            or "existing" in content.lower()
+
+        # The new draft must have an active guardian_identity Document
+        # carried over from the prior application (the reuse behavior).
+        from apps.documents.models import Document as _Document
+        from apps.registrations.models import RegistrationApplication as _RA
+
+        new_app = (
+            _RA.objects.filter(
+                parent_account=account, status=_RA.Status.DRAFT
+            )
+            .order_by("-created_at")
+            .first()
         )
-        assert has_reusable_hint, (
-            "New app form must show reusable guardian doc hint when extraction exists."
-        )
+        assert new_app is not None
+        assert new_app.documents.filter(
+            kind=_Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        ).exists()
 
     def test_new_app_form_no_reuse_hint_without_prior_app(self, settings):
         """GET /applications/new/ must NOT show reusable hint when no prior app exists."""
@@ -181,7 +190,7 @@ class TestGuardianAutoReuseDefault:
         client = Client()
         _login(client, account)
 
-        resp = client.get("/applications/new/")
+        resp = client.get("/applications/new/", follow=True)
 
         assert resp.status_code == 200
         content = resp.content.decode()

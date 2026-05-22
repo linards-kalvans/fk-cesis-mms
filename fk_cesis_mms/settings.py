@@ -92,7 +92,10 @@ DATABASES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static", BASE_DIR / "style-guide"]
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+    ("style-guide", BASE_DIR / "style-guide"),
+]
 
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",
