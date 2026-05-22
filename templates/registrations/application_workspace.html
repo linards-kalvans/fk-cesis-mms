@@ -49,7 +49,9 @@
       data-async-upload-root
       data-application-id="{{ application.id }}"
       data-upload-url="{% url 'registrations:async-document-upload' application_id=application.id %}"
-      data-status-url-template="/applications/{{ application.id }}/documents/__document_id__/status/">
+      data-status-url-template="/applications/{{ application.id }}/documents/__document_id__/status/"
+      data-pending-document-ids="{{ pending_document_ids_csv }}"
+      data-pending-by-kind="{{ pending_by_kind_json|escape }}">
   {% csrf_token %}
 
   {% for section_name, bound_fields in form.grouped_fields %}
