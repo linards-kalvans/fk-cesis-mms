@@ -163,3 +163,22 @@ def test_post_document_classifies_invalid_response(tiny_idp_settings, monkeypatc
 
     with pytest.raises(InvalidResponseError):
         post_document(file_name="x.jpg", content=b"x", content_type="image/jpeg")
+
+
+def test_post_document_classifies_auth_error_from_200_body(tiny_idp_settings, monkeypatch):
+    """tiny-IDP returns 200 + {'code': 'API_KEY_REQUIRED'} when auth fails."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {
+        "message": "API key is required",
+        "code": "API_KEY_REQUIRED",
+    }
+
+    monkeypatch.setattr(
+        "apps.integrations.tiny_idp.requests.post",
+        lambda *a, **kw: mock_response,
+    )
+
+    with pytest.raises(AuthError):
+        post_document(file_name="x.jpg", content=b"x", content_type="image/jpeg")

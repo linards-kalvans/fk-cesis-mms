@@ -158,6 +158,9 @@ def post_document(
             f"Malformed JSON response: {exc}"
         ) from exc
 
+    if payload.get("code") == "API_KEY_REQUIRED":
+        raise AuthError("tiny-IDP rejected the API key (API_KEY_REQUIRED)")
+
     return payload
 
 
