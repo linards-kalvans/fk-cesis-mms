@@ -60,6 +60,21 @@ Django settings auto-loads `.env` from the project root using
 or environment variables. At minimum, set `DJANGO_SECRET_KEY` for
 management commands to run without warnings.
 
+### OCR runtime configuration
+
+OCR is optional and controlled by four environment variables:
+
+| Variable | Purpose | Required |
+|---|---|---|
+| `OCR_PROVIDER_MODE` | `stub` (deterministic dummy) or `tiny_idp` (real provider) | Yes |
+| `TINY_IDP_API_URL` | tiny-IDP extraction endpoint | Only when `tiny_idp` |
+| `TINY_IDP_API_KEY` | API key for tiny-IDP | Only when `tiny_idp` |
+| `OCR_ENCRYPTION_KEY` | Fernet key for OCR payload/summary encryption | Yes (generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+
+For local development, leave `OCR_PROVIDER_MODE=stub` and set
+`OCR_ENCRYPTION_KEY` to any valid Fernet key. The stub provider ignores
+`TINY_IDP_*` variables entirely.
+
 ### Running tests and lint
 
 ```bash
