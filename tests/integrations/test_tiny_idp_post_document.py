@@ -18,26 +18,42 @@ from apps.integrations.tiny_idp import (
 
 
 _SAMPLE_PAYLOAD = {
-    "entities": [
-        {
-            "type": "person",
-            "fields": {
-                "first_name": "Anna",
-                "last_name": "Bērziņa",
-                "personal_id": "010180-12345",
-                "date_of_birth": "1980-01-01",
-            },
-        }
-    ],
-    "document": {
+    "success": True,
+    "data": {
+        "document_type": "ID_CARD",
+        "document_type_verified": True,
         "document_number": "LV1234567",
-        "issuer": "PMLP",
-        "issuance_date": "2020-05-21",
+        "document_number_verified": True,
+        "nationality": "LVA",
+        "nationality_verified": True,
+        "given_names": "Anna",
+        "given_names_verified": True,
+        "first_surname": "Bērziņa",
+        "first_surname_verified": True,
+        "second_surname": "",
+        "second_surname_verified": True,
+        "date_of_birth": "1980-01-01",
+        "date_of_birth_verified": True,
+        "place_of_birth": "",
+        "gender": "F",
+        "gender_verified": True,
+        "issuing_date": "2020-05-21",
+        "issuing_date_verified": True,
         "expiry_date": "2030-05-21",
+        "expiry_date_verified": True,
+        "issuing_authority": "PMLP",
+        "personal_number": "010180-12345",
+        "personal_number_verified": True,
+        "mrz_detected": True,
+        "address_line_1": "",
+        "address_line_2": "",
+        "address_city": "",
+        "address_state": "",
+        "address_country": "",
+        "address_zip_code": "",
     },
-    "confidence": {"first_name": 0.99},
-    "flags": [],
-    "model_version": "tinyidp-1.0.0",
+    "balance": 15.0,
+    "cost": 0.005,
 }
 
 
@@ -72,10 +88,10 @@ def test_post_document_returns_raw_payload(tiny_idp_settings, monkeypatch):
 
     assert payload == _SAMPLE_PAYLOAD
     assert captured["url"] == "https://tiny-idp.test/extract"
-    assert captured["headers"] == {"Authorization": "Bearer test-key"}
-    assert captured["files"]["file"][0] == "doc.jpg"
-    assert captured["files"]["file"][1] == b"binary-content"
-    assert captured["files"]["file"][2] == "image/jpeg"
+    assert captured["headers"] == {"x-api-key": "test-key"}
+    assert captured["files"]["files"][0] == "doc.jpg"
+    assert captured["files"]["files"][1] == b"binary-content"
+    assert captured["files"]["files"][2] == "image/jpeg"
 
 
 def test_post_document_raises_misconfig_when_url_missing(settings):
