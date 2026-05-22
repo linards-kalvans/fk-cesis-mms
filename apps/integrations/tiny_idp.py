@@ -194,31 +194,19 @@ def extract_document(
 
 # Mapping from provider person-field keys (under data.) to normalized keys.
 _PERSON_FIELD_MAP = {
-    "given_names": "first_name",
-    "first_surname": "last_name",
-    "personal_number": "personal_id",
-    "date_of_birth": "date_of_birth",
+    "GIVEN_NAME": "first_name",
+    "SURNAME": "last_name",
+    "PERSONAL_ID": "personal_id",
+    "DATE_OF_BIRTH": "date_of_birth",
 }
 
 # Mapping from provider document-field keys (under data.) to normalized keys.
+# Note: current generic-id-document spec does not return an issuing authority,
+# only ISSUING_COUNTRY_NAME, so the normalized `issuer` field stays unset.
 _DOCUMENT_FIELD_MAP = {
-    "document_number": "document_number",
-    "issuing_authority": "issuer",
-    "issuing_date": "issuance_date",
-    "expiry_date": "expiry_date",
-}
-
-# Provider key → verified-flag key, used to derive confidence.
-# Only fields the provider reports a *_verified bool for are included.
-_VERIFIED_FLAG_MAP = {
-    "given_names": "given_names_verified",
-    "first_surname": "first_surname_verified",
-    "personal_number": "personal_number_verified",
-    "date_of_birth": "date_of_birth_verified",
-    "document_number": "document_number_verified",
-    "issuing_date": "issuing_date_verified",
-    "expiry_date": "expiry_date_verified",
-    # issuing_authority has no *_verified flag in the real spec.
+    "DOCUMENT_NUMBER": "document_number",
+    "DATE_OF_ISSUE": "issuance_date",
+    "DATE_OF_EXPIRY": "expiry_date",
 }
 
 
@@ -262,21 +250,8 @@ def normalize_tiny_idp_response(
         if isinstance(value, str) and value != "":
             document_metadata[normalized_key] = value
 
-    # Confidence — derive from *_verified flags. Only emit confidence for
-    # fields whose value is present (non-empty), and that we actually map.
+    # No per-field confidence in the current spec; no analogue for flags.
     confidence: dict[str, float] = {}
-    combined_map = {**_PERSON_FIELD_MAP, **_DOCUMENT_FIELD_MAP}
-    for provider_key, normalized_key in combined_map.items():
-        flag_key = _VERIFIED_FLAG_MAP.get(provider_key)
-        if flag_key is None:
-            continue
-        value = data.get(provider_key)
-        if not isinstance(value, str) or value == "":
-            continue
-        verified = bool(data.get(flag_key))
-        confidence[normalized_key] = 1.0 if verified else 0.0
-
-    # No analogue for flags in real API.
     flags: list[dict[str, Any]] = []
 
     raw_reference = {
