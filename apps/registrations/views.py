@@ -111,10 +111,16 @@ def _parent_can_view_application(
 
 
 def new_application(request: HttpRequest) -> HttpResponse:
-    """GET /applications/new/ — requires verified parent account.
+    """GET /applications/new/ — bootstrap draft + redirect to workspace.
 
-    Guardian fields are prefilled from the verified account / latest
-    application. Member/child fields are NOT prefilled.
+    P3.5: file uploads need an application_id (async endpoint scope), so
+    /applications/new/ no longer renders its own form. On GET we either
+    surface the verified user's existing draft or auto-create a blank
+    one (with guardian prefill from prior apps + reusable guardian doc
+    copy) and redirect to /applications/<id>/, where async uploads work.
+
+    The synchronous POST path is retained as a no-JS fallback for clients
+    that POST directly to this route (legacy bookmarks etc.).
     """
     account = _current_parent_account(request)
     if account is None:
@@ -148,16 +154,23 @@ def new_application(request: HttpRequest) -> HttpResponse:
             },
         )
 
+    # GET: redirect to the verified user's existing draft if one is open,
+    # otherwise auto-create a blank draft + redirect to its workspace.
+    existing_draft = _portal_primary_application(account)
+    if existing_draft is not None:
+        return redirect(
+            "registrations:application-workspace", application_id=existing_draft.id
+        )
+
     prefill = get_application_prefill(account)
-    form = RegistrationApplicationForm(initial=prefill)
-    return render(
-        request,
-        "registrations/new_registration.html",
-        {
-            "form": form,
-            "field_source_labels": {},
-            "has_reusable_guardian_document": has_existing,
-        },
+    application = create_or_update_draft(
+        data=prefill,
+        files={},
+        verified_account=account,
+        reusable_guardian_document=reusable_doc if has_existing else None,
+    )
+    return redirect(
+        "registrations:application-workspace", application_id=application.id
     )
 
 
