@@ -138,6 +138,12 @@ def _apply_field_sources(application: RegistrationApplication, kind: str) -> Non
     field_map = _OCR_FIELD_SOURCE_MAP.get(kind)
     if not field_map:
         return
+    # Submit-while-OCR-pending: once the application leaves DRAFT, its
+    # captured data is frozen. Late job completions still write
+    # DocumentExtraction (so admin sees the data) but must not mutate
+    # field_sources on the submitted record.
+    if application.status != RegistrationApplication.Status.DRAFT:
+        return
     sources = dict(application.field_sources) if application.field_sources else {}
     sources.update(field_map)
     application.field_sources = sources
