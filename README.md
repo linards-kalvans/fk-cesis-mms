@@ -38,10 +38,18 @@ DJANGO_SECRET_KEY=change-me uv run python manage.py migrate
 # 4. Start the development server
 DJANGO_SECRET_KEY=change-me uv run python manage.py runserver 0.0.0.0:8000
 
-# 5. In a separate terminal, start the background-job worker
-#    (required for OCR extraction once P3.5 lands; harmless to run now).
+# 5. In a separate terminal, start the background-job worker.
+#    REQUIRED for OCR — uploaded identity documents stay in
+#    ocr_status=PENDING forever without it. The web process and the
+#    worker share the same .env, so DJANGO_SECRET_KEY, OCR_ENCRYPTION_KEY,
+#    and TINY_IDP_* (when OCR_PROVIDER_MODE=tiny_idp) must all be set in
+#    the env that starts qcluster.
 DJANGO_SECRET_KEY=change-me uv run python manage.py qcluster
 ```
+
+> **First time on this branch?** Run `uv sync` (step 1) then `migrate` (step 3) again
+> — Phase 0 added `django-q2` and 19 `django_q` migrations. Without the migration,
+> the worker fails to start and uploads return 500.
 
 ### Database
 
