@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.documents",
     "apps.integrations",
+    # Background-job runner (P3.5)
+    "django_q",
 ]
 
 MIDDLEWARE = [
@@ -140,3 +142,16 @@ OCR_PROVIDER_MODE = os.environ.get("OCR_PROVIDER_MODE") or "stub"
 TINY_IDP_API_URL = os.environ.get("TINY_IDP_API_URL", "")
 TINY_IDP_API_KEY = os.environ.get("TINY_IDP_API_KEY", "")
 OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
+
+# Background-job runner (django-q2) — uses the Django DB as broker so we
+# don't need Redis for this single-instance app. Worker starts with
+# `uv run python manage.py qcluster`.
+Q_CLUSTER = {
+    "name": "fk_cesis_mms",
+    "workers": 2,
+    "timeout": 60,
+    "retry": 90,
+    "max_attempts": 2,
+    "orm": "default",
+    "sync": os.environ.get("Q_CLUSTER_SYNC", "").lower() in {"1", "true", "yes"},
+}

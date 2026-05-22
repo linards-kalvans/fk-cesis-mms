@@ -132,6 +132,7 @@ Archive rule:
 uv sync                                # install deps
 uv run python manage.py migrate        # run migrations
 uv run python manage.py runserver      # start dev server locally
+uv run python manage.py qcluster       # start background-job worker (P3.5+)
 uv run pytest                          # run test suite
 uv run ruff check .                    # lint
 uv run mypy .                          # type check
@@ -142,6 +143,18 @@ Rules:
 - Do not assume `venv/` or `pip` exist.
 - For user-accessible dev servers, expose app through `kimaki tunnel`, not localhost-only.
 - For acceptance testing, expose usable app slices early, not only at end.
+
+### Background worker (django-q2)
+
+The web process and the worker process must both be running in local dev — they're separate terminals.
+
+- **Start:** `uv run python manage.py qcluster` (separate terminal from `runserver`)
+- **Broker:** Django ORM (`Q_CLUSTER.orm = "default"`) — no Redis needed
+- **Worker env:** the qcluster process must have the same `.env` as the web process (specifically `OCR_ENCRYPTION_KEY`, `TINY_IDP_API_URL`, `TINY_IDP_API_KEY`). Missing keys cause job failures inside the worker, not at boot.
+- **Retry policy:** `Q_CLUSTER.max_attempts = 2`. Jobs that *raise* are retried once; jobs that return normally (including OCR jobs that persist a classified FAILED state) are not retried.
+- **Inspection:** Django admin → "Failed tasks" and "Successful tasks" (django_q models). For ad-hoc inspection: `uv run python manage.py shell` then `from django_q.models import Task; Task.objects.filter(success=False)`.
+- **Tests:** Use the `Q_CLUSTER_SYNC=1` env var (or pass `sync=True` to `async_task`) to run jobs in-process during pytest. No real cluster needed for the test suite.
+- **Jobs registered:** (none yet — P3.5 Phase 1 will add `apps.integrations.tasks.ocr_extract_job`).
 
 ## Coding Conventions
 - **TDD first** — write failing test, then implementation, then verify.
