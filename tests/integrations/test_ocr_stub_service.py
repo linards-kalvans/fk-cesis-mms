@@ -13,6 +13,7 @@ Tests:
 
 import pytest
 
+from apps.integrations import tiny_idp
 from apps.integrations.ocr import OCRProviderMode, extract_document_data, safe_extract_document_data
 
 pytestmark = pytest.mark.django_db
@@ -242,6 +243,70 @@ class TestSafeExtractDocumentData:
 
         assert result is None
         assert error_code == "provider_unavailable"
+
+
+# ---------------------------------------------------------------------------
+# Unit B — safe_extract_document_data: tiny-IDP exception classification
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exception_class,expected_code",
+    [
+        (tiny_idp.ProviderMisconfigurationError, "provider_misconfigured"),
+        (tiny_idp.AuthError, "auth_failed"),
+        (tiny_idp.RateLimitError, "rate_limited"),
+        (tiny_idp.RequestTimeoutError, "request_timeout"),
+        (tiny_idp.ProviderUnavailableError, "provider_unavailable"),
+        (tiny_idp.InvalidResponseError, "invalid_response"),
+    ],
+)
+def test_safe_extract_classifies_tiny_idp_exceptions(
+    monkeypatch, settings, exception_class, expected_code
+):
+    """Each tiny-IDP exception class maps to the correct classified error code."""
+
+    def _boom(**kwargs):
+        raise exception_class("test error")
+
+    monkeypatch.setattr(
+        "apps.integrations.ocr.extract_document_data",
+        _boom,
+    )
+
+    result, error_code = safe_extract_document_data(
+        kind="guardian_identity",
+        file_name="test.png",
+        content=b"fake",
+        content_type="image/png",
+    )
+
+    assert result is None
+    assert error_code == expected_code
+
+
+def test_safe_extract_non_tiny_idp_exception_returns_provider_unavailable(
+    monkeypatch, settings,
+):
+    """Non-tiny-IDP exceptions still return the generic provider_unavailable code."""
+
+    def _boom(**kwargs):
+        raise RuntimeError("something unexpected")
+
+    monkeypatch.setattr(
+        "apps.integrations.ocr.extract_document_data",
+        _boom,
+    )
+
+    result, error_code = safe_extract_document_data(
+        kind="guardian_identity",
+        file_name="test.png",
+        content=b"fake",
+        content_type="image/png",
+    )
+
+    assert result is None
+    assert error_code == "provider_unavailable"
 
 
 # ---------------------------------------------------------------------------
