@@ -406,6 +406,27 @@ class TestAsyncUploadJsContract:
         # node. We don't pin the exact duration, just that auto-dismiss exists.
         assert "TOAST_AUTO_DISMISS_MS" in source or "auto-dismiss" in source.lower()
 
+    def test_upload_failure_renders_latvian_message_not_raw_code(self):
+        source = _read_async_upload_js()
+        # The old path interpolated the raw English error code.
+        assert "'Augšupielāde neizdevās (' + err.message" not in source
+        # New path uses renderFailure with a stable Latvian sentence.
+        assert "Pamēģini vēlreiz vai aizpildi laukus manuāli" in source
+
+    def test_failure_renderer_uses_role_alert_wrapper(self):
+        source = _read_async_upload_js()
+        # renderFailure must inject a role="alert" wrapper so screen readers
+        # announce the failure (the bare <p> slot has no aria-live).
+        assert 'role="alert"' in source
+        assert "fk-inline-error" in source
+
+    def test_no_ocr_badge_text_is_latvian(self):
+        source = _read_async_upload_js()
+        # The legacy "No OCR" English literal is gone. Latvian "No OCR
+        # dokumenta" replaces it (reads "from the OCR document").
+        assert "'No OCR'" not in source
+        assert "No OCR dokumenta" in source
+
 
 class TestParentThemeCssContract:
     """Selectors that the Slice B JS renders into the DOM must have matching
