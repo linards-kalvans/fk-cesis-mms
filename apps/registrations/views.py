@@ -188,23 +188,51 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     if request.method == "POST":
         if not editable:
             raise Http404
+        is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        # AJAX auto-save must never submit, even if the payload includes
+        # submit_action=submit. Submission is a deliberate user click.
+        submit_requested = (
+            request.POST.get("submit_action") == "submit" and not is_ajax
+        )
         form = RegistrationApplicationForm(
             request.POST,
             request.FILES,
-            is_submit=request.POST.get("submit_action") == "submit",
+            is_submit=submit_requested,
             has_existing_document=_active_guardian_identity_exists(application),
         )
         if form.is_valid():
-            application = create_or_update_draft(
-                data=form.cleaned_data,
-                files=request.FILES,
-                application=application,
-                verified_account=account,
-            )
-            if request.POST.get("submit_action") == "submit":
+            try:
+                application = create_or_update_draft(
+                    data=form.cleaned_data,
+                    files=request.FILES,
+                    application=application,
+                    verified_account=account,
+                )
+            except ValueError as exc:
+                if is_ajax:
+                    return JsonResponse(
+                        {"errors": [{"field": "__all__", "label": "", "message": str(exc)}]},
+                        status=400,
+                    )
+                raise
+            if is_ajax:
+                saved_at = timezone.now().replace(microsecond=0).isoformat()
+                return JsonResponse(
+                    {
+                        "saved_at": saved_at,
+                        "consent_recorded": bool(application.personal_data_consent_at),
+                    },
+                    status=200,
+                )
+            if submit_requested:
                 submit_application(application, account)
                 return redirect("registrations:parent-portal")
             return redirect("registrations:application-workspace", application_id=application.id)
+        elif is_ajax:
+            return JsonResponse(
+                {"errors": form.error_summary_items()},
+                status=400,
+            )
     else:
         form = RegistrationApplicationForm(
             initial={
