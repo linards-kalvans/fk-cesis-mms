@@ -37,6 +37,8 @@ def test_toast_renders_message_and_tone_hook():
     assert "Saglabāts" in output
     assert "data-toast" in output
     assert 'data-toast-tone="success"' in output
+    assert 'role="status"' in output
+    assert 'aria-live="polite"' in output
 
 
 def test_toast_defaults_to_neutral_tone_when_unspecified():
@@ -44,6 +46,16 @@ def test_toast_defaults_to_neutral_tone_when_unspecified():
         '{% include "parent_ui/includes/toast.html" with message="Saglabāts" %}'
     )
     assert 'data-toast-tone="neutral"' in output
+    assert 'role="status"' in output
+    assert 'aria-live="polite"' in output
+
+
+def test_toast_warning_uses_assertive_live_region():
+    output = _render(
+        '{% include "parent_ui/includes/toast.html" with message="Brīdinājums" tone="warning" %}'
+    )
+    assert 'role="alert"' in output
+    assert 'aria-live="assertive"' in output
 
 
 def test_empty_state_renders_title_and_body():
@@ -65,3 +77,19 @@ def test_error_state_renders_title_body_and_alert_role():
     assert "Lūdzu, mēģiniet vēlreiz." in output
     assert "data-error-state" in output
     assert 'role="alert"' in output
+
+
+def test_empty_state_omits_title_element_when_no_title_given():
+    output = _render(
+        '{% include "parent_ui/includes/empty_state.html" with body="Tikai pamatteksts." %}'
+    )
+    assert "Tikai pamatteksts." in output
+    assert "fk-empty-state__title" not in output
+
+
+def test_error_state_omits_title_element_when_no_title_given():
+    output = _render(
+        '{% include "parent_ui/includes/error_state.html" with body="Tikai pamatteksts." %}'
+    )
+    assert "Tikai pamatteksts." in output
+    assert "fk-error-state__title" not in output
