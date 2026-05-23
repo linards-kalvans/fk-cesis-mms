@@ -50,7 +50,8 @@ def _normalize_token(token: str, *, is_first: bool) -> str:
 
     Handles hyphenated compound surnames by splitting on ``-`` and
     capitalizing each sub-token. Particles (e.g. "van") stay lowercase
-    unless they form the first token of the full name.
+    unless ``is_first`` is True (i.e. the particle is the sole token of
+    the full name).
     """
     if not token:
         return ""
