@@ -8,6 +8,6 @@
      body  — Latvian explanatory / next-step copy (optional).
 #}
 <div class="fk-error-state" role="alert" data-error-state>
-  <p class="fk-error-state__title">{{ title|default:'' }}</p>
+  {% if title %}<p class="fk-error-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-error-state__body">{{ body }}</p>{% endif %}
 </div>

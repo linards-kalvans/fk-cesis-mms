@@ -10,8 +10,8 @@
 #}
 <div
   class="fk-toast fk-toast--{{ tone|default:'neutral' }}"
-  role="status"
-  aria-live="polite"
+  role="{% if tone == 'warning' %}alert{% else %}status{% endif %}"
+  aria-live="{% if tone == 'warning' %}assertive{% else %}polite{% endif %}"
   data-toast
   data-toast-tone="{{ tone|default:'neutral' }}"
 >

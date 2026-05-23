@@ -6,6 +6,6 @@
      body  — Latvian explanatory copy (optional).
 #}
 <div class="fk-empty-state" data-empty-state>
-  <p class="fk-empty-state__title">{{ title|default:'' }}</p>
+  {% if title %}<p class="fk-empty-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-empty-state__body">{{ body }}</p>{% endif %}
 </div>
