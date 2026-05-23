@@ -6,6 +6,15 @@ from django.db import models
 
 from apps.core.models import TimeStampedModel
 
+PERSONAL_DATA_CONSENT_VERSION = "v1-2026-05"
+"""Current version identifier for the personal-data-consent text.
+
+Bump this string (and ship a new T&C template partial) whenever the consent
+content materially changes. The version persisted on
+`RegistrationApplication.personal_data_consent_version` records which text
+the user agreed to.
+"""
+
 
 class RegistrationApplication(TimeStampedModel):
     """A parent's registration application for a child.
@@ -82,6 +91,12 @@ class RegistrationApplication(TimeStampedModel):
 
     # Field source classification (JSON)
     field_sources = models.JSONField(default=dict, blank=True)
+
+    # Personal-data-consent (P4 — gate UX lands in slice C)
+    personal_data_consent_at = models.DateTimeField(null=True, blank=True)
+    personal_data_consent_version = models.CharField(
+        max_length=32, null=True, blank=True
+    )
 
     submitted_at = models.DateTimeField(null=True, blank=True)
 
