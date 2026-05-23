@@ -14,7 +14,10 @@ from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import Guardian, KitSizeOption, Member
-from apps.registrations.models import RegistrationApplication
+from apps.registrations.models import (
+    PERSONAL_DATA_CONSENT_VERSION,
+    RegistrationApplication,
+)
 
 # Module-level wrapper for monkeypatch compatibility.
 # Tests patch both apps.registrations.services.extract_document_data and
@@ -462,6 +465,20 @@ def create_or_update_draft(
 
     if application.status != RegistrationApplication.Status.FIX_REQUESTED:
         application.status = RegistrationApplication.Status.DRAFT
+
+    # Personal-data-consent stamping. Once granted, never cleared by a later
+    # save: the server holds the historical record. Re-stamp only when the
+    # stored version differs from the current consent text version, so an
+    # idempotent re-save does not refresh the timestamp.
+    # Strict `is True` — callers must pass cleaned form data (Django BooleanField yields strict bool).
+    if data.get("personal_data_consent") is True:
+        if (
+            application.personal_data_consent_at is None
+            or application.personal_data_consent_version != PERSONAL_DATA_CONSENT_VERSION
+        ):
+            application.personal_data_consent_at = timezone.now()
+            application.personal_data_consent_version = PERSONAL_DATA_CONSENT_VERSION
+
     application.save()
 
     # Handle reusable guardian document for new applications.
