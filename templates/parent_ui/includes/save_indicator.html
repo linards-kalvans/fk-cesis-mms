@@ -1,4 +1,12 @@
-{# Save indicator partial — P4 Slice C. JS toggles data-save-state and updates textContent. #}
-<span class="fk-save-indicator" role="status" aria-live="polite" data-save-indicator hidden>
+{# Save indicator partial — P4 Slice C. JS toggles data-save-state and reads
+   the data-save-message-* attrs to update textContent. Strings come from
+   apps.registrations.messages so no Latvian copy is hardcoded in JS. #}
+<span class="fk-save-indicator" role="status" aria-live="polite"
+      data-save-indicator
+      data-save-state="idle"
+      data-save-message-saving="{{ save_indicator_saving_msg }}"
+      data-save-message-saved="{{ save_indicator_saved_msg }}"
+      data-save-message-error="{{ save_indicator_error_msg }}"
+      hidden>
   <span class="fk-save-indicator__label" data-save-label></span>
 </span>

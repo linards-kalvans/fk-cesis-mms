@@ -271,6 +271,46 @@ def test_template_consent_checkbox_unchecked_when_version_mismatches():
     )
 
 
+def test_save_indicator_renders_message_data_attrs():
+    """Save indicator must carry data-save-message-{saving,saved,error} attrs
+    sourced from apps.registrations.messages so wizard.js never hardcodes copy.
+    """
+    from apps.registrations.messages import (
+        SAVE_INDICATOR_ERROR,
+        SAVE_INDICATOR_SAVED,
+        SAVE_INDICATOR_SAVING,
+    )
+
+    client = Client()
+    acct, app = _make_draft("save-indicator-msgs@example.com")
+    _login(client, acct)
+
+    resp = client.get(f"/applications/{app.pk}/")
+    assert resp.status_code == 200
+    html = resp.content.decode()
+
+    pattern = re.compile(r"<[^>]*\bdata-save-indicator\b[^>]*>", re.IGNORECASE)
+    match = pattern.search(html)
+    assert match, "Expected an element with data-save-indicator in the rendered HTML."
+    tag = match.group(0)
+
+    saving = _attr_value(tag, "data-save-message-saving")
+    saved = _attr_value(tag, "data-save-message-saved")
+    error = _attr_value(tag, "data-save-message-error")
+
+    assert saving == SAVE_INDICATOR_SAVING, (
+        f"Expected data-save-message-saving={SAVE_INDICATOR_SAVING!r}, got {saving!r}"
+    )
+    assert saved == SAVE_INDICATOR_SAVED, (
+        f"Expected data-save-message-saved={SAVE_INDICATOR_SAVED!r}, got {saved!r}"
+    )
+    assert error == SAVE_INDICATOR_ERROR, (
+        f"Expected data-save-message-error={SAVE_INDICATOR_ERROR!r}, got {error!r}"
+    )
+    # Substring sniff for Latvian copy (mirrors task spec).
+    assert "Saglabā" in saving
+
+
 def test_template_consent_checkbox_unchecked_when_no_consent():
     client = Client()
     acct, app = _make_draft("consent-none@example.com")
