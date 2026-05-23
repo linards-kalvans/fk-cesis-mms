@@ -73,21 +73,27 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 4. Open gaps and debt
 
 ### Security and architecture gaps
-- audit/event baseline still incomplete (P6 target)
+- audit/event baseline still incomplete (P7 target)
 
 ### Registration UX gaps
-- unnecessary re-upload can replace earlier file and create confusing admin rows (P6 target)
+- step-gated wizard validation with background draft auto-save not yet implemented (P4 target)
+- camera-capture option for document/photo upload not yet implemented (P4 target)
+- personal-data consent gate on the ID-documents step not yet implemented (P4 target)
+- OCR processing UX (spinner, success confirmation, name title-casing) not yet implemented (P4 target)
+- Latvian copy normalization across parent-facing surfaces still incomplete (P4 target)
+- mobile-first responsiveness on the parent registration workspace still pending (P4 target)
+- unnecessary re-upload can replace earlier file and create confusing admin rows (P7 target)
 
 ### Admin UX gaps
-- admin review should show inline identity-document previews beside applicant data (P4 target)
-- admin document UX should better distinguish active vs replaced documents (P6 target)
-- training-group assignment flow still incomplete (P4 target)
-- review-action audit entries still incomplete (P6 target)
+- admin review should show inline identity-document previews beside applicant data (P5 target)
+- admin document UX should better distinguish active vs replaced documents (P7 target)
+- training-group assignment flow still incomplete (P5 target)
+- review-action audit entries still incomplete (P7 target)
 
 ### Business workflow gaps
-- agreement generation / manual-signing flow not implemented yet (P4 target)
-- billing / Invoice Ninja sync not implemented yet (P5 target)
-- admin export and operations polish still pending (P6 target)
+- agreement generation / manual-signing flow not implemented yet (P5 target)
+- billing / Invoice Ninja sync not implemented yet (P6 target)
+- admin export and operations polish still pending (P7 target)
 
 ---
 
@@ -158,7 +164,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 **Why between P3 and P4**
 - P3 delivered real OCR but kept it synchronous: the form blocks for ~4–10 s per upload (live runs showed 4182–9609 ms on tiny-IDP). That latency dominates parent-facing UX.
-- M1 already flags background-job baseline as missing. Pulling it forward here unblocks future async work (agreement-state sync in P4, billing sync in P5).
+- M1 already flags background-job baseline as missing. Pulling it forward here unblocks future async work (agreement-state sync in P5, billing sync in P6).
 - Belongs before P4 because the agreement-platform sync introduced in P4 should be built on the same job runner, not bolted on later.
 
 **Target outcome**
@@ -169,8 +175,27 @@ Do **not** use archived implementation plans for current planning unless user ex
 - Background-job runner adopted: **django-q2** (DB-broker default, single-instance friendly). Worker process documented in `AGENTS.md` run instructions.
 - No regression of P3 secure-storage posture: encrypted payload + summary still persisted; non-blocking failure path preserved.
 
-### P4 — Approval-to-agreement flow
+### P4 — Parent-flow UX polish + mobile-first workspace
 **Why fourth**
+- P3.5 deferred its visual polish (spinners, chip styling, source badges, visibility-aware polling, failure-message Latvianization); consolidating leftovers now closes that loop before any new workflow build
+- parents are using the live LAN baseline now; compounding clarity on their flow before staff-workflow expansion yields faster ground-truth value
+- the approval-to-agreement phase (now P5) reshapes staff workflow, not parent UX — a stable parent surface lets P5 build without re-touching the wizard
+- multilingual architecture remains an explicit non-priority (Section 8); the i18n work in this phase is Latvian copy normalization, not translation infrastructure
+
+**Target outcome**
+- P3.5 leftover polish landed: calm branded spinner during `ocr_running` ("Apstrādājam dokumentu…"); one-shot "Dokumenta apstrāde pabeigta. Persona atpazīta kā <First Last>." confirmation on `ocr_done`; refined OCR suggestion chip styling and source-badge visual consistency; visibility-aware polling (pauses while tab hidden, resumes on focus); Latvianized failure messages for upload/OCR/validation errors
+- Latvian copy normalized across all parent-facing templates, partials, and inline JS strings; zero English leakage on parent flows; admin surfaces unchanged
+- name normalization from OCR: ALL CAPS → Latvian title-case applied at the OCR-result-processing layer before the decrypted prefill summary is consumed; handles hyphenated compound surnames and particles; encrypted payload at rest is unchanged
+- step-gated wizard with inline validation and auto-save: "Turpināt" CTA on each step disabled until that step's required fields are valid; validation on blur for first-touch and on change for previously-invalid fields; inline error messages; draft auto-saves with ~500 ms debounce on field change, plus on blur and on step transition; subtle "Saglabāts" indicator; transient save failures retry silently; auto-save preserves `fix_requested` status; ownership posture unchanged
+- personal data consent on the ID-documents step: required checkbox at the top of step 1; expandable inline T&C (default Latvian draft, pending legal review); "Turpināt" on step 1 disabled until checkbox ticked AND step-1 fields valid; `personal_data_consent_at` and `personal_data_consent_version` persist on `RegistrationApplication`; existing in-flight drafts re-consent on resume
+- document/photo upload with camera capture: each upload slot exposes "Augšupielādēt failu" and "Uzņemt attēlu" (HTML `capture="environment"`); no custom `getUserMedia`; camera control hidden gracefully on unsupported devices; reuses P3.5 async upload + OCR enqueue path
+- mobile-first registration workspace: `/applications/<id>/` wizard laid out narrow-viewport-first then enhanced for desktop; sticky primary CTA; progressive disclosure; ≥44 px touch targets
+- entry + chooser + portal polished: `/register/`, `/register/verify/`, `/portal/`, parent registration list audited for mobile breakpoints, empty/error state clarity, visual cohesion with workspace
+- cross-cutting UX primitives: shared empty-state and error-state partials; consistent spinner/toast/inline-error patterns
+- minimal schema change scoped to consent: two new nullable fields on `RegistrationApplication` (`personal_data_consent_at`, `personal_data_consent_version`); no other model changes, no admin redesign, no new business rules
+
+### P5 — Approval-to-agreement flow
+**Why fifth**
 - agreement is business basis for billing
 - admin review quality should improve before agreement decisions
 - simpler first slice avoids premature in-app e-sign orchestration
@@ -181,8 +206,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 - generate agreement after approval
 - track agreement state from external agreement platform
 
-### P5 — Billing / Invoice Ninja sync
-**Why fifth**
+### P6 — Billing / Invoice Ninja sync
+**Why sixth**
 - should follow agreement flow in business sequence
 
 **Target outcome**
@@ -191,8 +216,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 - automatic billing trigger after agreement platform `completed` state
 - Invoice Ninja sync and payment-status visibility
 
-### P6 — Admin operations / export / audit polish
-**Why sixth**
+### P7 — Admin operations / export / audit polish
+**Why seventh**
 - builds on earlier workflow completion
 - improves day-to-day operations and controls
 
@@ -202,7 +227,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - audit completion
 - document/admin UX polish
 
-### P7 — Calendar + WhatsApp attendance integration
+### P8 — Calendar + WhatsApp attendance integration
 **Why last**
 - explicitly future scope
 - likely separate platform/integration boundary
@@ -408,8 +433,79 @@ P3.5 is complete when all of the following are true:
    - `AGENTS.md` describes the worker process, the job lifecycle, and how OCR fits in
    - `README.md` includes worker startup in the local-dev quickstart
 
-### P4 acceptance — Approval-to-agreement flow
+### P4 acceptance — Parent-flow UX polish + mobile-first workspace
 P4 is complete when all of the following are true:
+
+1. **P3.5 polish leftovers landed**:
+   - calm branded spinner during `ocr_running` with "Apstrādājam dokumentu…" copy
+   - one-shot "Dokumenta apstrāde pabeigta. Persona atpazīta kā <First Last>." confirmation on `ocr_done`
+   - refined OCR suggestion chip styling and source-badge visual consistency
+   - visibility-aware polling pauses while the tab is hidden and resumes on focus
+   - Latvianized failure messages for upload, OCR, and validation errors
+2. **Latvian copy normalized** across all parent-facing templates, partials, and inline JS strings; zero English leakage on `/register/`, `/register/verify/`, `/portal/`, `/applications/new/`, `/applications/<id>/`; admin surfaces unchanged.
+3. **Name normalization from OCR**:
+   - ALL CAPS → Latvian title-case ("JĀNIS BĒRZIŅŠ" → "Jānis Bērziņš")
+   - hyphenated compound surnames ("BĒRZIŅŠ-KALNIŅŠ" → "Bērziņš-Kalniņš") handled
+   - particles ("VAN DER BERG" → "van der Berg") handled
+   - normalization at the OCR-result-processing layer before the decrypted prefill summary is consumed; encrypted payload at rest unchanged
+   - unit tests cover representative Latvian + particle cases
+4. **Step-gated wizard with inline validation and auto-save**:
+   - "Turpināt" CTA disabled until current step's required fields are all valid
+   - validation runs on blur for first-touch fields and on change for fields previously shown invalid
+   - inline error messages render beneath each field
+   - draft auto-saves with ~500 ms debounce on field change, plus on blur and on step transition
+   - "Saglabāts" indicator confirms persistence; transient save failures retry silently and surface only on terminal failure
+   - auto-save preserves `fix_requested` status; ownership posture unchanged
+5. **Personal data consent on step 1 (ID documents)**:
+   - required checkbox at the top of the ID-documents step
+   - expandable inline T&C (collapsed by default, "Lasīt vairāk" toggle) with default Latvian draft pending legal review
+   - "Turpināt" on step 1 disabled until checkbox ticked AND step-1 fields valid
+   - `personal_data_consent_at` (timestamp) and `personal_data_consent_version` (text) persist on `RegistrationApplication`
+   - resuming a draft with prior consent of the current version does not re-prompt
+   - existing in-flight drafts must re-consent on resume (consent fields default to unset)
+6. **Document/photo upload with camera capture**:
+   - each upload slot exposes "Augšupielādēt failu" (file picker) and "Uzņemt attēlu" (camera capture)
+   - camera capture uses HTML `<input type="file" accept="image/*" capture="environment">`; no custom `getUserMedia` pipeline in this phase
+   - camera control hidden gracefully on devices/browsers without `capture` support
+   - captured images flow through the existing async upload + OCR enqueue path from P3.5
+7. **Mobile-first registration workspace**:
+   - `/applications/<id>/` wizard laid out narrow-viewport-first, enhanced for desktop
+   - primary CTA sticky on mobile
+   - wizard steps use progressive disclosure (one step at a time, prior steps collapsible/back-navigable)
+   - all interactive controls (wizard nav, document card actions, consent checkbox, camera/upload buttons) have touch targets ≥44 px
+8. **Entry + chooser + portal polished**:
+   - `/register/`, `/register/verify/`, `/portal/`, and parent registration list audited at mobile breakpoints
+   - empty and error states use the shared cross-cutting primitives
+   - visual cohesion with the workspace (same tokens, typography, spacing)
+9. **Cross-cutting UX primitives**:
+   - shared empty-state partial used across surfaces
+   - shared error-state partial used across surfaces
+   - consistent spinner, toast, and inline-error patterns
+10. **No regression**:
+    - verified entry, chooser, continue draft, start new, save draft, submit still work
+    - async upload, OCR enqueue, suggestion accept/dismiss still work
+    - non-blocking OCR failure path still passes its test
+    - ownership/security posture unchanged
+11. **Schema migration applied**:
+    - two new nullable fields on `RegistrationApplication` (`personal_data_consent_at`, `personal_data_consent_version`)
+    - migration committed; existing drafts default to unset (forcing re-consent on resume)
+    - no other model changes
+12. **Tests cover**:
+    - name-normalization helper across Latvian, hyphenated, particle, and edge cases
+    - "Turpināt" gating: invalid field → disabled; valid field + missing consent on step 1 → disabled; both valid → enabled
+    - auto-save debounce, blur, and step-transition triggers; transient retry path
+    - consent persistence and resume behavior
+    - async upload from camera-capture input
+    - OCR success confirmation message renders with normalized name
+    - visibility-aware polling pauses/resumes correctly
+    - critical mobile breakpoints render expected layout (DOM-level, not pixel-perfect)
+13. **Documentation updated**:
+    - `AGENTS.md` notes the T&C version handling and consent fields
+    - `README.md` worker startup section unchanged from P3.5
+    - default T&C text marked as pending legal review
+
+### P5 acceptance — Approval-to-agreement flow
+P5 is complete when all of the following are true:
 
 1. Admin review shows inline document preview:
    - guardian and member ID docs visible inline beside applicant data
@@ -452,8 +548,8 @@ P4 is complete when all of the following are true:
    - external-platform linkage/state tracking
    - signed-state sync behavior
 
-### P5 acceptance — Billing / Invoice Ninja sync
-P5 is complete when all of the following are true:
+### P6 acceptance — Billing / Invoice Ninja sync
+P6 is complete when all of the following are true:
 
 1. Billing starts only after agreement platform final state is **completed**.
 2. Billing is created automatically after Django sync confirms `completed` state.
@@ -500,8 +596,8 @@ P5 is complete when all of the following are true:
    - retry/failure handling
    - payment-status sync
 
-### P6 acceptance — Admin operations / export / audit polish
-P6 is complete when all of the following are true:
+### P7 acceptance — Admin operations / export / audit polish
+P7 is complete when all of the following are true:
 
 1. Admin search/filter is useful for registrations, members, agreements, and billing records.
 2. CSV export exists for both:
@@ -532,8 +628,8 @@ P6 is complete when all of the following are true:
    - active/replaced document handling
    - admin visibility for sync/error states
 
-### P7 acceptance — Calendar + WhatsApp attendance integration
-P7 is complete when all of the following are true:
+### P8 acceptance — Calendar + WhatsApp attendance integration
+P8 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -567,6 +663,7 @@ Remaining focus:
 Remaining focus:
 - dual-document registration flow
 - OCR-backed prefill
+- parent-flow UX polish (step-gated wizard, auto-save, consent gate, camera capture, mobile-first workspace, Latvian copy normalization)
 
 ### M3 — Approval-to-membership and agreement completion
 Remaining focus:
