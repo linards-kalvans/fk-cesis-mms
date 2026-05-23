@@ -4,6 +4,8 @@ import re
 
 from django import forms
 
+from apps.registrations.messages import STEP_FIELD_FORMAT, STEP_FIELD_REQUIRED
+
 
 class RegistrationApplicationForm(forms.Form):
     """Form for creating/editing a RegistrationApplication."""
@@ -122,6 +124,35 @@ class RegistrationApplicationForm(forms.Form):
         self.fields["member_identity_document"].widget.attrs["data-progress-slot"] = "id_member_identity_document_progress"
         self.fields["member_portrait_document"].widget.attrs["data-async-upload"] = "member_portrait"
         self.fields["member_portrait_document"].widget.attrs["data-progress-slot"] = "id_member_portrait_document_progress"
+
+        # P4 Slice C — step-gating hooks. The wizard JS controller reads
+        # `data-step-required` to know which inputs gate "next" on each step,
+        # and the two `data-step-error-*` attrs supply the Latvian error copy
+        # without ever embedding it in markup.
+        _field_step_map = {
+            "guardian_identity_document": "documents",
+            "member_identity_document": "documents",
+            "guardian_full_name": "guardian",
+            "guardian_personal_id": "guardian",
+            "guardian_email": "guardian",
+            "guardian_phone": "guardian",
+            "guardian_declared_address": "guardian",
+            "member_full_name": "member",
+            "member_personal_id": "member",
+            "member_birth_date": "member",
+            "member_actual_address": "member",
+            "member_kit_size_shirt": "member",
+            "member_kit_size_shorts": "member",
+            "member_same_address_as_guardian": "member",
+            "preferred_agreement_signing": "agreement",
+        }
+        _format_validated = {"guardian_personal_id", "member_personal_id"}
+        for field_name, step_name in _field_step_map.items():
+            widget = self.fields[field_name].widget
+            widget.attrs["data-step-required"] = step_name
+            widget.attrs["data-step-error-empty"] = STEP_FIELD_REQUIRED
+            if field_name in _format_validated:
+                widget.attrs["data-step-error-format"] = STEP_FIELD_FORMAT
 
     def clean(self):
         cleaned_data = super().clean()

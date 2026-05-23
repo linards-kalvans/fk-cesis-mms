@@ -19,6 +19,7 @@
       <div class="fk-progress-line"><span></span></div>
       <span class="fk-mobile-step-label"></span>
     </div>
+    {% include "parent_ui/includes/save_indicator.html" %}
     {% else %}
     {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
     {% endif %}
@@ -67,6 +68,18 @@
       </div>
       <div class="fk-section-body">
         {% if section_name == "documents" %}
+          <div class="fk-consent" data-consent-block>
+            <label class="fk-consent__label">
+              <input type="checkbox" id="id_personal_data_consent" name="personal_data_consent"
+                     data-personal-data-consent
+                     data-consent-version="{{ personal_data_consent_version }}"
+                     data-step-required="documents"
+                     data-step-error-empty="{{ consent_required_msg }}"
+                     {% if application.personal_data_consent_version == personal_data_consent_version and application.personal_data_consent_at %}checked{% endif %}>
+              <span class="fk-consent__text">Piekrītu personas datu apstrādei</span>
+            </label>
+            {% include "registrations/_terms_v1.html" %}
+          </div>
           {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map workspace_mode=workspace_mode %}
         {% endif %}
         {% for bound_field in bound_fields %}

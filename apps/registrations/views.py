@@ -23,7 +23,18 @@ from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.registrations.forms import RegistrationApplicationForm
-from apps.registrations.models import RegistrationApplication
+from apps.registrations.messages import (
+    CONSENT_REQUIRED,
+    SAVE_INDICATOR_ERROR,
+    SAVE_INDICATOR_SAVED,
+    SAVE_INDICATOR_SAVING,
+    STEP_FIELD_FORMAT,
+    STEP_FIELD_REQUIRED,
+)
+from apps.registrations.models import (
+    PERSONAL_DATA_CONSENT_VERSION,
+    RegistrationApplication,
+)
 from apps.registrations.presentation import (
     DOCUMENT_FIELD_ID_MAP,
     DOCUMENT_KIND_LABELS,
@@ -293,6 +304,17 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             "ocr_decrypted_summaries": ocr_decrypted_summaries,
             "pending_document_ids_csv": pending_document_ids_csv,
             "pending_by_kind_json": pending_by_kind_json,
+            # P4 Slice C — Latvian copy + version constant for the consent
+            # gate, step-gating inline errors, and the auto-save indicator.
+            # Centralised in `apps.registrations.messages` so no inline
+            # English fallback can leak into parent-facing markup.
+            "step_field_required_msg": STEP_FIELD_REQUIRED,
+            "step_field_format_msg": STEP_FIELD_FORMAT,
+            "consent_required_msg": CONSENT_REQUIRED,
+            "save_indicator_saving_msg": SAVE_INDICATOR_SAVING,
+            "save_indicator_saved_msg": SAVE_INDICATOR_SAVED,
+            "save_indicator_error_msg": SAVE_INDICATOR_ERROR,
+            "personal_data_consent_version": PERSONAL_DATA_CONSENT_VERSION,
         },
     )
 
