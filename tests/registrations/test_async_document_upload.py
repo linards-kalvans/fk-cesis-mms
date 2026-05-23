@@ -7,6 +7,7 @@ record, enqueues the OCR job, and returns a JSON payload immediately.
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import patch
 
 import pytest
@@ -457,3 +458,73 @@ class TestParentThemeCssContract:
             ".fk-ocr-suggestion__dismiss",
         ):
             assert selector in css, f"Missing CSS selector: {selector}"
+
+
+class TestParentThemeCssContractSliceC:
+    """P4 Slice C — CSS hooks for save indicator, consent block, disabled CTA."""
+
+    SECTION_HEADER = "Wizard gating"
+
+    @staticmethod
+    def _read_css() -> str:
+        path = Path(__file__).resolve().parents[2] / "static" / "css" / "parent_theme.css"
+        return path.read_text(encoding="utf-8")
+
+    def _slice_c_section(self) -> str:
+        css = self._read_css()
+        idx = css.find(self.SECTION_HEADER)
+        assert idx != -1, f"Section header containing {self.SECTION_HEADER!r} not found"
+        return css[idx:]
+
+    def test_fk_save_indicator_class_defined(self):
+        css = self._read_css()
+        assert ".fk-save-indicator" in css
+
+    def test_fk_save_indicator_state_variants(self):
+        css = self._read_css()
+        for variant in ('data-save-state="saving"', 'data-save-state="saved"', 'data-save-state="error"'):
+            assert variant in css, f"Missing state selector: {variant}"
+
+    def test_fk_save_indicator_uses_red_token_for_error(self):
+        section = self._slice_c_section()
+        # The error variant block must reference --fk-red.
+        error_idx = section.find('data-save-state="error"')
+        assert error_idx != -1
+        # Look at the rule body that follows (next ~200 chars should cover it).
+        window = section[error_idx : error_idx + 400]
+        assert "var(--fk-red)" in window, "Error state must use --fk-red token"
+
+    def test_fk_consent_class_defined(self):
+        css = self._read_css()
+        assert ".fk-consent" in css
+
+    def test_fk_consent_label_meets_touch_target(self):
+        section = self._slice_c_section()
+        label_idx = section.find(".fk-consent__label")
+        assert label_idx != -1
+        window = section[label_idx : label_idx + 400]
+        assert re.search(
+            r"min-height\s*:\s*44px", window
+        ), ".fk-consent__label must declare ≥ 44px touch target"
+
+    def test_disabled_wizard_next_visual_cue(self):
+        section = self._slice_c_section()
+        assert "[data-wizard-next]" in section
+        # Find a rule for the disabled state and confirm it sets opacity + cursor.
+        # The selector could be `:disabled` or `[disabled]`.
+        has_disabled_selector = (
+            "[data-wizard-next]:disabled" in section
+            or "[data-wizard-next][disabled]" in section
+        )
+        assert has_disabled_selector, "Need disabled selector for [data-wizard-next]"
+        assert "opacity" in section
+        assert "cursor" in section
+        assert "not-allowed" in section
+
+    def test_no_new_color_tokens_introduced(self):
+        import re
+
+        section = self._slice_c_section()
+        # No 6-digit hex literals allowed in the new section.
+        matches = re.findall(r"#[0-9a-fA-F]{6}\b", section)
+        assert matches == [], f"Unexpected new hex color literals in Slice C section: {matches}"
