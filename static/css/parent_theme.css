@@ -929,3 +929,108 @@ h1, h2, h3 {
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* ── Wizard gating + auto-save (P4 Slice C) ── */
+
+/* Save status pill at the top of the wizard. Fixed min-width
+   prevents layout shift as the label cycles SAVING/SAVED/ERROR.
+   No green token exists in the design system, so the "saved"
+   state intentionally uses the neutral blue tone family. */
+
+.fk-save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--fk-border);
+  background: var(--fk-white);
+  color: var(--fk-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.fk-save-indicator[data-save-state="saving"] {
+  background: var(--fk-bg);
+  border-color: var(--fk-border);
+  color: var(--fk-muted);
+}
+
+.fk-save-indicator[data-save-state="saved"] {
+  background: var(--fk-soft-blue);
+  border-color: var(--fk-soft-blue);
+  color: var(--fk-blue);
+}
+
+.fk-save-indicator[data-save-state="error"] {
+  background: var(--fk-white);
+  border-color: var(--fk-red);
+  color: var(--fk-red);
+}
+
+.fk-save-indicator__label {
+  text-decoration: none;
+}
+
+/* Consent block above the documents grid in step 1. */
+
+.fk-consent {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--fk-border);
+  border-radius: var(--fk-radius-md);
+  background: var(--fk-white);
+}
+
+.fk-consent__label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.fk-consent__label input[type="checkbox"] {
+  margin-top: 4px;
+  accent-color: var(--fk-blue);
+}
+
+.fk-consent__text {
+  flex: 1 1 auto;
+  line-height: 1.45;
+}
+
+.fk-consent details {
+  margin-top: 8px;
+}
+
+.fk-consent details > summary {
+  cursor: pointer;
+  color: var(--fk-blue);
+  font-weight: 600;
+}
+
+.fk-consent details > *:not(summary) {
+  padding: 8px 0 0;
+}
+
+/* Disabled CTA — react to either the `:disabled` pseudo or the
+   `[disabled]` HTML attribute (JS sets `.disabled = true`). */
+
+[data-wizard-next]:disabled,
+[data-wizard-next][disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-wizard-next]:disabled:hover,
+[data-wizard-next][disabled]:hover,
+[data-wizard-next]:disabled:focus,
+[data-wizard-next][disabled]:focus {
+  filter: none;
+  transform: none;
+  box-shadow: none;
+}
