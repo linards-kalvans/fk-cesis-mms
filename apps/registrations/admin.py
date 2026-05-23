@@ -25,6 +25,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "reviewed_by",
         "reviewed_at",
         "approved_member",
+        # Consent stamps are gate-controlled (P4 Slice C). Never editable in admin.
+        "personal_data_consent_at",
+        "personal_data_consent_version",
         "created_at",
         "updated_at",
     )
