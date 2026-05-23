@@ -20,6 +20,7 @@ from apps.accounts.services import issue_one_time_code, send_one_time_code_email
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
+from apps.integrations.ocr_messages import get_ocr_error_message
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
@@ -701,6 +702,8 @@ def document_ocr_status(
         if document.ocr_status == Document.OcrStatus.COMPLETED
         else {},
     }
-    if document.ocr_status == Document.OcrStatus.FAILED and document.ocr_error_code:
-        payload["ocr_error_code"] = document.ocr_error_code
+    if document.ocr_status == Document.OcrStatus.FAILED:
+        if document.ocr_error_code:
+            payload["ocr_error_code"] = document.ocr_error_code
+        payload["ocr_error_message"] = get_ocr_error_message(document.ocr_error_code)
     return JsonResponse(payload)
