@@ -10,7 +10,8 @@ from django.template import Context, Template
 
 
 def _render(template_source: str) -> str:
-    return Template(template_source).render(Context({}))
+    rendered: str = Template(template_source).render(Context({}))
+    return rendered
 
 
 def test_spinner_renders_with_default_latvian_label():
