@@ -816,3 +816,109 @@ h1, h2, h3 {
   .fk-section-header { padding: 20px 16px 4px; }
   .fk-section-body { padding: 14px 16px 20px; }
 }
+
+/* ── OCR async UX (P4 Slice B) ── */
+
+.fk-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--fk-radius-md);
+  background: color-mix(in srgb, var(--fk-soft-blue) 70%, transparent);
+  color: var(--fk-blue);
+  font-size: 13px;
+}
+
+.fk-spinner__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--fk-blue);
+  border-top-color: transparent;
+  animation: fk-spinner-rotate 0.9s linear infinite;
+}
+
+.fk-spinner__label {
+  opacity: 0.85;
+  font-weight: 600;
+}
+
+@keyframes fk-spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fk-spinner__dot { animation: none; }
+}
+
+.fk-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--fk-radius-md);
+  border: 1px solid color-mix(in srgb, var(--fk-blue) 15%, transparent);
+  background: var(--fk-soft-blue);
+  color: var(--fk-blue);
+  font-size: 13px;
+  font-weight: 600;
+  animation: fk-toast-fade-in 0.2s ease-out;
+}
+
+.fk-toast--success {
+  background: #eaf8ef;
+  color: #22a85a;
+  border-color: color-mix(in srgb, #22a85a 18%, transparent);
+}
+
+.fk-toast--warning {
+  background: #fff8e1;
+  color: #b8860b;
+  border-color: color-mix(in srgb, #b8860b 22%, transparent);
+}
+
+.fk-toast__message { line-height: 1.35; }
+
+@keyframes fk-toast-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* OCR suggestion chip — align with badge family. */
+
+.fk-ocr-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--fk-soft-blue);
+  color: var(--fk-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fk-ocr-suggestion__label { opacity: 0.75; }
+.fk-ocr-suggestion__value { font-weight: 700; }
+
+.fk-ocr-suggestion__accept,
+.fk-ocr-suggestion__dismiss {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.fk-ocr-suggestion__accept {
+  background: var(--fk-blue);
+  color: var(--fk-white);
+}
+
+.fk-ocr-suggestion__accept:hover { filter: brightness(1.05); }
+.fk-ocr-suggestion__dismiss:hover { background: rgba(15, 8, 81, 0.06); }
