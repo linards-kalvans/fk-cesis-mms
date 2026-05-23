@@ -1,0 +1,14 @@
+{% comment %}
+templates/parent_ui/includes/spinner.html
+Calm branded spinner for async work (e.g. OCR processing).
+
+Parameters (via include with):
+  label  — Latvian status text. Defaults to "Apstrādājam dokumentu…".
+
+Slice A creates the markup; the visibility-aware polling behavior
+that consumes this partial lands in P4 Slice B.
+{% endcomment %}
+<div class="fk-spinner" role="status" aria-live="polite" data-spinner>
+  <span class="fk-spinner__dot" aria-hidden="true"></span>
+  <span class="fk-spinner__label">{{ label|default:"Apstrādājam dokumentu…" }}</span>
+</div>

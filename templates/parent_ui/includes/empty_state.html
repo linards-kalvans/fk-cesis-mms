@@ -1,0 +1,11 @@
+{# templates/parent_ui/includes/empty_state.html
+   Shared empty-state primitive for "no items yet" surfaces.
+
+   Parameters:
+     title — Latvian heading copy.
+     body  — Latvian explanatory copy (optional).
+#}
+<div class="fk-empty-state" data-empty-state>
+  <p class="fk-empty-state__title">{{ title|default:'' }}</p>
+  {% if body %}<p class="fk-empty-state__body">{{ body }}</p>{% endif %}
+</div>

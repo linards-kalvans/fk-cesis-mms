@@ -1,0 +1,19 @@
+{# templates/parent_ui/includes/toast.html
+   Auto-dismiss confirmation / inline status pill.
+
+   Parameters:
+     message — visible text (caller-supplied; renders empty if omitted).
+     tone    — "success" | "warning" | "neutral". Defaults to "neutral".
+
+   The data-toast / data-toast-tone hooks are consumed by a small JS
+   controller landing in P4 Slice B (auto-dismiss + dismiss-on-action).
+#}
+<div
+  class="fk-toast fk-toast--{{ tone|default:'neutral' }}"
+  role="status"
+  aria-live="polite"
+  data-toast
+  data-toast-tone="{{ tone|default:'neutral' }}"
+>
+  <span class="fk-toast__message">{{ message|default:'' }}</span>
+</div>
