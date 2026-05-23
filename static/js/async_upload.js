@@ -138,16 +138,29 @@
         // Still pending/running — keep polling with mild backoff.
         var nextInterval = Math.min(intervalMs + 500, POLL_MAX_MS);
         setProgressLabel(progressSlot, 'OCR notiek…');
-        setTimeout(function () {
-          pollStatus(documentId, progressSlot, deadline, nextInterval);
-        }, nextInterval);
+        scheduleNextPoll(documentId, progressSlot, deadline, nextInterval);
       })
       .catch(function () {
         var nextInterval = Math.min(intervalMs + 1000, POLL_MAX_MS);
-        setTimeout(function () {
-          pollStatus(documentId, progressSlot, deadline, nextInterval);
-        }, nextInterval);
+        scheduleNextPoll(documentId, progressSlot, deadline, nextInterval);
       });
+  }
+
+  function scheduleNextPoll(documentId, progressSlot, deadline, intervalMs) {
+    // Pause polling when the tab is hidden — the browser already throttles
+    // setTimeout in background tabs, but resuming on visibilitychange gives
+    // a snappier user experience when the parent comes back to the tab.
+    if (document.hidden) {
+      var resume = function () {
+        document.removeEventListener('visibilitychange', resume);
+        pollStatus(documentId, progressSlot, deadline, intervalMs);
+      };
+      document.addEventListener('visibilitychange', resume, { once: true });
+      return;
+    }
+    setTimeout(function () {
+      pollStatus(documentId, progressSlot, deadline, intervalMs);
+    }, intervalMs);
   }
 
   function bindFileInput(input) {

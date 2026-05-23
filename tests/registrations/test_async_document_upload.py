@@ -332,3 +332,46 @@ def test_post_member_portrait_does_not_enqueue_ocr():
     payload = json.loads(response.content)
     assert payload["ocr_status"] == "not_requested"
     assert enqueued == []
+
+
+# ---------------------------------------------------------------------------
+# Source-level contract checks on static/js/async_upload.js
+# ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402  (import after pytestmark is fine here)
+
+JS_PATH = Path(__file__).resolve().parents[2] / "static" / "js" / "async_upload.js"
+
+
+def _read_async_upload_js() -> str:
+    return JS_PATH.read_text(encoding="utf-8")
+
+
+class TestAsyncUploadJsContract:
+    """Source-level contract checks on static/js/async_upload.js.
+
+    The file ships unbundled and there is no JS test runner; substring
+    sniffs are the simplest stable assertion for "this hook exists".
+    """
+
+    def test_polling_checks_document_hidden(self):
+        source = _read_async_upload_js()
+        assert "document.hidden" in source, (
+            "Polling must check document.hidden so it can pause when the tab "
+            "is in the background (P4 Slice B requirement)."
+        )
+
+    def test_polling_resumes_on_visibilitychange(self):
+        source = _read_async_upload_js()
+        assert "visibilitychange" in source, (
+            "Polling must register a visibilitychange listener so a paused "
+            "poll resumes when the tab becomes visible again."
+        )
+
+    def test_polling_listener_uses_once_semantics(self):
+        """The visibilitychange listener must remove itself after firing once."""
+        source = _read_async_upload_js()
+        assert "{ once: true }" in source or "removeEventListener" in source, (
+            "Visibilitychange listener must be one-shot — use `{ once: true }` "
+            "or call removeEventListener inside the handler."
+        )
