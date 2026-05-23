@@ -17,11 +17,13 @@ from apps.integrations.name_normalization import normalize_latvian_name
         ("DE LA CRUZ", "de la Cruz"),
         ("VON TRAPP", "von Trapp"),
         ("VAN", "Van"),  # particle as the only/first token must capitalize.
+        ("VAN BERG", "van Berg"),  # particle as first of multiple tokens stays lowercase.
         ("KALNIŅŠ-VAN-BERG", "Kalniņš-van-Berg"),
         ("  KRŪMIŅŠ   ", "Krūmiņš"),
         ("", ""),
         ("   ", ""),
         ("Jānis", "Jānis"),  # already normalized stays stable.
+        ("O'BRIEN", "O'brien"),
         ("ČUKČA-ĶĒNIŅŠ", "Čukča-Ķēniņš"),
     ],
 )
