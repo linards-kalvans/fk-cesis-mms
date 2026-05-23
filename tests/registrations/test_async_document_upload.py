@@ -405,3 +405,34 @@ class TestAsyncUploadJsContract:
         # Auto-dismiss happens via a setTimeout that removes the toast DOM
         # node. We don't pin the exact duration, just that auto-dismiss exists.
         assert "TOAST_AUTO_DISMISS_MS" in source or "auto-dismiss" in source.lower()
+
+
+class TestParentThemeCssContract:
+    """Selectors that the Slice B JS renders into the DOM must have matching
+    CSS in parent_theme.css so the markup actually styles."""
+
+    @staticmethod
+    def _read_css() -> str:
+        path = Path(__file__).resolve().parents[2] / "static" / "css" / "parent_theme.css"
+        return path.read_text(encoding="utf-8")
+
+    def test_spinner_selectors_exist(self):
+        css = self._read_css()
+        for selector in (".fk-spinner", ".fk-spinner__dot", ".fk-spinner__label"):
+            assert selector in css, f"Missing CSS selector: {selector}"
+
+    def test_toast_selectors_exist(self):
+        css = self._read_css()
+        for selector in (".fk-toast", ".fk-toast--success", ".fk-toast__message"):
+            assert selector in css, f"Missing CSS selector: {selector}"
+
+    def test_ocr_suggestion_selectors_exist(self):
+        css = self._read_css()
+        for selector in (
+            ".fk-ocr-suggestion",
+            ".fk-ocr-suggestion__label",
+            ".fk-ocr-suggestion__value",
+            ".fk-ocr-suggestion__accept",
+            ".fk-ocr-suggestion__dismiss",
+        ):
+            assert selector in css, f"Missing CSS selector: {selector}"
