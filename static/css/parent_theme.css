@@ -922,3 +922,10 @@ h1, h2, h3 {
 
 .fk-ocr-suggestion__accept:hover { filter: brightness(1.05); }
 .fk-ocr-suggestion__dismiss:hover { background: rgba(15, 8, 81, 0.06); }
+
+.fk-inline-error {
+  display: block;
+  color: var(--fk-red);
+  font-size: 13px;
+  line-height: 1.4;
+}

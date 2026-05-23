@@ -98,7 +98,9 @@
     if (!slot) return;
     slot.removeAttribute('hidden');
     slot.setAttribute('data-state', 'failed');
-    slot.textContent = message
+    slot.innerHTML =
+      '<div class="fk-inline-error" role="alert" data-inline-error></div>';
+    slot.querySelector('[data-inline-error]').textContent = message
       || 'Neizdevās apstrādāt dokumentu automātiski. Lūdzu, aizpildi laukus manuāli.';
   }
 
@@ -124,7 +126,7 @@
     var badge = document.createElement('span');
     badge.setAttribute('data-source-badge', kind);
     badge.className = 'fk-source-badge fk-source-badge--' + kind;
-    badge.textContent = kind === 'ocr' ? 'No OCR' : kind;
+    badge.textContent = kind === 'ocr' ? 'No OCR dokumenta' : kind;
     input.parentNode.appendChild(badge);
   }
 
@@ -252,8 +254,11 @@
             POLL_INITIAL_MS
           );
         })
-        .catch(function (err) {
-          setProgressLabel(progressSlot, 'Augšupielāde neizdevās (' + err.message + ')');
+        .catch(function () {
+          renderFailure(
+            progressSlot,
+            'Augšupielāde neizdevās. Pamēģini vēlreiz vai aizpildi laukus manuāli.'
+          );
         });
     });
   }
