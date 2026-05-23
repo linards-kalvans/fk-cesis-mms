@@ -36,6 +36,12 @@ _TRANSIENT_OCR_ERROR_CODES = frozenset(
     {"request_timeout", "provider_unavailable", "rate_limited"}
 )
 
+# Person-field keys whose values are Latvian person names and therefore
+# need title-case normalization when shown in the encrypted_summary. The
+# parent registration form intentionally has no middle_name field, so
+# middle_name is normalized for summary display only (no prefill read).
+_NAME_KEYS = ("first_name", "last_name", "middle_name")
+
 
 _OCR_FIELD_SOURCE_MAP: dict[str, dict[str, str]] = {
     "guardian_identity": {
@@ -106,7 +112,6 @@ def ocr_extract_job(document_id: int) -> None:
             "raw_reference": result.raw_reference,
         }
     )
-    _NAME_KEYS = ("first_name", "last_name", "middle_name")
     summary_lines: list[str] = []
     for key, value in result.person_fields.items():
         display_value = normalize_latvian_name(value) if key in _NAME_KEYS else value
