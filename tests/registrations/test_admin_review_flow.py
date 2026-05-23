@@ -932,3 +932,17 @@ class TestEmailOnReviewActions:
         with patch("apps.registrations.services.send_mail") as mock_send:
             approve_application(app, staff_user)
             assert mock_send.call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# 11. Admin readonly — consent stamp fields must not be editable
+# ---------------------------------------------------------------------------
+
+
+def test_admin_consent_fields_are_readonly():
+    """Admin must not allow staff to edit consent timestamps directly."""
+    from apps.registrations.admin import RegistrationApplicationAdmin
+
+    readonly = set(RegistrationApplicationAdmin.readonly_fields)
+    assert "personal_data_consent_at" in readonly
+    assert "personal_data_consent_version" in readonly
