@@ -375,3 +375,33 @@ class TestAsyncUploadJsContract:
             "Visibilitychange listener must be one-shot — use `{ once: true }` "
             "or call removeEventListener inside the handler."
         )
+
+    def test_pending_state_renders_branded_spinner_markup(self):
+        source = _read_async_upload_js()
+        # The spinner markup the JS injects must carry the same DOM hook the
+        # parent_ui/includes/spinner.html partial uses, so future CSS and JS
+        # controllers can attach to a single selector.
+        assert "fk-spinner" in source
+        assert "data-spinner" in source
+
+    def test_completed_state_renders_branded_toast_markup(self):
+        source = _read_async_upload_js()
+        assert "fk-toast" in source
+        assert "data-toast" in source
+        # The success copy must be Latvian and reference the recognized person.
+        assert "Persona atpazīta" in source
+        assert "Dokumenta apstrāde pabeigta" in source
+
+    def test_failed_state_consumes_server_supplied_latvian_message(self):
+        source = _read_async_upload_js()
+        # The JS must read the new ocr_error_message field instead of
+        # synthesizing an English-free template inline.
+        assert "ocr_error_message" in source
+        # The pre-Slice-B raw-text path must be gone.
+        assert "'OCR neizdevās ('" not in source
+
+    def test_toast_auto_dismisses(self):
+        source = _read_async_upload_js()
+        # Auto-dismiss happens via a setTimeout that removes the toast DOM
+        # node. We don't pin the exact duration, just that auto-dismiss exists.
+        assert "TOAST_AUTO_DISMISS_MS" in source or "auto-dismiss" in source.lower()

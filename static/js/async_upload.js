@@ -53,11 +53,53 @@
     slot.removeAttribute('hidden');
   }
 
-  function renderError(slot, errorCode) {
+  var TOAST_AUTO_DISMISS_MS = 4000;
+
+  function renderSpinner(slot, label) {
     if (!slot) return;
-    slot.textContent = 'OCR neizdevās (' + (errorCode || 'nezināms') + ') — '
-      + 'aizpildi laukus manuāli.';
+    slot.removeAttribute('hidden');
+    slot.setAttribute('data-state', 'running');
+    slot.innerHTML =
+      '<div class="fk-spinner" role="status" aria-live="polite" data-spinner>'
+      + '<span class="fk-spinner__dot" aria-hidden="true"></span>'
+      + '<span class="fk-spinner__label"></span>'
+      + '</div>';
+    slot.querySelector('.fk-spinner__label').textContent =
+      label || 'Apstrādājam dokumentu…';
+  }
+
+  function renderSuccessToast(slot, recognizedName) {
+    if (!slot) return;
+    slot.removeAttribute('hidden');
+    slot.setAttribute('data-state', 'completed');
+    var message = recognizedName
+      ? ('Dokumenta apstrāde pabeigta. Persona atpazīta kā ' + recognizedName + '.')
+      : 'Dokumenta apstrāde pabeigta.';
+    slot.innerHTML =
+      '<div class="fk-toast fk-toast--success" role="status" aria-live="polite" '
+      + 'data-toast data-toast-tone="success">'
+      + '<span class="fk-toast__message"></span>'
+      + '</div>';
+    slot.querySelector('.fk-toast__message').textContent = message;
+    // Auto-dismiss after a short delay.
+    setTimeout(function () { dismissToast(slot); }, TOAST_AUTO_DISMISS_MS);
+  }
+
+  function dismissToast(slot) {
+    if (!slot) return;
+    var toast = slot.querySelector('[data-toast]');
+    if (toast) toast.remove();
+    if (!slot.children || slot.children.length === 0) {
+      slot.setAttribute('hidden', '');
+    }
+  }
+
+  function renderFailure(slot, message) {
+    if (!slot) return;
+    slot.removeAttribute('hidden');
     slot.setAttribute('data-state', 'failed');
+    slot.textContent = message
+      || 'Neizdevās apstrādāt dokumentu automātiski. Lūdzu, aizpildi laukus manuāli.';
   }
 
   function applyExtractedFields(extractedFields) {
@@ -127,17 +169,19 @@
       .then(function (response) { return response.json(); })
       .then(function (payload) {
         if (payload.ocr_status === 'completed') {
-          setProgressLabel(progressSlot, 'OCR pabeigts');
-          applyExtractedFields(payload.extracted_fields || {});
+          var fields = payload.extracted_fields || {};
+          var name = fields.guardian_full_name || fields.member_full_name || '';
+          renderSuccessToast(progressSlot, name);
+          applyExtractedFields(fields);
           return;
         }
         if (payload.ocr_status === 'failed') {
-          renderError(progressSlot, payload.ocr_error_code);
+          renderFailure(progressSlot, payload.ocr_error_message);
           return;
         }
         // Still pending/running — keep polling with mild backoff.
         var nextInterval = Math.min(intervalMs + 500, POLL_MAX_MS);
-        setProgressLabel(progressSlot, 'OCR notiek…');
+        renderSpinner(progressSlot);
         scheduleNextPoll(documentId, progressSlot, deadline, nextInterval);
       })
       .catch(function () {
@@ -200,7 +244,7 @@
             setProgressLabel(progressSlot, 'Augšupielādēts');
             return;
           }
-          setProgressLabel(progressSlot, 'OCR notiek…');
+          renderSpinner(progressSlot);
           pollStatus(
             payload.document_id,
             progressSlot,
@@ -240,7 +284,7 @@
         slot = slotId ? document.getElementById(slotId) : null;
       }
       if (!slot) return;
-      setProgressLabel(slot, 'OCR notiek…');
+      renderSpinner(slot);
       pollStatus(docId, slot, Date.now() + POLL_DEADLINE_MS, POLL_INITIAL_MS);
     });
   })();
