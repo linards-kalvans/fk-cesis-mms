@@ -238,3 +238,109 @@ def test_status_returns_404_when_document_belongs_to_other_application():
 
     response = client.get(_url(app2.id, doc.id))
     assert response.status_code in {403, 404}
+
+
+def test_status_returns_latvian_error_message_when_failed(settings):
+    """FAILED status response must carry ocr_error_message in Latvian."""
+    from apps.integrations.ocr_messages import OCR_ERROR_MESSAGES_LV
+
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="failed-message@example.com", phone="+37120000010"
+    )
+    app = _make_application(account)
+    doc = _make_document(
+        app,
+        ocr_status=Document.OcrStatus.FAILED,
+        ocr_error_code="auth_failed",
+    )
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+
+    assert response.status_code == 200
+    payload = json.loads(response.content)
+    assert payload["ocr_status"] == "failed"
+    assert payload["ocr_error_code"] == "auth_failed"
+    assert payload["ocr_error_message"] == OCR_ERROR_MESSAGES_LV["auth_failed"]
+
+
+def test_status_emits_fallback_message_for_unknown_failure_code(settings):
+    """Unknown error code still produces a usable Latvian fallback message."""
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="failed-fallback@example.com", phone="+37120000011"
+    )
+    app = _make_application(account)
+    doc = _make_document(
+        app,
+        ocr_status=Document.OcrStatus.FAILED,
+        ocr_error_code="totally_bogus_value_not_in_mapping",
+    )
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+
+    payload = json.loads(response.content)
+    assert "ocr_error_message" in payload
+    assert "manuāli" in payload["ocr_error_message"].lower()
+
+
+def test_status_emits_message_when_failed_without_error_code(settings):
+    """A FAILED document with no recorded code still gets the fallback message."""
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="failed-no-code@example.com", phone="+37120000012"
+    )
+    app = _make_application(account)
+    doc = _make_document(
+        app,
+        ocr_status=Document.OcrStatus.FAILED,
+        ocr_error_code="",  # worker crashed before classifying
+    )
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+
+    payload = json.loads(response.content)
+    assert "ocr_error_message" in payload
+    assert payload["ocr_error_message"]
+    # ocr_error_code should be absent because the existing payload only adds it
+    # when truthy.
+    assert "ocr_error_code" not in payload
+
+
+def test_status_omits_error_message_when_pending(settings):
+    """ocr_error_message must NOT appear on pending payloads."""
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="pending-message@example.com", phone="+37120000013"
+    )
+    app = _make_application(account)
+    doc = _make_document(app, ocr_status=Document.OcrStatus.PENDING)
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+
+    payload = json.loads(response.content)
+    assert payload["ocr_status"] == "pending"
+    assert "ocr_error_message" not in payload
+
+
+def test_status_omits_error_message_when_completed(settings):
+    """ocr_error_message must NOT appear on completed payloads."""
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="completed-message@example.com", phone="+37120000014"
+    )
+    app = _make_application(account)
+    # Re-use the same pattern as the existing completed test — no extraction
+    # is needed because we only care about the absence of the message field.
+    doc = _make_document(app, ocr_status=Document.OcrStatus.COMPLETED)
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+
+    payload = json.loads(response.content)
+    assert payload["ocr_status"] == "completed"
+    assert "ocr_error_message" not in payload
