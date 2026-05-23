@@ -154,7 +154,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - live run on 2026-05-22 against `api.tiny-idp.com` surfaced and fixed three integration bugs (auth header, multipart field, response shape) before sign-off
 
 ### P3.5 — Async OCR UX + background-job baseline
-**Status:** complete (2026-05-22)
+**Status:** complete (2026-05-23 — phase shipping 2026-05-22, post-merge fixes 2026-05-23)
 
 **Why between P3 and P4**
 - P3 delivered real OCR but kept it synchronous: the form blocks for ~4–10 s per upload (live runs showed 4182–9609 ms on tiny-IDP). That latency dominates parent-facing UX.
@@ -353,7 +353,14 @@ P3 is complete when all of the following are true:
    - secure handling expectations where testable
 
 ### P3.5 acceptance — Async OCR UX + background-job baseline
-**Status:** complete (2026-05-22) — plan archived at `docs/superpowers/plans/2026-05-22-p3.5-async-ocr-ux.md`.
+**Status:** complete (2026-05-23) — plan archived at `docs/superpowers/plans/2026-05-22-p3.5-async-ocr-ux.md`.
+
+**Post-merge fixes (2026-05-23):**
+- `/applications/new/` redirects to a freshly created blank draft workspace (was rendering a synchronous wizard form with no application_id, so async upload had no endpoint to POST to).
+- Workspace wizard now lands on step 1 (ID documents) instead of the review step.
+- Page-load polling: workspace polls any documents already in `ocr_status=PENDING` on load (previously the JS only bound to file-pick events, so PENDING docs from a sync save were never observed).
+- Guardian-doc reuse no longer double-prefixes `private/documents/` on the file path (each reuse used to compound the prefix until `FileSystemStorage` ran out of `max_length`).
+- `STATICFILES_DIRS` switched to `(prefix, path)` tuple form so `/static/style-guide/tokens.css` resolves correctly.
 
 P3.5 is complete when all of the following are true:
 
