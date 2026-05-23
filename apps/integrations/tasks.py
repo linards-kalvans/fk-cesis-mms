@@ -17,6 +17,7 @@ from django_q.tasks import async_task
 
 from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
+from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS, safe_extract_document_data
 from apps.registrations.models import RegistrationApplication
 
@@ -105,9 +106,11 @@ def ocr_extract_job(document_id: int) -> None:
             "raw_reference": result.raw_reference,
         }
     )
+    _NAME_KEYS = ("first_name", "last_name", "middle_name")
     summary_lines: list[str] = []
     for key, value in result.person_fields.items():
-        summary_lines.append(f"{key}: {value}")
+        display_value = normalize_latvian_name(value) if key in _NAME_KEYS else value
+        summary_lines.append(f"{key}: {display_value}")
     for key, value in result.document_metadata.items():
         summary_lines.append(f"{key}: {value}")
     encrypted_summary = encrypt_json("\n".join(summary_lines))
