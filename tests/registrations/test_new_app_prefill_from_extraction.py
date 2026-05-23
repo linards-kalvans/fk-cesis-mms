@@ -210,3 +210,111 @@ class TestNewAppPrefillFromExtraction:
         content = resp.content.decode()
         # Must fall back to model field value
         assert "Fallback Parent" in content
+
+
+# ---------------------------------------------------------------------------
+# Helpers for direct-injection normalization tests
+# ---------------------------------------------------------------------------
+
+
+def _inject_completed_extraction(
+    settings,
+    *,
+    account,
+    kind,
+    first_name,
+    last_name,
+    personal_id="010101-99999",
+):
+    """Create a submitted prior app with a COMPLETED document + extraction.
+
+    Bypasses the OCR pipeline so the test can inject arbitrary casing
+    directly into the encrypted payload.
+    """
+    from apps.documents.ocr import encrypt_json
+    from apps.registrations.models import RegistrationApplication
+
+    settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+    app = RegistrationApplication.objects.create(
+        parent_account=account,
+        guardian_email=account.email,
+        guardian_full_name="Prior Parent",
+        guardian_personal_id="010101-90000",
+        guardian_phone="+37120000099",
+        status=RegistrationApplication.Status.SUBMITTED,
+    )
+    doc = Document.objects.create(
+        application=app,
+        kind=kind,
+        file=f"private-uploads/test/{kind}.png",
+        content_type="image/png",
+        ocr_status=Document.OcrStatus.COMPLETED,
+    )
+    payload = {
+        "subject": kind.split("_")[0],
+        "person_fields": {
+            "first_name": first_name,
+            "last_name": last_name,
+            "personal_id": personal_id,
+        },
+        "document_metadata": {},
+        "confidence": {},
+        "flags": [],
+        "raw_reference": {"provider": "tiny_idp"},
+    }
+    DocumentExtraction.objects.create(
+        document=doc,
+        subject_role=kind.split("_")[0],
+        provider="tiny_idp",
+        extraction_schema_version="v1",
+        encrypted_payload=encrypt_json(payload),
+        encrypted_summary=encrypt_json("noop"),
+    )
+    return app
+
+
+class TestPrefillNormalization:
+    """OCR-derived prefill values must be Latvian title-case, even when the
+    encrypted payload stores ALL CAPS provider data."""
+
+    def test_guardian_full_name_prefill_is_title_case(self, settings):
+        from apps.registrations.services import get_application_prefill
+
+        account = ParentAccount.objects.create(
+            email="normalize-guardian@example.com",
+            phone="+37120000090",
+        )
+        _inject_completed_extraction(
+            settings,
+            account=account,
+            kind=Document.Kind.GUARDIAN_IDENTITY,
+            first_name="JĀNIS",
+            last_name="BĒRZIŅŠ",
+        )
+
+        prefill = get_application_prefill(account)
+
+        # Prior-app model values are "Prior Parent"; OCR overlay appends normalized.
+        assert "Jānis Bērziņš" in str(prefill["guardian_full_name"])
+        assert "JĀNIS" not in str(prefill["guardian_full_name"])
+
+    def test_member_full_name_prefill_is_title_case(self, settings):
+        from apps.registrations.services import get_application_prefill
+
+        account = ParentAccount.objects.create(
+            email="normalize-member@example.com",
+            phone="+37120000091",
+        )
+        _inject_completed_extraction(
+            settings,
+            account=account,
+            kind=Document.Kind.MEMBER_IDENTITY,
+            first_name="ANNA",
+            last_name="KALNIŅA-BĒRZIŅA",
+        )
+
+        prefill = get_application_prefill(account)
+
+        assert "Anna Kalniņa-Bērziņa" in str(prefill["member_full_name"])
+        assert "ANNA" not in str(prefill["member_full_name"])

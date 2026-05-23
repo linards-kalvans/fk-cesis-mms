@@ -10,6 +10,7 @@ from django.utils import timezone
 from apps.accounts.models import ParentAccount
 from apps.documents.models import Document, DocumentExtraction
 from apps.integrations import ocr as _ocr
+from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import Guardian, KitSizeOption, Member
@@ -146,8 +147,8 @@ def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
                 if payload:
                     person_fields = payload.get("person_fields", {})
                     if isinstance(person_fields, dict):
-                        fn = str(person_fields.get("first_name", "")).strip()
-                        ln = str(person_fields.get("last_name", "")).strip()
+                        fn = normalize_latvian_name(person_fields.get("first_name", ""))
+                        ln = normalize_latvian_name(person_fields.get("last_name", ""))
                         pid = str(person_fields.get("personal_id", "")).strip()
                         full_name = " ".join(part for part in [fn, ln] if part).strip()
                         if full_name:
@@ -170,8 +171,8 @@ def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
                 if payload:
                     person_fields = payload.get("person_fields", {})
                     if isinstance(person_fields, dict):
-                        fn = str(person_fields.get("first_name", "")).strip()
-                        ln = str(person_fields.get("last_name", "")).strip()
+                        fn = normalize_latvian_name(person_fields.get("first_name", ""))
+                        ln = normalize_latvian_name(person_fields.get("last_name", ""))
                         pid = str(person_fields.get("personal_id", "")).strip()
                         full_name = " ".join(part for part in [fn, ln] if part).strip()
                         latest = _latest_application(account)

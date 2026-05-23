@@ -314,3 +314,48 @@ def test_upload_does_not_enqueue_for_member_portrait(settings):
         )
 
     assert enqueued_ids == []
+
+
+def test_ocr_extract_job_normalizes_names_in_summary_but_preserves_raw_payload(settings):
+    """encrypted_summary uses title-case names; encrypted_payload preserves raw provider casing."""
+    from apps.documents.ocr import decrypt_json
+
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    settings.OCR_PROVIDER_MODE = "tiny_idp"
+
+    application = _make_application("normalize-summary@example.com")
+    document = _make_document(application)
+
+    fake_result = OCRExtractionResult(
+        subject="guardian",
+        person_fields={
+            "first_name": "JĀNIS",
+            "last_name": "BĒRZIŅŠ-KALNIŅŠ",
+            "personal_id": "010101-12345",
+        },
+        document_metadata={"document_number": "LV1234567"},
+        confidence={},
+        flags=[],
+        raw_reference={"provider": "tiny_idp"},
+    )
+
+    from apps.integrations import tasks
+
+    with patch(
+        "apps.integrations.tasks.safe_extract_document_data",
+        return_value=(fake_result, None),
+    ):
+        tasks.ocr_extract_job(document.id)
+
+    extraction = DocumentExtraction.objects.get(document=document)
+    summary_text = decrypt_json(extraction.encrypted_summary)
+    payload = decrypt_json(extraction.encrypted_payload)
+
+    # Summary shows title-case names.
+    assert "first_name: Jānis" in summary_text
+    assert "last_name: Bērziņš-Kalniņš" in summary_text
+    # Non-name fields untouched.
+    assert "personal_id: 010101-12345" in summary_text
+    # Raw payload preserves provider casing for audit.
+    assert payload["person_fields"]["first_name"] == "JĀNIS"
+    assert payload["person_fields"]["last_name"] == "BĒRZIŅŠ-KALNIŅŠ"
