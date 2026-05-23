@@ -166,11 +166,8 @@ The web process and the worker process must both be running in local dev — the
 - Business rules live in `services.py` / `rules.py`, not views or templates.
 - No sensitive PII in logs. Mask personal IDs; redact external API payloads.
 - All external API calls (Invoice Ninja, OCR) run through background jobs with retry state.
-- Develop all new work only inside a local git worktree directory; do not develop directly on checked-out `main`.
-- Develop each task or feature in its own git worktree branch, then merge back to `main` only after user approval.
-- Create future worktrees inside project directory (for example `.worktrees/` or `worktrees/`), not outside repository.
-- On future iterations, copy project-root `.env` into the worktree before running env-driven commands or local app flows.
-- When app is exposed through a tunnel, ensure worktree `.env` uses the correct `SITE_URL` and related trusted-origin settings so CSRF-protected forms work over the tunnel.
+- Develop directly on `main` for this project unless the user asks for a worktree. Keep commits small and verifiable so iteration on `main` stays safe.
+- When a worktree is explicitly requested, create it inside the project (for example `.worktrees/`), copy the project-root `.env` in, and (if exposed via a tunnel) update `SITE_URL` and related trusted-origin settings in the worktree `.env` so CSRF-protected forms work.
 - Current acceptance-test baseline uses LAN bind on `192.168.3.245:8000`.
 - Ask before major structural changes or architecture changes.
 - Keep context lean; read only files needed for current task.
