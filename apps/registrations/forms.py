@@ -71,6 +71,8 @@ class RegistrationApplicationForm(forms.Form):
     member_kit_size_shorts = forms.ChoiceField(required=False, label="Šortu izmērs")
     preferred_agreement_signing = forms.ChoiceField(required=False, label="Līguma parakstīšanas veids")
     support_club_instead_of_multi_child_discount = forms.BooleanField(required=False, label="Nepiemērot Līgumā noteiktās atlaides - Vēlos atbalstīt klubu")
+    # Enforced at service layer, not here — rendered manually in template.
+    personal_data_consent = forms.BooleanField(required=False, label="Piekrītu personas datu apstrādei")
     guardian_identity_document = forms.FileField(required=False, label="Vecāka personas dokuments")
     member_identity_document = forms.FileField(required=False, label="Bērna personu apliecinošs dokuments")
     member_portrait_document = forms.FileField(required=False, label="Bērna portrets")

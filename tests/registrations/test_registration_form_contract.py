@@ -1026,3 +1026,76 @@ class TestWorkspaceTemplateGroupedRendering:
             "application_workspace.html must iterate over form.grouped_fields "
             "for grouped section rendering."
         )
+
+
+# ===========================================================================
+# 14. P4 Slice C Task 2 — personal_data_consent BooleanField on form
+# ===========================================================================
+
+
+class TestRegistrationApplicationFormConsentField:
+    """The RegistrationApplicationForm must accept an optional
+    personal_data_consent BooleanField that is NOT part of
+    submit_required_fields nor section_order — the consent gate is enforced
+    client-side and at the service layer, not at form-validation time."""
+
+    def test_form_accepts_personal_data_consent_true(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "consent@example.com",
+                "personal_data_consent": "on",
+            },
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["personal_data_consent"] is True
+
+    def test_form_accepts_personal_data_consent_absent(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={"guardian_email": "consent@example.com"},
+        )
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data.get("personal_data_consent") is False
+
+    def test_form_consent_not_in_submit_required_fields(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert "personal_data_consent" not in RegistrationApplicationForm.submit_required_fields, (
+            "personal_data_consent must NOT be a submit-required form field; "
+            "the consent gate is enforced client-side and at the service layer."
+        )
+
+    def test_form_consent_not_in_section_order_fields(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        for _section_name, field_names in RegistrationApplicationForm.section_order:
+            assert "personal_data_consent" not in field_names, (
+                "personal_data_consent must NOT appear in section_order; the "
+                "consent checkbox is rendered manually in the template, not via "
+                "grouped_fields()."
+            )
+
+    def test_form_remains_valid_when_consent_absent_on_submit(self):
+        """Even with is_submit=True, omitting personal_data_consent must not
+        produce a consent-specific form error. The consent gate is enforced at
+        the service layer (and client-side), never inside Form.clean()."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "consentsubmit@example.com",
+                # personal_data_consent intentionally omitted
+            },
+            is_submit=True,
+            has_existing_document=True,
+        )
+        # Force validation; other submit-required fields will error, but
+        # personal_data_consent must NOT appear in form.errors.
+        form.is_valid()
+        assert "personal_data_consent" not in form.errors, (
+            "personal_data_consent absence must not surface as a form-layer "
+            "error; the consent gate lives in the service layer."
+        )
