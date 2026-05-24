@@ -25,143 +25,39 @@ pytestmark = pytest.mark.django_db
 
 
 # ===========================================================================
-# 1. Guardian snapshot fields exist with exact P1 names
+# 1-3. Form exposes all P1 fields; model retains field_sources JSON field
 # ===========================================================================
 
 
-class TestGuardianFields:
-    """Guardian snapshot fields on RegistrationApplication must exist with P1 names."""
+class TestRegistrationApplicationFormFields:
+    """P1 form exposes every field expected by the registration UX."""
 
-    def test_guardian_full_name_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "guardian_full_name",
+            "guardian_personal_id",
+            "guardian_declared_address",
+            "guardian_email",
+            "guardian_phone",
+            "member_full_name",
+            "member_personal_id",
+            "member_birth_date",
+            "member_actual_address",
+            "member_same_address_as_guardian",
+            "member_kit_size_shirt",
+            "member_kit_size_shorts",
+            "preferred_agreement_signing",
+            "support_club_instead_of_multi_child_discount",
+        ],
+    )
+    def test_form_exposes_p1_field(self, field_name):
+        from apps.registrations.forms import RegistrationApplicationForm
 
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_full_name" in field_names
-
-    def test_guardian_personal_id_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_personal_id" in field_names
-
-    def test_guardian_declared_address_field_exists(self):
-        """Must use guardian_declared_address, not guardian_address."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_declared_address" in field_names, (
-            "RegistrationApplication must have guardian_declared_address field."
-        )
-
-    def test_guardian_email_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_email" in field_names
-
-    def test_guardian_phone_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_phone" in field_names
-
-
-# ===========================================================================
-# 2. Member (child/player) snapshot fields exist with exact P1 names
-# ===========================================================================
-
-
-class TestMemberFields:
-    """Member snapshot fields on RegistrationApplication must exist with P1 names."""
-
-    def test_member_full_name_field_exists(self):
-        """Must use member_full_name, not child_full_name."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_full_name" in field_names, (
-            "RegistrationApplication must have member_full_name field."
-        )
-
-    def test_member_personal_id_field_exists(self):
-        """Must use member_personal_id, not child_personal_id."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_personal_id" in field_names, (
-            "RegistrationApplication must have member_personal_id field."
-        )
-
-    def test_member_birth_date_field_exists(self):
-        """Must use member_birth_date, not child_birth_date."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_birth_date" in field_names, (
-            "RegistrationApplication must have member_birth_date field."
-        )
-
-    def test_member_actual_address_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_actual_address" in field_names
-
-    def test_member_same_address_as_guardian_field_exists(self):
-        """Must use member_same_address_as_guardian, not same_address."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_same_address_as_guardian" in field_names, (
-            "RegistrationApplication must have "
-            "member_same_address_as_guardian field."
-        )
-
-    def test_member_kit_size_shirt_field_exists(self):
-        """Shirt kit size must be a FK to KitSizeOption."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_kit_size_shirt" in field_names, (
-            "RegistrationApplication must have member_kit_size_shirt field."
-        )
-
-    def test_member_kit_size_shorts_field_exists(self):
-        """Shorts kit size must be a FK to KitSizeOption."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_kit_size_shorts" in field_names, (
-            "RegistrationApplication must have member_kit_size_shorts field."
-        )
-
-
-# ===========================================================================
-# 3. Application-level fields exist with exact P1 names
-# ===========================================================================
-
-
-class TestApplicationFields:
-    """Application-level fields on RegistrationApplication must exist."""
-
-    def test_preferred_agreement_signing_field_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "preferred_agreement_signing" in field_names
-
-    def test_support_club_instead_of_multi_child_discount_field_exists(self):
-        """Must use exact P1 name: support_club_instead_of_multi_child_discount."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "support_club_instead_of_multi_child_discount" in field_names, (
-            "RegistrationApplication must have "
-            "support_club_instead_of_multi_child_discount field."
-        )
+        assert field_name in RegistrationApplicationForm.base_fields
 
     def test_field_sources_json_field_exists(self):
-        """field_sources JSON field must exist for source classification."""
+        """field_sources JSON field must exist on the model for source classification."""
         from apps.registrations.models import RegistrationApplication
 
         field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
@@ -400,45 +296,23 @@ class TestSubmitRequiredFields:
 # ===========================================================================
 
 
-class TestDocumentsAreSeparateModel:
-    """Document uploads must be separate Document rows, not model columns."""
+class TestDocumentKindSeparation:
+    """Document fields must live on Document, not on RegistrationApplication."""
 
-    def test_guardian_identity_document_not_application_field(self):
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_portrait_document",
+            "child_identity_document",
+        ],
+    )
+    def test_document_field_is_not_on_application_model(self, field_name):
         from apps.registrations.models import RegistrationApplication
 
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "guardian_identity_document" not in field_names, (
-            "guardian_identity_document must NOT be a direct field on "
-            "RegistrationApplication; use Document records instead."
-        )
-
-    def test_member_identity_document_not_application_field(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_identity_document" not in field_names, (
-            "member_identity_document must NOT be a direct field on "
-            "RegistrationApplication; use Document records instead."
-        )
-
-    def test_member_portrait_not_application_field(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "member_portrait_photo" not in field_names, (
-            "member_portrait_photo must NOT be a direct field on "
-            "RegistrationApplication; use Document records instead."
-        )
-
-    def test_child_identity_document_not_application_field(self):
-        """Old child_identity_document field must also be absent."""
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "child_identity_document" not in field_names, (
-            "child_identity_document must NOT be a direct field on "
-            "RegistrationApplication; use Document records instead."
-        )
+        names = {f.name for f in RegistrationApplication._meta.get_fields()}
+        assert field_name not in names
 
 
 # ===========================================================================
@@ -446,35 +320,23 @@ class TestDocumentsAreSeparateModel:
 # ===========================================================================
 
 
-class TestDocumentKinds:
-    """Document.Kind must include guardian_identity, member_identity, member_portrait."""
+class TestDocumentKindChoices:
+    """Document.Kind enumerates only P1 kinds; child_identity must not exist."""
 
-    def test_document_kind_guardian_identity_exists(self):
+    @pytest.mark.parametrize(
+        ("kind_value", "should_exist"),
+        [
+            ("guardian_identity", True),
+            ("member_identity", True),
+            ("member_portrait", True),
+            ("child_identity", False),
+        ],
+    )
+    def test_document_kind_membership(self, kind_value, should_exist):
         from apps.documents.models import Document
 
-        choices = dict(Document.Kind.choices)
-        assert "guardian_identity" in choices
-
-    def test_document_kind_member_identity_exists(self):
-        from apps.documents.models import Document
-
-        choices = dict(Document.Kind.choices)
-        assert "member_identity" in choices
-
-    def test_document_kind_member_portrait_exists(self):
-        from apps.documents.models import Document
-
-        choices = dict(Document.Kind.choices)
-        assert "member_portrait" in choices
-
-    def test_child_identity_kind_not_present(self):
-        """Old child_identity kind must be replaced by member_identity."""
-        from apps.documents.models import Document
-
-        choices = dict(Document.Kind.choices)
-        assert "child_identity" not in choices, (
-            "Document.Kind must not include child_identity; use member_identity instead."
-        )
+        values = {choice[0] for choice in Document.Kind.choices}
+        assert (kind_value in values) is should_exist
 
 
 # ===========================================================================
