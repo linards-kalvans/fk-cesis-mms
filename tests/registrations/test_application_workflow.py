@@ -11,82 +11,8 @@ P1-aligned. Covers:
 """
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
-
-from apps.accounts.models import ParentAccount
-from apps.accounts.services import issue_magic_link
 
 pytestmark = pytest.mark.django_db
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _login_via_magic_link(client, account):
-    """Convenience: issue magic link and GET verify to establish session."""
-    raw = issue_magic_link(account)
-    client.get(f"/accounts/verify/{raw}/")
-
-
-def _make_member_identity_file(name="id_card.jpg"):
-    """Return a minimal SimpleUploadedFile suitable for member_identity_document upload."""
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
-def _make_guardian_identity_file(name="guardian_id.jpg"):
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
-def _make_member_portrait_file(name="portrait.jpg"):
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
-def _ensure_kit_sizes():
-    """Create kit size options if they don't already exist. Returns (shirt_pk, shorts_pk)."""
-    from apps.members.models import KitSizeOption
-
-    shirt, _ = KitSizeOption.objects.get_or_create(
-        kind=KitSizeOption.Kind.SHIRT,
-        defaults={"label": "S", "is_active": True},
-    )
-    shorts, _ = KitSizeOption.objects.get_or_create(
-        kind=KitSizeOption.Kind.SHORTS,
-        defaults={"label": "S", "is_active": True},
-    )
-    return shirt.pk, shorts.pk
-
-
-def _submit_form_data(email, shirt_pk, shorts_pk):
-    """Build POST data matching P1 submit requirements."""
-    return {
-        "guardian_full_name": "Submit Guardian",
-        "guardian_personal_id": "010101-12345",
-        "guardian_email": email,
-        "guardian_phone": "+37120000000",
-        "guardian_declared_address": "Riga, Brivibas 1",
-        "member_full_name": "Submit Child",
-        "member_personal_id": "010125-67890",
-        "member_birth_date": "2025-01-01",
-        "member_same_address_as_guardian": True,
-        "member_kit_size_shirt": shirt_pk,
-        "member_kit_size_shorts": shorts_pk,
-        "preferred_agreement_signing": "paper",
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +49,11 @@ class TestCreateOrUpdateDraft:
     """Draft creation stores claimed_email; does NOT auto-create ParentAccount."""
 
     def test_draft_creation_stores_claimed_email_no_parent_account(self):
-        """Saving a draft must store claimed_email and NOT create ParentAccount."""
+        """Saving a draft must store claimed_email and NOT create ParentAccount.
+
+        Kept bespoke: exercises anonymous (no verified_account) draft path which
+        the standard fixtures do not cover.
+        """
         from apps.registrations.services import create_or_update_draft
 
         app = create_or_update_draft(
@@ -144,6 +74,8 @@ class TestCreateOrUpdateDraft:
         assert app.guardian_email == "newparent@example.com"
 
     def test_draft_creation_links_existing_parent_account(self):
+        """Kept bespoke: exercises account-linking logic with a specific returning email."""
+        from apps.accounts.models import ParentAccount
         from apps.registrations.services import create_or_update_draft
 
         existing = ParentAccount.objects.create(
@@ -167,7 +99,10 @@ class TestCreateOrUpdateDraft:
         assert app.parent_account_id == existing.pk
 
     def test_second_application_same_claimed_email_no_auto_link(self):
-        """Second draft with same email stores same claimed_email, no auto-link."""
+        """Second draft with same email stores same claimed_email, no auto-link.
+
+        Kept bespoke: exercises multi-draft-same-email isolation logic.
+        """
         from apps.registrations.services import create_or_update_draft
         from apps.registrations.models import RegistrationApplication
 
@@ -266,7 +201,9 @@ class TestDraftAllowsIncompleteFields:
 class TestUploadCreatesDocument:
     """Uploading guardian/member documents should create Document records."""
 
-    def test_upload_creates_guardian_identity_document(self, settings):
+    def test_upload_creates_guardian_identity_document(
+        self, settings, guardian_identity_file
+    ):
         from apps.registrations.services import create_or_update_draft
         from apps.documents.models import Document
 
@@ -283,7 +220,7 @@ class TestUploadCreatesDocument:
                 "member_birth_date": "2025-03-01",
             },
             files={
-                "guardian_identity_document": _make_guardian_identity_file("guardian_id.png"),
+                "guardian_identity_document": guardian_identity_file,
             },
         )
         doc = Document.objects.get(application=app)
@@ -292,7 +229,7 @@ class TestUploadCreatesDocument:
         assert doc.uploaded_by_parent_at is not None
         assert doc.file_size > 0
 
-    def test_upload_creates_member_identity_document(self):
+    def test_upload_creates_member_identity_document(self, member_identity_file):
         from apps.registrations.services import create_or_update_draft
         from apps.documents.models import Document
 
@@ -308,13 +245,13 @@ class TestUploadCreatesDocument:
                 "member_birth_date": "2025-03-02",
             },
             files={
-                "member_identity_document": _make_member_identity_file("member_id.png"),
+                "member_identity_document": member_identity_file,
             },
         )
         doc = Document.objects.get(application=app)
         assert doc.kind == "member_identity"
 
-    def test_upload_creates_member_portrait_document(self):
+    def test_upload_creates_member_portrait_document(self, member_portrait_file):
         from apps.registrations.services import create_or_update_draft
         from apps.documents.models import Document
 
@@ -330,7 +267,7 @@ class TestUploadCreatesDocument:
                 "member_birth_date": "2025-03-03",
             },
             files={
-                "member_portrait_document": _make_member_portrait_file("portrait.png"),
+                "member_portrait_document": member_portrait_file,
             },
         )
         doc = Document.objects.get(application=app)
@@ -344,19 +281,15 @@ class TestUploadCreatesDocument:
 class TestSubmitApplication:
     """Submit should enforce required docs and set status."""
 
-    def test_submit_sets_status_and_submitted_at(self):
+    def test_submit_sets_status_and_submitted_at(
+        self, draft_with_documents, kit_sizes, parent_account
+    ):
         from apps.registrations.services import create_or_update_draft, submit_application
-        from apps.accounts.models import ParentAccount
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        acct = ParentAccount.objects.create(
-            email="submitter@example.com",
-            phone="+37144444444",
-        )
+        shirt_pk, shorts_pk = kit_sizes
         app = create_or_update_draft(
             data={
-                "guardian_email": "submitter@example.com",
+                "guardian_email": parent_account.email,
                 "guardian_full_name": "Submitter",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37155555555",
@@ -367,17 +300,16 @@ class TestSubmitApplication:
                 "member_kit_size_shirt": shirt_pk,
                 "member_kit_size_shorts": shorts_pk,
             },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("sub_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("sub_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("sub_portrait.jpg"),
-            },
+            files={},
+            application=draft_with_documents,
+            verified_account=parent_account,
         )
-        result = submit_application(app, acct)
+        result = submit_application(app, parent_account)
         assert result.status == "submitted"
         assert result.submitted_at is not None
 
     def test_submit_without_identity_document_raises(self):
+        """Kept bespoke: intentionally no documents — tests the missing-doc guard."""
         from apps.registrations.services import create_or_update_draft, submit_application
         from apps.accounts.models import ParentAccount
 
@@ -401,20 +333,17 @@ class TestSubmitApplication:
         with pytest.raises(ValueError):
             submit_application(app, acct)
 
-    def test_submit_with_deleted_identity_document_raises(self):
+    def test_submit_with_deleted_identity_document_raises(
+        self, draft_with_documents, kit_sizes, parent_account
+    ):
         from apps.registrations.services import create_or_update_draft, submit_application
-        from apps.accounts.models import ParentAccount
+        from apps.documents.models import Document
         from datetime import datetime, timezone
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        acct = ParentAccount.objects.create(
-            email="deleted-doc@example.com",
-            phone="+37188888888",
-        )
+        shirt_pk, shorts_pk = kit_sizes
         app = create_or_update_draft(
             data={
-                "guardian_email": "deleted-doc@example.com",
+                "guardian_email": parent_account.email,
                 "guardian_full_name": "Deleted Doc",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37199999999",
@@ -425,40 +354,28 @@ class TestSubmitApplication:
                 "member_kit_size_shirt": shirt_pk,
                 "member_kit_size_shorts": shorts_pk,
             },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("del_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("del_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("del_portrait.jpg"),
-            },
+            files={},
+            application=draft_with_documents,
+            verified_account=parent_account,
         )
         # Soft-delete all documents
-        from apps.documents.models import Document
-
         for doc in Document.objects.filter(application=app):
             doc.deleted_at = datetime.now(timezone.utc)
             doc.save(update_fields=["deleted_at"])
             doc.delete()
 
         with pytest.raises(ValueError):
-            submit_application(app, acct)
+            submit_application(app, parent_account)
 
-    def test_submit_rejects_non_owner(self):
+    def test_submit_rejects_non_owner(
+        self, draft_with_documents, kit_sizes, parent_account, other_parent_account
+    ):
         from apps.registrations.services import create_or_update_draft, submit_application
-        from apps.accounts.models import ParentAccount
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        owner = ParentAccount.objects.create(
-            email="owner@example.com",
-            phone="+37110101010",
-        )
-        other = ParentAccount.objects.create(
-            email="other@example.com",
-            phone="+37120202020",
-        )
+        shirt_pk, shorts_pk = kit_sizes
         app = create_or_update_draft(
             data={
-                "guardian_email": "owner@example.com",
+                "guardian_email": parent_account.email,
                 "guardian_full_name": "Owner",
                 "guardian_personal_id": "010101-10101",
                 "guardian_phone": "+37130303030",
@@ -469,18 +386,20 @@ class TestSubmitApplication:
                 "member_kit_size_shirt": shirt_pk,
                 "member_kit_size_shorts": shorts_pk,
             },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("own_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("own_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("own_portrait.jpg"),
-            },
-            verified_account=owner,
+            files={},
+            application=draft_with_documents,
+            verified_account=parent_account,
         )
         with pytest.raises(ValueError):
-            submit_application(app, other)
+            submit_application(app, other_parent_account)
 
-    def test_submit_without_kit_sizes_raises(self):
-        """Submit must require kit sizes (shirt and shorts)."""
+    def test_submit_without_kit_sizes_raises(
+        self,
+        guardian_identity_file,
+        member_identity_file,
+        member_portrait_file,
+    ):
+        """Kept bespoke: intentionally omits kit sizes — tests the missing-kit guard."""
         from apps.registrations.services import create_or_update_draft, submit_application
         from apps.accounts.models import ParentAccount
 
@@ -500,9 +419,9 @@ class TestSubmitApplication:
                 "member_birth_date": "2025-10-01",
             },
             files={
-                "guardian_identity_document": _make_guardian_identity_file("nokit_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("nokit_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("nokit_portrait.jpg"),
+                "guardian_identity_document": guardian_identity_file,
+                "member_identity_document": member_identity_file,
+                "member_portrait_document": member_portrait_file,
             },
         )
         with pytest.raises(ValueError):
@@ -516,92 +435,22 @@ class TestSubmitApplication:
 class TestCanEditApplication:
     """Permission helper should gate edit access correctly."""
 
-    def test_owner_can_edit_draft(self):
-        from apps.registrations.services import create_or_update_draft, can_edit_application
-        from apps.accounts.models import ParentAccount
+    def test_owner_can_edit_draft(self, draft_application, parent_account):
+        from apps.registrations.services import can_edit_application
 
-        acct = ParentAccount.objects.create(
-            email="editowner@example.com",
-            phone="+37140404040",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "editowner@example.com",
-                "guardian_full_name": "Edit Owner",
-                "guardian_personal_id": "010101-40404",
-                "guardian_phone": "+37150505050",
-                "guardian_declared_address": "Riga 40",
-                "member_full_name": "Child Edit",
-                "member_personal_id": "010125-40404",
-                "member_birth_date": "2025-10-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-        assert can_edit_application(app, acct) is True
+        assert can_edit_application(draft_application, parent_account) is True
 
-    def test_non_owner_cannot_edit_draft(self):
-        from apps.registrations.services import create_or_update_draft, can_edit_application
-        from apps.accounts.models import ParentAccount
+    def test_non_owner_cannot_edit_draft(self, draft_application, other_parent_account):
+        from apps.registrations.services import can_edit_application
 
-        owner = ParentAccount.objects.create(
-            email="editowner2@example.com",
-            phone="+37160606060",
-        )
-        other = ParentAccount.objects.create(
-            email="editother@example.com",
-            phone="+37170707070",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "editowner2@example.com",
-                "guardian_full_name": "Edit Owner 2",
-                "guardian_personal_id": "010101-60606",
-                "guardian_phone": "+37180808080",
-                "guardian_declared_address": "Riga 60",
-                "member_full_name": "Child Edit2",
-                "member_personal_id": "010125-60606",
-                "member_birth_date": "2025-11-01",
-            },
-            files={},
-        )
-        assert can_edit_application(app, other) is False
+        assert can_edit_application(draft_application, other_parent_account) is False
 
-    def test_submitted_application_not_editable_by_owner(self):
-        from apps.registrations.services import (
-            create_or_update_draft,
-            submit_application,
-            can_edit_application,
-        )
-        from apps.accounts.models import ParentAccount
+    def test_submitted_application_not_editable_by_owner(
+        self, submitted_application, parent_account
+    ):
+        from apps.registrations.services import can_edit_application
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        acct = ParentAccount.objects.create(
-            email="subowner@example.com",
-            phone="+37190909090",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "subowner@example.com",
-                "guardian_full_name": "Sub Owner",
-                "guardian_personal_id": "010101-90909",
-                "guardian_phone": "+37101010101",
-                "guardian_declared_address": "Riga 90",
-                "member_full_name": "Child Sub",
-                "member_personal_id": "010125-90909",
-                "member_birth_date": "2025-12-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("sub2_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("sub2_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("sub2_portrait.jpg"),
-            },
-        )
-        submit_application(app, acct)
-        assert can_edit_application(app, acct) is False
+        assert can_edit_application(submitted_application, parent_account) is False
 
 
 # ---------------------------------------------------------------------------
@@ -612,6 +461,7 @@ class TestGetApplicationPrefill:
     """Prefill should use account and latest application values."""
 
     def test_prefill_returns_account_and_latest_application_data(self):
+        """Kept bespoke: tests the latest-application selection logic with two drafts."""
         from apps.registrations.services import create_or_update_draft, get_application_prefill
         from apps.accounts.models import ParentAccount
 
@@ -634,7 +484,7 @@ class TestGetApplicationPrefill:
             files={},
         )
         # Second (latest) application
-        second = create_or_update_draft(
+        create_or_update_draft(
             data={
                 "guardian_email": "prefill@example.com",
                 "guardian_full_name": "Updated Name",
@@ -655,6 +505,7 @@ class TestGetApplicationPrefill:
         assert prefill.get("guardian_email") == "prefill@example.com"
 
     def test_prefill_returns_empty_when_no_account(self):
+        """Kept bespoke: no-account path — fixture contract assumes a verified parent."""
         from apps.registrations.services import get_application_prefill
 
         prefill = get_application_prefill(None)
@@ -669,42 +520,12 @@ class TestGetApplicationPrefill:
 class TestInvalidSubmitErrorSummary:
     """Invalid submit should return 400 with a top-level error summary in the response."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_draft_with_doc_and_login(self, email="errsum@example.com"):
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37188888888",
-        )
-        _login_via_magic_link(self.client, acct)
-        from apps.registrations.services import create_or_update_draft
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Error Sum Guardian",
-                "guardian_personal_id": "010101-88888",
-                "guardian_phone": "+37199999999",
-                "guardian_declared_address": "Riga 88",
-                "member_full_name": "Error Sum Child",
-                "member_personal_id": "010125-88888",
-                "member_birth_date": "2025-04-01",
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("err_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("err_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("err_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        return acct, app
-
-    def test_invalid_submit_returns_400_and_has_error_summary(self):
+    def test_invalid_submit_returns_400_and_has_error_summary(
+        self, verified_client, draft_with_documents
+    ):
         """Submitting with empty required fields should return 400 with error summary."""
-        acct, app = self._create_draft_with_doc_and_login("errsum2@example.com")
-        resp = self.client.post(
-            f"/applications/{app.pk}/submit/",
+        resp = verified_client.post(
+            f"/applications/{draft_with_documents.pk}/submit/",
             data={
                 "guardian_full_name": "",
                 "guardian_personal_id": "",
@@ -744,43 +565,14 @@ class TestInvalidSubmitErrorSummary:
 class TestResubmissionAcceptsFixRequested:
     """submit_application must accept applications with status=fix_requested."""
 
-    def test_submit_application_accepts_fix_requested(self):
+    def test_submit_application_accepts_fix_requested(
+        self, fix_requested_application, parent_account
+    ):
         """Calling submit_application on a fix_requested app must succeed."""
         from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.registrations.services import submit_application
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        acct = ParentAccount.objects.create(
-            email="fixsub@example.com",
-            phone="+37133333333",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "fixsub@example.com",
-                "guardian_full_name": "Fix Sub Guardian",
-                "guardian_personal_id": "010101-33333",
-                "guardian_phone": "+37144444444",
-                "guardian_declared_address": "Riga 3",
-                "member_full_name": "Child FixSub",
-                "member_personal_id": "010125-33333",
-                "member_birth_date": "2025-02-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("fixsub_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("fixsub_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("fixsub_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.save(update_fields=["status"])
-
-        # submit_application should accept fix_requested
-        result = submit_application(app, acct)
+        result = submit_application(fix_requested_application, parent_account)
         assert result.status == RegistrationApplication.Status.SUBMITTED, (
             f"Expected submitted, got {result.status}."
         )
@@ -789,89 +581,34 @@ class TestResubmissionAcceptsFixRequested:
 class TestResubmissionClearsReviewFields:
     """Resubmission must clear review_message, reviewed_by, reviewed_at."""
 
-    def test_resubmission_clears_review_message(self):
+    def test_resubmission_clears_review_message(
+        self, fix_requested_application, parent_account
+    ):
         """After resubmission, review_message must be cleared."""
         from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
+        from apps.registrations.services import submit_application
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-
-        acct = ParentAccount.objects.create(
-            email="clearmsg@example.com",
-            phone="+37155555555",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "clearmsg@example.com",
-                "guardian_full_name": "Clear Msg Guardian",
-                "guardian_personal_id": "010101-55555",
-                "guardian_phone": "+37166666666",
-                "guardian_declared_address": "Riga 5",
-                "member_full_name": "Child ClearMsg",
-                "member_personal_id": "010125-55555",
-                "member_birth_date": "2025-03-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("clearmsg_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("clearmsg_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("clearmsg_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.review_message = "Fix this please."
-        app.save(update_fields=["status", "review_message"])
-
-        # Resubmit
-        submit_application(app, acct)
-        app.refresh_from_db()
-        assert app.status == RegistrationApplication.Status.SUBMITTED
-        assert app.review_message == "", (
+        submit_application(fix_requested_application, parent_account)
+        fix_requested_application.refresh_from_db()
+        assert fix_requested_application.status == RegistrationApplication.Status.SUBMITTED
+        assert fix_requested_application.review_message == "", (
             "review_message must be cleared on resubmission."
         )
 
-    def test_resubmission_clears_reviewed_at(self):
+    def test_resubmission_clears_reviewed_at(
+        self, fix_requested_application, parent_account
+    ):
         """After resubmission, reviewed_at must be cleared."""
-        from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
+        from datetime import datetime, timezone
 
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
+        # Set reviewed_at before resubmitting
+        fix_requested_application.reviewed_at = datetime.now(timezone.utc)
+        fix_requested_application.save(update_fields=["reviewed_at"])
 
-        acct = ParentAccount.objects.create(
-            email="clearat@example.com",
-            phone="+37177777777",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "clearat@example.com",
-                "guardian_full_name": "Clear At Guardian",
-                "guardian_personal_id": "010101-77777",
-                "guardian_phone": "+37188888888",
-                "guardian_declared_address": "Riga 7",
-                "member_full_name": "Child ClearAt",
-                "member_personal_id": "010125-77777",
-                "member_birth_date": "2025-04-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("clearat_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("clearat_member.jpg"),
-                "member_portrait_document": _make_member_portrait_file("clearat_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.reviewed_at = app.updated_at  # Set reviewed_at
-        app.save(update_fields=["status", "reviewed_at"])
+        from apps.registrations.services import submit_application
 
-        # Resubmit
-        submit_application(app, acct)
-        app.refresh_from_db()
-        assert app.reviewed_at is None, (
+        submit_application(fix_requested_application, parent_account)
+        fix_requested_application.refresh_from_db()
+        assert fix_requested_application.reviewed_at is None, (
             "reviewed_at must be cleared on resubmission."
         )
