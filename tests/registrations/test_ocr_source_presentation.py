@@ -6,6 +6,7 @@ Covers:
 - OCR-extracted badge visible when field_sources contains OCR source markers.
 - Error summary shows heading, field label, validation message, and anchor target.
 - Verified-parent ownership/workspace access (no regression).
+- classify_field_action unit tests (folded from RED-phase test_ocr_prefill_vs_suggestion.py).
 """
 
 import pytest
@@ -14,6 +15,7 @@ from django.test import Client
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import issue_magic_link
 from apps.registrations.models import RegistrationApplication
+from apps.registrations.presentation import classify_field_action
 from apps.registrations.services import create_or_update_draft
 
 pytestmark = pytest.mark.django_db
@@ -349,3 +351,27 @@ class TestReviewHintExtractedSource:
             "Workspace must display 'Lūdzu, pārbaudiet' when field_sources "
             "contains the 'review_hint_extracted' source marker."
         )
+
+
+# ===========================================================================
+# 7. classify_field_action unit tests
+#    (folded from RED-phase test_ocr_prefill_vs_suggestion.py)
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    "current,ocr,expected",
+    [
+        ("", "Anna", "prefill"),
+        ("   ", "Anna", "prefill"),
+        ("Anna", "Anna", "noop"),
+        ("anna", "Anna", "noop"),
+        ("Anna ", " Anna", "noop"),
+        ("Janis", "Anna", "suggest"),
+        ("", "", "noop"),
+        ("   ", "", "noop"),
+        ("Anna", "", "noop"),
+    ],
+)
+def test_classify_field_action(current, ocr, expected):
+    assert classify_field_action(current, ocr) == expected
