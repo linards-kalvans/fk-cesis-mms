@@ -139,6 +139,13 @@ class TestParentShellHooks:
         assert resp.status_code == 200
         assert "fk-parent-page" in resp.content.decode()
 
+    def test_verify_page_has_fk_site_header(self) -> None:
+        client = Client()
+        client.post("/register/", {"email": "verifyshell2@example.com"})
+        resp = client.get("/register/verify/")
+        assert resp.status_code == 200
+        assert "fk-site-header" in resp.content.decode()
+
     def test_portal_has_fk_parent_page(self, verified_client: Client) -> None:
         resp = verified_client.get("/portal/")
         assert resp.status_code == 200
