@@ -41,16 +41,22 @@ def member_portrait_file():
 
 @pytest.fixture
 def kit_sizes(db):
-    """Return (shirt_pk, shorts_pk). Idempotent."""
+    """Return (shirt_pk, shorts_pk). Idempotent.
+
+    Looks up by (kind, label) so it is safe when other fixtures or autouse
+    fixtures have already created multiple labels for the same kind.
+    """
     from apps.members.models import KitSizeOption
 
     shirt, _ = KitSizeOption.objects.get_or_create(
         kind=KitSizeOption.Kind.SHIRT,
-        defaults={"label": "S", "is_active": True},
+        label="S",
+        defaults={"is_active": True},
     )
     shorts, _ = KitSizeOption.objects.get_or_create(
         kind=KitSizeOption.Kind.SHORTS,
-        defaults={"label": "S", "is_active": True},
+        label="S",
+        defaults={"is_active": True},
     )
     return shirt.pk, shorts.pk
 
@@ -122,3 +128,28 @@ def draft_with_documents(
         file_size=len(_PNG_BYTES),
     )
     return draft_application
+
+
+@pytest.fixture
+def submitted_application(draft_with_documents, parent_account, submit_payload):
+    """A draft_with_documents that has been promoted to status='submitted'.
+
+    Suitable for admin-review tests which need a queue-visible application
+    owned by parent_account.
+
+    The draft is first updated with the full submit_payload (all required
+    fields + kit sizes), then submitted via the service layer.
+    """
+    from apps.registrations.services import create_or_update_draft, submit_application
+
+    # Update the minimal draft with the full set of required fields and kit sizes.
+    # Documents are already attached by draft_with_documents; pass files={} to
+    # avoid re-uploading them (create_or_update_draft only uploads when files are
+    # present in the mapping).
+    app = create_or_update_draft(
+        data=submit_payload,
+        files={},
+        application=draft_with_documents,
+        verified_account=parent_account,
+    )
+    return submit_application(app, parent_account)
