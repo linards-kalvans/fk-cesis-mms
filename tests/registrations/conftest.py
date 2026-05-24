@@ -153,3 +153,33 @@ def submitted_application(draft_with_documents, parent_account, submit_payload):
         verified_account=parent_account,
     )
     return submit_application(app, parent_account)
+
+
+@pytest.fixture
+def fix_requested_application(submitted_application):
+    """A submitted application that the admin has set to fix_requested.
+
+    review_message is set to a stable sentinel string used by portal-visibility
+    and save-preserves-status tests.
+    """
+    from apps.registrations.models import RegistrationApplication
+
+    submitted_application.status = RegistrationApplication.Status.FIX_REQUESTED
+    submitted_application.review_message = "Please correct the personal ID format."
+    submitted_application.save(update_fields=["status", "review_message"])
+    return submitted_application
+
+
+@pytest.fixture
+def rejected_application(submitted_application):
+    """A submitted application that the admin has set to rejected.
+
+    review_message is set to a stable sentinel string used by portal-visibility
+    and editability tests.
+    """
+    from apps.registrations.models import RegistrationApplication
+
+    submitted_application.status = RegistrationApplication.Status.REJECTED
+    submitted_application.review_message = "Application does not meet requirements."
+    submitted_application.save(update_fields=["status", "review_message"])
+    return submitted_application

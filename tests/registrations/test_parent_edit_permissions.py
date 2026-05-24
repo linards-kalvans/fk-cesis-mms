@@ -11,54 +11,12 @@ Covers:
 """
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import issue_magic_link
 
 pytestmark = pytest.mark.django_db
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _login_via_magic_link(client, account):
-    """Convenience: issue magic link and GET verify to establish session."""
-    raw = issue_magic_link(account)
-    client.get(f"/accounts/verify/{raw}/")
-
-
-def _make_member_identity_file(name="id.png"):
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
-def _make_guardian_identity_file(name="guardian_id.png"):
-    return SimpleUploadedFile(
-        name=name,
-        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-        content_type="image/png",
-    )
-
-
-def _ensure_kit_sizes():
-    """Create kit size options if they don't already exist. Returns (shirt_pk, shorts_pk)."""
-    from apps.members.models import KitSizeOption
-
-    shirt, _ = KitSizeOption.objects.get_or_create(
-        kind=KitSizeOption.Kind.SHIRT,
-        defaults={"label": "S", "is_active": True},
-    )
-    shorts, _ = KitSizeOption.objects.get_or_create(
-        kind=KitSizeOption.Kind.SHORTS,
-        defaults={"label": "S", "is_active": True},
-    )
-    return shirt.pk, shorts.pk
 
 
 # ---------------------------------------------------------------------------
@@ -91,99 +49,39 @@ class TestStartRegistrationView:
 class TestEditRegistrationView:
     """Edit page should enforce ownership and draft status."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_draft_with_owner(self, email="edit@example.com"):
-        """Helper: create a ParentAccount, log in, create a verified draft app."""
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        _login_via_magic_link(self.client, acct)
-        from apps.registrations.services import create_or_update_draft
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Edit Owner",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child Edit",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={},
-            verified_account=acct,
-        )
-        return acct, app
-
-    def test_owner_can_open_draft_edit_page(self):
-        acct, app = self._create_draft_with_owner("ownedit@example.com")
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
+    def test_owner_can_open_draft_edit_page(self, verified_client, draft_application):
+        resp = verified_client.get(f"/applications/{draft_application.pk}/edit/")
         assert resp.status_code == 302
-        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
+        assert resp.headers["Location"].endswith(f"/applications/{draft_application.pk}/")
 
-    def test_summary_route_redirects_to_canonical_workspace(self):
+    def test_summary_route_redirects_to_canonical_workspace(
+        self, verified_client, draft_application
+    ):
         """Summary route must redirect (302) to canonical workspace."""
-        acct, app = self._create_draft_with_owner("summaryredirect@example.com")
-        resp = self.client.get(f"/applications/{app.pk}/summary/")
+        resp = verified_client.get(f"/applications/{draft_application.pk}/summary/")
         assert resp.status_code == 302
-        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
+        assert resp.headers["Location"].endswith(f"/applications/{draft_application.pk}/")
 
-    def test_other_parent_cannot_open_draft_edit_page(self):
+    def test_other_parent_cannot_open_draft_edit_page(
+        self, other_verified_client, draft_application
+    ):
         """A different logged-in parent gets blocked."""
-        self._create_draft_with_owner("ownedit2@example.com")
-        # Create and login a different parent
-        other = ParentAccount.objects.create(
-            email="otheredit@example.com",
-            phone="+37133333333",
-        )
-        _login_via_magic_link(self.client, other)
-        from apps.registrations.models import RegistrationApplication
-
-        app = RegistrationApplication.objects.first()
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
+        # draft_application is owned by parent_account; other_verified_client
+        # is logged in as other_parent_account — distinct ownership.
+        resp = other_verified_client.get(f"/applications/{draft_application.pk}/edit/")
         assert resp.status_code == 404
 
-    def test_submitted_application_not_editable_by_owner(self):
+    def test_submitted_application_not_editable_by_owner(
+        self, verified_client, submitted_application
+    ):
         """Once submitted, owner cannot edit."""
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email="subedit@example.com",
-            phone="+37111111111",
+        resp = verified_client.get(
+            f"/applications/{submitted_application.pk}/edit/"
         )
-        _login_via_magic_link(self.client, acct)
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "subedit@example.com",
-                "guardian_full_name": "Sub Edit Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child SubEdit",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("subedit_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("subedit_member.jpg"),
-                "member_portrait_document": _make_member_identity_file("subedit_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 302
-        assert resp.headers["Location"].endswith(f"/applications/{app.pk}/")
+        assert resp.headers["Location"].endswith(
+            f"/applications/{submitted_application.pk}/"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -193,59 +91,13 @@ class TestEditRegistrationView:
 class TestSubmitRegistrationView:
     """Submit view should enforce ownership and required documents."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_draft_with_doc_and_login(self, email="subview@example.com"):
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37144444444",
-        )
-        _login_via_magic_link(self.client, acct)
-        from apps.registrations.services import create_or_update_draft
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Submit View",
-                "guardian_personal_id": "010101-44444",
-                "guardian_phone": "+37155555555",
-                "guardian_declared_address": "Riga 5",
-                "member_full_name": "Child SubView",
-                "member_personal_id": "010125-44444",
-                "member_birth_date": "2025-02-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("subview_guardian_id.jpg"),
-                "member_identity_document": _make_member_identity_file("subview_member_id.jpg"),
-                "member_portrait_document": _make_member_identity_file("subview_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        return acct, app
-
-    def test_owner_can_submit_with_documents(self):
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct, app = self._create_draft_with_doc_and_login("owndocsubmit@example.com")
-        resp = self.client.post(
+    def test_owner_can_submit_with_documents(
+        self, verified_client, draft_with_documents, submit_payload
+    ):
+        app = draft_with_documents
+        resp = verified_client.post(
             f"/applications/{app.pk}/submit/",
-            data={
-                "guardian_full_name": "Submit Guardian",
-                "guardian_personal_id": "010101-12345",
-                "guardian_email": "owndocsubmit@example.com",
-                "guardian_phone": "+37120000000",
-                "guardian_declared_address": "Riga, Brivibas 1",
-                "member_full_name": "Submit Child",
-                "member_personal_id": "010125-67890",
-                "member_birth_date": "2025-01-01",
-                "member_same_address_as_guardian": True,
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-                "preferred_agreement_signing": "paper",
-            },
+            data=submit_payload,
         )
         # Successful submit redirects to parent portal
         assert resp.status_code == 302
@@ -253,29 +105,11 @@ class TestSubmitRegistrationView:
         app.refresh_from_db()
         assert app.status == "submitted"
 
-    def test_owner_cannot_submit_without_documents(self):
-        acct = ParentAccount.objects.create(
-            email="nosubmit@example.com",
-            phone="+37166666666",
-        )
-        _login_via_magic_link(self.client, acct)
-        from apps.registrations.services import create_or_update_draft
-
-        app = create_or_update_draft(
-            data={
-                "guardian_email": "nosubmit@example.com",
-                "guardian_full_name": "No Submit",
-                "guardian_personal_id": "010101-66666",
-                "guardian_phone": "+37177777777",
-                "guardian_declared_address": "Riga 7",
-                "member_full_name": "Child NoSub",
-                "member_personal_id": "010125-66666",
-                "member_birth_date": "2025-03-01",
-            },
-            files={},
-            verified_account=acct,
-        )
-        resp = self.client.post(
+    def test_owner_cannot_submit_without_documents(
+        self, verified_client, draft_application
+    ):
+        app = draft_application
+        resp = verified_client.post(
             f"/applications/{app.pk}/submit/",
             data={
                 "guardian_full_name": "",
@@ -299,22 +133,16 @@ class TestSubmitRegistrationView:
 class TestParentPortalView:
     """Portal should list only the current parent's applications."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def test_portal_lists_only_current_parent_applications(self):
+    def test_portal_lists_only_current_parent_applications(
+        self, parent_account, other_parent_account
+    ):
         """Two parents, two apps — each portal shows only own."""
-        # Parent A
-        acct_a = ParentAccount.objects.create(
-            email="portalA@example.com",
-            phone="+37188888888",
-        )
-        _login_via_magic_link(self.client, acct_a)
         from apps.registrations.services import create_or_update_draft
 
+        # Parent A creates draft
         create_or_update_draft(
             data={
-                "guardian_email": "portalA@example.com",
+                "guardian_email": parent_account.email,
                 "guardian_full_name": "Parent A",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37199999999",
@@ -324,18 +152,13 @@ class TestParentPortalView:
                 "member_birth_date": "2025-04-01",
             },
             files={},
-            verified_account=acct_a,
+            verified_account=parent_account,
         )
 
-        # Parent B
-        acct_b = ParentAccount.objects.create(
-            email="portalB@example.com",
-            phone="+37100000000",
-        )
-        _login_via_magic_link(self.client, acct_b)
+        # Parent B creates draft
         create_or_update_draft(
             data={
-                "guardian_email": "portalB@example.com",
+                "guardian_email": other_parent_account.email,
                 "guardian_full_name": "Parent B",
                 "guardian_personal_id": "010101-00000",
                 "guardian_phone": "+37112121212",
@@ -345,16 +168,18 @@ class TestParentPortalView:
                 "member_birth_date": "2025-05-01",
             },
             files={},
-            verified_account=acct_b,
+            verified_account=other_parent_account,
         )
 
-        # Re-login as A and check portal
-        _login_via_magic_link(self.client, acct_a)
-        resp = self.client.get("/portal/")
+        # Login as Parent A and check portal shows only A's data
+        client_a = Client()
+        raw = issue_magic_link(parent_account)
+        client_a.get(f"/accounts/verify/{raw}/")
+        resp = client_a.get("/portal/")
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert "Parent A" in content or "portalA" in content
-        assert "Parent B" not in content and "portalB" not in content
+        assert "Parent A" in content or "parent@example.com" in content
+        assert "Parent B" not in content and "other@example.com" not in content
 
     def test_portal_redirects_anonymous(self):
         client = Client()
@@ -448,7 +273,8 @@ class TestResumedParentCanContinueDraft:
             phone="+37152525252",
         )
         client = Client()
-        _login_via_magic_link(client, acct_b)
+        raw = issue_magic_link(acct_b)
+        client.get(f"/accounts/verify/{raw}/")
 
         # Parent B tries to edit Parent A's draft
         resp = client.get(f"/applications/{app_a.pk}/edit/")
@@ -463,59 +289,22 @@ class TestResumedParentCanContinueDraft:
 class TestSubmittedApplicationPortalCard:
     """Submitted application card must show 'Skatīt pieteikumu', not 'Turpināt'."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_and_login(self, email="submittedperm@example.com"):
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        _login_via_magic_link(self.client, acct)
-        return acct
-
-    def _create_submitted_application(self, email="submittedperm@example.com"):
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        acct = self._create_and_login(email)
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Submitted Perm Guardian",
-                "guardian_personal_id": "010101-55555",
-                "guardian_phone": "+37166666666",
-                "guardian_declared_address": "Riga 55",
-                "member_full_name": "Child SubmittedPerm",
-                "member_personal_id": "010125-55555",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("submittedperm_guardian_id.png"),
-                "member_identity_document": _make_member_identity_file("submittedperm_member_id.png"),
-                "member_portrait_document": _make_member_identity_file("submittedperm_portrait.png"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        return app
-
-    def test_portal_card_shows_skatit_ieteikumu_for_submitted(self):
+    def test_portal_card_shows_skatit_ieteikumu_for_submitted(
+        self, verified_client, submitted_application
+    ):
         """Submitted application must show 'Skatīt pieteikumu' link on portal."""
-        self._create_submitted_application()
-        resp = self.client.get("/portal/")
+        resp = verified_client.get("/portal/")
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "Skatīt pieteikumu" in content, (
             "Submitted application portal card must show 'Skatīt pieteikumu'."
         )
 
-    def test_portal_card_no_turpat_for_submitted(self):
+    def test_portal_card_no_turpat_for_submitted(
+        self, verified_client, submitted_application
+    ):
         """Submitted application must NOT show 'Turpināt' link on portal."""
-        self._create_submitted_application()
-        resp = self.client.get("/portal/")
+        resp = verified_client.get("/portal/")
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "Turpināt" not in content, (
@@ -530,16 +319,14 @@ class TestSubmittedApplicationPortalCard:
 class TestSameBrowserVsCrossBrowser:
     """Draft continuity must work in same browser but not across browsers."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _save_draft_anonymously(self, email="samebrowser@example.com"):
-        """Save a draft as anonymous user and return the application."""
+    def test_cross_browser_cannot_access_draft(self):
+        """A fresh browser session cannot access a draft saved in another session."""
+        from apps.registrations.models import RegistrationApplication
         from apps.registrations.services import create_or_update_draft
 
-        app = create_or_update_draft(
+        create_or_update_draft(
             data={
-                "guardian_email": email,
+                "guardian_email": "crosscross@example.com",
                 "guardian_full_name": "Same Browser Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
@@ -550,18 +337,9 @@ class TestSameBrowserVsCrossBrowser:
             },
             files={},
         )
-        return app
-
-    def test_cross_browser_cannot_access_draft(self):
-        """A fresh browser session cannot access a draft saved in another session."""
-        self._save_draft_anonymously("crosscross@example.com")
 
         # Fresh client = different browser
         other_browser = Client()
-
-        # Try to access by application ID
-        from apps.registrations.models import RegistrationApplication
-
         app = RegistrationApplication.objects.get(
             guardian_email="crosscross@example.com"
         )
@@ -572,7 +350,21 @@ class TestSameBrowserVsCrossBrowser:
 
     def test_cross_browser_cannot_access_via_portal(self):
         """Cross-browser cannot see another browser's drafts in portal."""
-        self._save_draft_anonymously("crossportal@example.com")
+        from apps.registrations.services import create_or_update_draft
+
+        create_or_update_draft(
+            data={
+                "guardian_email": "crossportal@example.com",
+                "guardian_full_name": "Same Browser Parent",
+                "guardian_personal_id": "010101-12345",
+                "guardian_phone": "+37120000000",
+                "guardian_declared_address": "Riga, Brivibas 1",
+                "member_full_name": "Child SB",
+                "member_personal_id": "010125-12345",
+                "member_birth_date": "2025-01-01",
+            },
+            files={},
+        )
 
         other_browser = Client()
         resp = other_browser.get("/portal/")
@@ -590,79 +382,32 @@ class TestSameBrowserVsCrossBrowser:
 class TestFixRequestedEditability:
     """fix_requested applications must be editable by the owning parent."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_fix_requested_app(self, email="fixedit@example.com"):
-        """Create a draft, submit it, then set status to fix_requested."""
-        from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Fix Edit Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child FixEdit",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("fix_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("fix_member.jpg"),
-                "member_portrait_document": _make_member_identity_file("fix_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.review_message = "Please correct the personal ID format."
-        app.save(update_fields=["status", "review_message"])
-        return acct, app
-
-    def test_fix_requested_is_editable_by_owning_parent(self):
+    def test_fix_requested_is_editable_by_owning_parent(
+        self, verified_client, fix_requested_application, parent_account
+    ):
         """fix_requested application must be editable by owning parent."""
         from apps.registrations.services import can_edit_application
 
-        acct, app = self._create_fix_requested_app("fixownedit@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        assert can_edit_application(app, acct) is True, (
+        assert can_edit_application(fix_requested_application, parent_account) is True, (
             "fix_requested application must be editable by owning parent."
         )
 
-    def test_fix_requested_edit_page_accessible(self):
+    def test_fix_requested_edit_page_accessible(
+        self, verified_client, fix_requested_application
+    ):
         """fix_requested application workspace must load (200) for owning parent."""
-        acct, app = self._create_fix_requested_app("fixpageedit@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        resp = self.client.get(f"/applications/{app.pk}/")
+        resp = verified_client.get(f"/applications/{fix_requested_application.pk}/")
         assert resp.status_code == 200, (
             f"Expected 200 for fix_requested workspace, got {resp.status_code}."
         )
 
-    def test_fix_requested_not_editable_by_other_parent(self):
+    def test_fix_requested_not_editable_by_other_parent(
+        self, fix_requested_application, other_parent_account
+    ):
         """fix_requested application must not be editable by another parent."""
         from apps.registrations.services import can_edit_application
 
-        acct, app = self._create_fix_requested_app("fixother@example.com")
-
-        other = ParentAccount.objects.create(
-            email="otherfix@example.com",
-            phone="+37133333333",
-        )
-        _login_via_magic_link(self.client, other)
-
-        assert can_edit_application(app, other) is False, (
+        assert can_edit_application(fix_requested_application, other_parent_account) is False, (
             "fix_requested application must not be editable by other parent."
         )
 
@@ -670,51 +415,11 @@ class TestFixRequestedEditability:
 class TestParentPortalFixRequestedVisibility:
     """Portal must show fix message and edit CTA for fix_requested."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_fix_requested_app(self, email="portalfix@example.com"):
-        """Create a draft, submit it, then set status to fix_requested."""
-        from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Portal Fix Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child PortalFix",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("pf_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("pf_member.jpg"),
-                "member_portrait_document": _make_member_identity_file("pf_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.review_message = "Please correct the personal ID format."
-        app.save(update_fields=["status", "review_message"])
-        return acct, app
-
-    def test_portal_shows_fix_message_and_edit_cta(self):
+    def test_portal_shows_fix_message_and_edit_cta(
+        self, verified_client, fix_requested_application
+    ):
         """Portal must display review message and edit link for fix_requested."""
-        acct, app = self._create_fix_requested_app("fixportalext@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        resp = self.client.get("/portal/")
+        resp = verified_client.get("/portal/")
         assert resp.status_code == 200, (
             f"Expected 200 on portal, got {resp.status_code}."
         )
@@ -727,7 +432,7 @@ class TestParentPortalFixRequestedVisibility:
             "edit" in content.lower()
             or "turpinat" in content.lower()
             or "labot" in content.lower()
-            or f"/applications/{app.pk}/" in content
+            or f"/applications/{fix_requested_application.pk}/" in content
         )
         assert has_edit_link, (
             "Portal must show an edit/continue link for fix_requested application."
@@ -741,69 +446,24 @@ class TestFixRequestedDraftSavePreservesStatus:
     silently reverting fix_requested to draft.
     """
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_fix_requested_app(self, email="fixdraftsave@example.com"):
-        """Create a draft, submit, admin requests fix, return (acct, app)."""
-        from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Fix Draft Save Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child FixDraftSave",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("fd_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("fd_member.jpg"),
-                "member_portrait_document": _make_member_identity_file("fd_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.FIX_REQUESTED
-        app.review_message = "Please correct the personal ID format."
-        app.save(update_fields=["status", "review_message"])
-        return acct, app
-
-    def test_save_draft_on_fix_requested_keeps_fix_requested_status(self):
+    def test_save_draft_on_fix_requested_keeps_fix_requested_status(
+        self, verified_client, fix_requested_application, parent_account, submit_payload
+    ):
         """POST save-draft on a fix_requested application must keep status fix_requested."""
         from apps.registrations.models import RegistrationApplication
 
-        acct, app = self._create_fix_requested_app("fixdraftsave2@example.com")
-        _login_via_magic_link(self.client, acct)
-
+        app = fix_requested_application
         initial_status = app.status
         assert initial_status == RegistrationApplication.Status.FIX_REQUESTED
 
-        resp = self.client.post(
+        resp = verified_client.post(
             f"/applications/{app.pk}/",
             {
+                **submit_payload,
                 "guardian_full_name": "Updated Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_email": acct.email,
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child FixDraftSave",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
+                "guardian_email": parent_account.email,
                 "member_kit_size_shirt": app.member_kit_size_shirt_id,
                 "member_kit_size_shorts": app.member_kit_size_shorts_id,
-                "preferred_agreement_signing": "paper",
                 "submit_action": "save_draft",
             },
         )
@@ -824,81 +484,39 @@ class TestFixRequestedDraftSavePreservesStatus:
 class TestParentPortalRejectedVisibility:
     """Portal must show reject message but no edit CTA for rejected."""
 
-    def setup_method(self):
-        self.client = Client()
-
-    def _create_rejected_app(self, email="portalreject@example.com"):
-        """Create a draft, submit it, then set status to rejected."""
-        from apps.registrations.models import RegistrationApplication
-        from apps.registrations.services import create_or_update_draft, submit_application
-
-        shirt_pk, shorts_pk = _ensure_kit_sizes()
-        acct = ParentAccount.objects.create(
-            email=email,
-            phone="+37111111111",
-        )
-        app = create_or_update_draft(
-            data={
-                "guardian_email": email,
-                "guardian_full_name": "Portal Reject Guardian",
-                "guardian_personal_id": "010101-11111",
-                "guardian_phone": "+37122222222",
-                "guardian_declared_address": "Riga 1",
-                "member_full_name": "Child PortalReject",
-                "member_personal_id": "010125-11111",
-                "member_birth_date": "2025-01-01",
-                "member_kit_size_shirt": shirt_pk,
-                "member_kit_size_shorts": shorts_pk,
-            },
-            files={
-                "guardian_identity_document": _make_guardian_identity_file("pr_guardian.jpg"),
-                "member_identity_document": _make_member_identity_file("pr_member.jpg"),
-                "member_portrait_document": _make_member_identity_file("pr_portrait.jpg"),
-            },
-            verified_account=acct,
-        )
-        submit_application(app, acct)
-        app.status = RegistrationApplication.Status.REJECTED
-        app.review_message = "Application does not meet requirements."
-        app.save(update_fields=["status", "review_message"])
-        return acct, app
-
-    def test_portal_shows_reject_message_no_edit_cta(self):
+    def test_portal_shows_reject_message_no_edit_cta(
+        self, verified_client, rejected_application
+    ):
         """Portal must display reject message and no edit link."""
-        acct, app = self._create_rejected_app("rejectportalext@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        resp = self.client.get("/portal/")
+        app = rejected_application
+        resp = verified_client.get("/portal/")
         assert resp.status_code == 200
         content = resp.content.decode()
         assert "Application does not meet requirements." in content, (
             "Portal must show the reject review message."
         )
         # Must NOT show an edit link
-        has_edit_link = (
-            f"/applications/{app.pk}/edit/" in content
-        )
+        has_edit_link = f"/applications/{app.pk}/edit/" in content
         assert not has_edit_link, (
             "Portal must not show an edit link for rejected application."
         )
 
-    def test_rejected_application_not_editable_by_parent(self):
+    def test_rejected_application_not_editable_by_parent(
+        self, rejected_application, parent_account
+    ):
         """rejected application must not be editable by the owning parent."""
         from apps.registrations.services import can_edit_application
 
-        acct, app = self._create_rejected_app("noteditreject@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        assert can_edit_application(app, acct) is False, (
+        assert can_edit_application(rejected_application, parent_account) is False, (
             "rejected application must not be editable."
         )
 
-    def test_rejected_edit_page_redirects_to_workspace(self):
+    def test_rejected_edit_page_redirects_to_workspace(
+        self, verified_client, rejected_application
+    ):
         """rejected application edit page must redirect to workspace for owning parent."""
-        acct, app = self._create_rejected_app("rejected404@example.com")
-        _login_via_magic_link(self.client, acct)
-
-        resp = self.client.get(f"/applications/{app.pk}/edit/")
+        app = rejected_application
+        resp = verified_client.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 302, (
             f"Expected 302 for rejected edit page, got {resp.status_code}."
         )
