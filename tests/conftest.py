@@ -2,6 +2,9 @@
 
 import os
 
+import pytest
+from django.test import Client
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fk_cesis_mms.settings")
 # Run django-q2 jobs in-process during tests so OCR-after-upload tests
 # (which used to exercise a synchronous code path) keep their existing
@@ -53,3 +56,60 @@ def pytest_configure(config):
         )
 
     RequestFactory.post = _patched_rf_post
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures — added 2026-05-24 during test-suite consolidation.
+# These replace per-test bootstrap repeated across tests/registrations/.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def parent_account(db):
+    """A fresh ParentAccount with a deterministic email."""
+    from apps.accounts.models import ParentAccount
+
+    return ParentAccount.objects.create(email="parent@example.com")
+
+
+@pytest.fixture
+def other_parent_account(db):
+    """A second ParentAccount for cross-account isolation tests."""
+    from apps.accounts.models import ParentAccount
+
+    return ParentAccount.objects.create(email="other@example.com")
+
+
+@pytest.fixture
+def verified_client(parent_account):
+    """A django test Client logged in via magic link as parent_account."""
+    from apps.accounts.services import issue_magic_link
+
+    client = Client()
+    raw = issue_magic_link(parent_account)
+    client.get(f"/accounts/verify/{raw}/")
+    return client
+
+
+@pytest.fixture
+def other_verified_client(other_parent_account):
+    """A second logged-in Client for cross-account assertions."""
+    from apps.accounts.services import issue_magic_link
+
+    client = Client()
+    raw = issue_magic_link(other_parent_account)
+    client.get(f"/accounts/verify/{raw}/")
+    return client
+
+
+@pytest.fixture
+def staff_client(db):
+    """A django test Client logged in as a staff superuser."""
+    from django.contrib.auth.models import User
+
+    User.objects.create_superuser(
+        username="staff", email="staff@example.com", password="pw"
+    )
+    client = Client()
+    client.login(username="staff", password="pw")
+    return client
