@@ -318,3 +318,101 @@ class TestPrefillNormalization:
 
         assert "Anna Kalniņa-Bērziņa" in str(prefill["member_full_name"])
         assert "ANNA" not in str(prefill["member_full_name"])
+
+
+# ===========================================================================
+# Guardian auto-reuse on /applications/new/
+# (folded from RED-phase test_p3_remaining_gaps.py)
+# ===========================================================================
+
+
+def _create_submitted_app_with_ocr(email: str):
+    """Create a submitted application with guardian, member, and portrait docs in stub OCR mode."""
+    kit = _ensure_kit_sizes()
+    account = ParentAccount.objects.create(email=email, phone="+37120000040")
+    app = create_or_update_draft(
+        data={
+            "guardian_email": email,
+            "guardian_full_name": "Auto Reuse Parent",
+            "guardian_personal_id": "010101-20202",
+            "guardian_phone": "+37120000040",
+            "guardian_declared_address": "Riga 40",
+            "member_full_name": "Auto Reuse Child",
+            "member_personal_id": "010125-20202",
+            "member_birth_date": "2025-01-01",
+            "member_kit_size_shirt": kit["shirt"].pk,
+            "member_kit_size_shorts": kit["shorts"].pk,
+            "preferred_agreement_signing": "paper",
+        },
+        files={
+            "guardian_identity_document": _make_png("ar_guardian.png"),
+            "member_identity_document": _make_png("ar_member.png"),
+            "member_portrait_document": _make_png("ar_portrait.png"),
+        },
+        verified_account=account,
+    )
+    submit_application(app, account)
+    return app
+
+
+class TestGuardianAutoReuseDefault:
+    """New application /applications/new/ must reuse prior guardian identity doc by default."""
+
+    def test_new_app_form_shows_reusable_hint_when_extraction_exists(self, settings):
+        """GET /applications/new/ must reuse the prior guardian identity doc when extraction exists.
+
+        P3.5 redirect: /applications/new/ now redirects straight into the
+        workspace, so the reuse signal moved from a hint label to an
+        actual active guardian_identity Document on the new draft.
+        """
+        settings.OCR_PROVIDER_MODE = "stub"
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        _create_submitted_app_with_ocr("reusehint@example.com")
+
+        account = ParentAccount.objects.get(email="reusehint@example.com")
+        client = Client()
+        _login(client, account)
+
+        resp = client.get("/applications/new/", follow=True)
+        assert resp.status_code == 200
+
+        # The new draft must have an active guardian_identity Document
+        # carried over from the prior application (the reuse behavior).
+        from apps.registrations.models import RegistrationApplication as _RA
+
+        new_app = (
+            _RA.objects.filter(
+                parent_account=account, status=_RA.Status.DRAFT
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        assert new_app is not None
+        assert new_app.documents.filter(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        ).exists()
+
+    def test_new_app_form_no_reuse_hint_without_prior_app(self, settings):
+        """GET /applications/new/ must NOT show reusable hint when no prior app exists."""
+        settings.OCR_PROVIDER_MODE = "stub"
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        account = ParentAccount.objects.create(
+            email="noreuse@example.com",
+            phone="+37120000055",
+        )
+        client = Client()
+        _login(client, account)
+
+        resp = client.get("/applications/new/", follow=True)
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        has_reusable_hint = (
+            "Izmanto iepriekš" in content
+            or "reusable" in content.lower()
+        )
+        assert not has_reusable_hint, (
+            "New app form must not show reusable hint without prior app."
+        )

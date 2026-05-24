@@ -313,3 +313,55 @@ class TestAdminDetailOcrDecryption:
         assert "0.98" in content, (
             "Admin detail must render confidence values when provider returns them."
         )
+
+    def test_admin_detail_no_crash_without_any_ocr(self, settings):
+        """Detail page must render fine when no OCR extractions exist.
+
+        (Folded from RED-phase test_p3_remaining_gaps.py.)
+        """
+        settings.OCR_PROVIDER_MODE = "stub"
+        settings.OCR_ENCRYPTION_KEY = "Y14NJYvOnvr0FLs41cks5xUkk8j95dwHcT3xsp-LkbY="
+
+        # Create submitted app WITHOUT identity docs (no OCR possible)
+        kit = _ensure_kit_sizes()
+        account = ParentAccount.objects.create(
+            email="noocrexample@example.com",
+            phone="+37120000056",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": "noocrexample@example.com",
+                "guardian_full_name": "No OCR Parent",
+                "guardian_personal_id": "010101-56565",
+                "guardian_phone": "+37120000056",
+                "guardian_declared_address": "Riga 56",
+                "member_full_name": "No OCR Child",
+                "member_personal_id": "010125-56565",
+                "member_birth_date": "2025-01-01",
+                "member_kit_size_shirt": kit["shirt"].pk,
+                "member_kit_size_shorts": kit["shorts"].pk,
+                "preferred_agreement_signing": "paper",
+                "member_same_address_as_guardian": True,
+            },
+            files={},
+            verified_account=account,
+        )
+        # Manually set status to submitted (skip submit validation since no docs)
+        app.status = "submitted"
+        app.submitted_at = app.created_at
+        app.save(update_fields=["status", "submitted_at", "updated_at"])
+
+        staff_user = User.objects.create_superuser(
+            username="noocrstaff",
+            email="noocrstaff@example.com",
+            password="noocrstaffpass",
+        )
+        client = Client()
+        client.force_login(staff_user)
+
+        resp = client.get(f"/admin/review/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        # Page must render without crashing
+        assert "No OCR Parent" in content

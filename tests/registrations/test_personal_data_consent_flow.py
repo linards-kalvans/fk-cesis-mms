@@ -9,9 +9,12 @@ Stamping rules under test:
 - Version upgrade: refresh timestamp + version when stored version differs.
 - False/absent: never clears an existing stamp; never stamps a fresh app.
 - Orthogonal to fix_requested status.
+
+Also covers schema smoke tests for consent model fields (folded from RED-phase
+test_personal_data_consent_schema.py).
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 import pytest
 from django.utils import timezone
@@ -23,6 +26,35 @@ from apps.registrations.models import (
 from apps.registrations.services import create_or_update_draft
 
 pytestmark = pytest.mark.django_db
+
+
+# ---------------------------------------------------------------------------
+# Schema smoke tests (folded from test_personal_data_consent_schema.py)
+# ---------------------------------------------------------------------------
+
+
+class TestSchema:
+    """Schema smoke tests for personal-data-consent fields on RegistrationApplication."""
+
+    def test_consent_version_constant_exposed(self):
+        assert isinstance(PERSONAL_DATA_CONSENT_VERSION, str)
+        assert PERSONAL_DATA_CONSENT_VERSION  # non-empty
+
+    def test_consent_fields_default_to_null(self):
+        app = RegistrationApplication.objects.create(guardian_email="parent@example.com")
+        assert app.personal_data_consent_at is None
+        assert app.personal_data_consent_version is None
+
+    def test_consent_fields_persist_when_set(self):
+        when = datetime(2026, 5, 23, 12, 0, tzinfo=dt_timezone.utc)
+        app = RegistrationApplication.objects.create(
+            guardian_email="parent@example.com",
+            personal_data_consent_at=when,
+            personal_data_consent_version=PERSONAL_DATA_CONSENT_VERSION,
+        )
+        app.refresh_from_db()
+        assert app.personal_data_consent_at == when
+        assert app.personal_data_consent_version == PERSONAL_DATA_CONSENT_VERSION
 
 
 # ---------------------------------------------------------------------------
