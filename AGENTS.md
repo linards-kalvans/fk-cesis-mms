@@ -102,6 +102,14 @@ Target Django monolith with domain apps:
 - Wizard step-gating contract: inputs in `submit_required_fields` (plus the two document inputs) carry `data-step-required="<step-name>"` and `data-step-error-empty="<lv-msg>"` (and `data-step-error-format="<lv-msg>"` for `*_personal_id` inputs). `static/js/wizard.js` reads these attrs, validates on blur/change/input, and toggles `[data-wizard-next].disabled` accordingly. `member_actual_address` is skipped when `member_same_address_as_guardian` is checked, mirroring the server-side waiver in `forms.py::clean()`. The consent checkbox participates in the step-1 gate via `data-step-required="documents"` + `data-personal-data-consent`.
 - `apps/registrations/messages.py` holds wizard / consent / save-indicator Latvian strings as plain top-level `str` constants. The template injects them via `data-step-error-empty`, `data-step-error-format`, `data-save-message-saving|saved|error` attributes — `wizard.js` reads from the DOM, never hardcodes Latvian.
 
+### Test suite consolidation (2026-05-24)
+- `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.
+- Shared fixture homes (use these for new tests instead of repeating per-test bootstrap):
+  - `tests/conftest.py` — cross-app: `parent_account`, `other_parent_account`, `verified_client`, `other_verified_client`, `staff_client` (renamed from `admin_client` to avoid shadowing pytest-django's built-in).
+  - `tests/registrations/conftest.py` — registrations-scoped: `guardian_identity_file`, `member_identity_file`, `member_portrait_file`, `kit_sizes`, `submit_payload`, `draft_application`, `draft_with_documents`, `submitted_application`, `fix_requested_application`, `rejected_application`.
+- Visual / template / CSS contract for parent pages lives in **`tests/registrations/test_visual_contract.py`** (consolidated from the former `test_parent_visual_pages.py` and `test_task2_logo_and_css.py` + the visual half of `test_verified_registration_entry.py`). Add new visual assertions here, not in workflow / permissions test files.
+- Removed files: `test_parent_visual_pages.py`, `test_task2_logo_and_css.py`, `test_personal_data_consent_schema.py`, `test_ocr_prefill_vs_suggestion.py`, `test_p3_remaining_gaps.py`. Their behaviors are preserved in the natural-home files listed above (or were duplicates of existing coverage).
+
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 - Django admin document UX should distinguish active vs replaced (soft-deleted) documents and hide or clearly disable preview/download actions for replaced rows.
