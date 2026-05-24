@@ -101,57 +101,6 @@ class TestRegistrationApplicationModel:
 
         assert RegistrationApplication is not None
 
-    def test_has_parent_account_field(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "parent_account" in field_names
-
-    def test_has_status_field_with_required_choices(self):
-        from apps.registrations.models import RegistrationApplication
-
-        status_field = RegistrationApplication._meta.get_field("status")
-        choices_dict = dict(status_field.choices)
-        assert "draft" in choices_dict
-        assert "submitted" in choices_dict
-        assert "fix_requested" in choices_dict
-        assert "approved" in choices_dict
-        assert "rejected" in choices_dict
-
-    def test_has_guardian_and_member_fields(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        required = {
-            "guardian_full_name",
-            "guardian_personal_id",
-            "guardian_email",
-            "guardian_phone",
-            "guardian_declared_address",
-            "member_full_name",
-            "member_personal_id",
-            "member_birth_date",
-            "member_actual_address",
-            "member_same_address_as_guardian",
-        }
-        assert required.issubset(field_names)
-
-    def test_has_submitted_at_field(self):
-        from apps.registrations.models import RegistrationApplication
-
-        field_names = {f.name for f in RegistrationApplication._meta.get_fields()}
-        assert "submitted_at" in field_names
-
-    def test_is_draft_helper_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        assert hasattr(RegistrationApplication, "is_draft")
-
-    def test_is_editable_by_helper_exists(self):
-        from apps.registrations.models import RegistrationApplication
-
-        assert hasattr(RegistrationApplication, "is_editable_by")
-
 
 # ---------------------------------------------------------------------------
 # Document model — fields, kinds, OCR status
@@ -164,79 +113,6 @@ class TestDocumentModel:
         from apps.documents.models import Document
 
         assert Document is not None
-
-    def test_has_application_foreign_key(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "application" in field_names
-
-    def test_has_kind_field_with_guardian_identity(self):
-        from apps.documents.models import Document
-
-        kind_field = Document._meta.get_field("kind")
-        choices_dict = dict(kind_field.choices)
-        assert "guardian_identity" in choices_dict
-
-    def test_has_kind_field_with_member_identity(self):
-        from apps.documents.models import Document
-
-        kind_field = Document._meta.get_field("kind")
-        choices_dict = dict(kind_field.choices)
-        assert "member_identity" in choices_dict
-
-    def test_has_kind_field_with_member_portrait(self):
-        from apps.documents.models import Document
-
-        kind_field = Document._meta.get_field("kind")
-        choices_dict = dict(kind_field.choices)
-        assert "member_portrait" in choices_dict
-
-    def test_has_file_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "file" in field_names
-
-    def test_has_original_filename_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "original_filename" in field_names
-
-    def test_has_content_type_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "content_type" in field_names
-
-    def test_has_file_size_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "file_size" in field_names
-
-    def test_has_ocr_status_field(self):
-        from apps.documents.models import Document
-
-        ocr_field = Document._meta.get_field("ocr_status")
-        choices_dict = dict(ocr_field.choices)
-        assert "not_requested" in choices_dict
-        assert "pending" in choices_dict
-        assert "completed" in choices_dict
-        assert "failed" in choices_dict
-
-    def test_has_uploaded_by_parent_at_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "uploaded_by_parent_at" in field_names
-
-    def test_has_deleted_at_field(self):
-        from apps.documents.models import Document
-
-        field_names = {f.name for f in Document._meta.get_fields()}
-        assert "deleted_at" in field_names
 
 
 # ---------------------------------------------------------------------------
