@@ -475,6 +475,29 @@ class TestPrefillNoDoubling:
         # Must be exactly "Anna Bērziņa", not "Anna Bērziņa Anna Bērziņa".
         assert prefill["guardian_full_name"] == "Anna Bērziņa"
 
+    def test_guardian_phone_prefilled_from_latest_application(self):
+        """Guardian phone must come from the most recent application, not the account."""
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import get_application_prefill
+
+        account = ParentAccount.objects.create(
+            email="phoneprefill@example.com",
+            phone="+37120000001",  # account registration phone
+        )
+        RegistrationApplication.objects.create(
+            parent_account=account,
+            guardian_email=account.email,
+            guardian_full_name="Anna Bērziņa",
+            guardian_personal_id="010101-72000",
+            guardian_phone="+37120000999",  # contact phone entered in prior app
+            status=RegistrationApplication.Status.SUBMITTED,
+        )
+
+        prefill = get_application_prefill(account)
+
+        # Prior application's guardian_phone wins over account.phone.
+        assert prefill["guardian_phone"] == "+37120000999"
+
     def test_member_fields_absent_from_new_app_prefill(self, settings):
         from apps.documents.models import Document, DocumentExtraction
         from apps.documents.ocr import encrypt_json
