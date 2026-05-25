@@ -444,7 +444,7 @@ h1, h2, h3 {
 }
 
 .fk-button--small {
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 16px;
   font-size: 13px;
   border-radius: 8px;
@@ -1096,4 +1096,15 @@ h1, h2, h3 {
     box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.04);
     z-index: 10;
   }
+}
+
+/* Touch-target floors for form controls (Slice D acceptance #5). */
+.fk-input,
+.fk-select,
+.fk-textarea {
+  min-height: 44px;
+}
+
+input[type="date"] {
+  min-height: 44px;
 }
