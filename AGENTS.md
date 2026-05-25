@@ -117,6 +117,15 @@ Target Django monolith with domain apps:
 - Full repo verification after Slice D landing: `uv run pytest -q` → `798 passed`, `uv run ruff check .` → passed, `uv run mypy .` → passed (143 source files).
 - Manual LAN verification on `http://192.168.3.245:8000/applications/<id>/` complete (2026-05-25). Phone: 3 cards with two buttons each; "Uzņemt attēlu" opens the device camera; "Augšupielādēt failu" opens the file picker; sticky "Turpināt →" stays visible while scrolling; OCR toast still appears after upload; address-sync row stacks on step 2. Desktop: camera buttons hidden; inline wizard nav; stepper-click navigation works. Initial render exposed two template-comment leaks and unequal button widths — fixed in follow-up commits (see entries above).
 
+- **P4 Slice E delivered (2026-05-25):** Closeout polish for the parent-flow entry/chooser/portal surfaces and Latvian copy normalization across all parent-facing pages.
+  - `/register/`: removed duplicate `fk-section-card` include, repaired the broken `fk-button primary` class, dropped the `fk-eyebrow` wrapper, added `inputmode="email"` + `autocomplete="email"`, full-width primary CTA.
+  - `/register/verify/`: switched the pending-email notice to the new `.fk-page-intro` helper, added `inputmode="numeric"` / `autocomplete="one-time-code"` / `autofocus` to the code input, full-width CTA.
+  - `/portal/`: replaced the bespoke `<div class="fk-empty-state">` markup with the shared `empty_state.html` partial (now accepts optional `cta_url`/`cta_label`); stripped inline `style="margin-top:…"` attributes inside the application-card region in favour of a `.fk-app-meta--review` modifier; action anchors and helper-card CTA gain `fk-button--full`. Dynamic `<span style="width:N%">` widths inside `.fk-progress-bar` preserved (encode content, not styling).
+  - CSS: `.fk-page-intro` helper added; new `@media (max-width: 720px)` block stacks `.fk-applications`, `.fk-application-card`, `.fk-app-actions .fk-button`, `.fk-helper-card` for the mobile baseline.
+  - Latvian copy: new regression test `tests/registrations/test_parent_surface_copy_contract.py` scans rendered visible text on `/register/`, `/register/verify/`, `/portal/` (empty + with apps), `/applications/<id>/`, plus a static scan of `new_registration.html`, for English-token leakage. Token list fixed; legitimate fragments allowlisted in code with comments. Initial sweep found no English leaks (codebase was already Latvian-by-default; three Latvian-phrase guards were added to absorb the Latvian preposition "no").
+  - Manual LAN verification on 192.168.3.245 (2026-05-25): PENDING — user to fill in.
+  - Test suite: 818 passed (up from 798 baseline); ruff and mypy clean.
+
 ### Test suite consolidation (2026-05-24)
 - `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.
 - Shared fixture homes (use these for new tests instead of repeating per-test bootstrap):
