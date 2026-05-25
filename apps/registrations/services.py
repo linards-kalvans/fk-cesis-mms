@@ -119,6 +119,8 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
                 "guardian_declared_address": latest.guardian_declared_address,
             }
         )
+        if latest.guardian_phone:
+            prefill["guardian_phone"] = latest.guardian_phone
 
     # Merge OCR-extracted values from prior applications
     # OCR values take priority when extraction exists; model values used as fallback.
