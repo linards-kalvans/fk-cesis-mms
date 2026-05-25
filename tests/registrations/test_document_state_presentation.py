@@ -643,3 +643,18 @@ class TestStrongerActiveDocumentGuidance:
             "Active document card must show 'Aizvietojiet tikai tad' guidance "
             "to tell users to replace only when necessary."
         )
+
+
+class TestMemberPortraitInDocumentsSection:
+    """P4 Slice D — member portrait lives alongside the identity docs in step 1."""
+
+    def test_member_portrait_field_in_documents_section(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        sections = dict(RegistrationApplicationForm.section_order)
+        assert "member_portrait_document" in sections["documents"], (
+            "member_portrait_document must live in the documents section for "
+            "Slice D so its upload UI ships in step 1."
+        )
+        assert "member_portrait_document" not in sections["member"], (
+            "member_portrait_document must no longer live in the member section."
+        )

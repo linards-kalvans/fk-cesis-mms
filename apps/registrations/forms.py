@@ -16,6 +16,7 @@ class RegistrationApplicationForm(forms.Form):
             (
                 "guardian_identity_document",
                 "member_identity_document",
+                "member_portrait_document",
             ),
         ),
         (
@@ -38,7 +39,6 @@ class RegistrationApplicationForm(forms.Form):
                 "member_actual_address",
                 "member_kit_size_shirt",
                 "member_kit_size_shorts",
-                "member_portrait_document",
             ),
         ),
         (
