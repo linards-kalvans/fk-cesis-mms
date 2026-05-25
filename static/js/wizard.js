@@ -12,6 +12,7 @@
   var nextButtons = document.querySelectorAll('[data-wizard-next]');
 
   var current = 0;
+  var visitedSteps = new Set();
   var total = steps.length;
 
   // ---- Step name resolution -------------------------------------------------
@@ -188,6 +189,10 @@
       progressLine.style.width = Math.round((n + 1) / total * 100) + '%';
     }
     current = n;
+    visitedSteps.add(n);
+    indicators.forEach(function (ind, i) {
+      ind.classList.toggle('fk-step--visited', visitedSteps.has(i));
+    });
     if (n === total - 1) updateReview();
     refreshNextDisabled();
     window.scrollTo(0, 0);
@@ -408,10 +413,11 @@
     });
   }
 
-  // Stepper click navigation
+  // Stepper click navigation — only visited steps are navigable to prevent
+  // bypassing step gating by clicking ahead.
   indicators.forEach(function (indicator, i) {
     indicator.addEventListener('click', function () {
-      showStep(i);
+      if (visitedSteps.has(i)) showStep(i);
     });
   });
 
