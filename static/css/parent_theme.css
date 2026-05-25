@@ -548,7 +548,7 @@ h1, h2, h3 {
   margin-top: 26px;
 }
 
-.fk-wizard-nav-actions {
+.fk-wizard-actions {
   display: flex;
   gap: 12px;
 }
