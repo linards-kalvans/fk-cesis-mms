@@ -299,4 +299,55 @@
     classifyFieldAction: classifyFieldAction,
     applyExtractedFields: applyExtractedFields,
   };
+
+  /* P4 Slice D — camera-affordance shim.
+   *
+   * document_card.html renders two <label for="id_<field>"> controls
+   * pointing at the same canonical hidden file input. The "Augšupielādēt failu"
+   * label uses native label→input wiring (no JS needed). The "Uzņemt attēlu"
+   * label carries data-camera-affordance and lives inside a .fk-camera-only
+   * wrapper (hidden on non-coarse pointers).
+   *
+   * On camera-label click:
+   *   1. preventDefault — stop the native label→input click flow.
+   *   2. Set capture="environment" and accept="image/*" on the canonical input.
+   *   3. Call input.click() ourselves so the device opens the camera.
+   *
+   * Non-camera labels get a pointerdown listener that defensively clears
+   * `capture` before the native label→input click runs — handles the
+   * camera-cancelled-without-pick edge case.
+   */
+  function wireCameraAffordance() {
+    var cameraLabels = document.querySelectorAll('label[data-camera-affordance]');
+    cameraLabels.forEach(function (lbl) {
+      lbl.addEventListener('click', function (event) {
+        event.preventDefault();
+        var inputId = lbl.getAttribute('for');
+        if (!inputId) return;
+        var input = document.getElementById(inputId);
+        if (!input) return;
+        input.setAttribute('accept', 'image/*');
+        input.setAttribute('capture', 'environment');
+        input.click();
+      });
+    });
+
+    var fileLabels = document.querySelectorAll(
+      'label.fk-button[for]:not([data-camera-affordance])'
+    );
+    fileLabels.forEach(function (lbl) {
+      lbl.addEventListener('pointerdown', function () {
+        var inputId = lbl.getAttribute('for');
+        if (!inputId) return;
+        var input = document.getElementById(inputId);
+        if (input) input.removeAttribute('capture');
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireCameraAffordance);
+  } else {
+    wireCameraAffordance();
+  }
 })();
