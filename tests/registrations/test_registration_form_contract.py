@@ -675,7 +675,10 @@ class TestGroupedFormContract:
     def test_member_section_fields(self):
         """Member section must contain: member_full_name, member_personal_id,
         member_birth_date, member_actual_address, member_same_address_as_guardian,
-        member_kit_size_shirt, member_kit_size_shorts."""
+        member_kit_size_shirt, member_kit_size_shorts.
+
+        Slice D — member_portrait_document moved to the documents section.
+        """
         from apps.registrations.forms import RegistrationApplicationForm
 
         member_fields = [
@@ -690,7 +693,6 @@ class TestGroupedFormContract:
             "member_actual_address",
             "member_kit_size_shirt",
             "member_kit_size_shorts",
-            "member_portrait_document",
         )
         assert member_fields == expected, (
             f"Member section fields must be {expected}, got {member_fields}."
@@ -698,7 +700,11 @@ class TestGroupedFormContract:
 
     def test_documents_section_fields(self):
         """Documents section must contain: guardian_identity_document,
-        member_identity_document, member_portrait_document."""
+        member_identity_document, member_portrait_document.
+
+        Slice D — member_portrait_document now lives in the documents section
+        alongside the two identity uploads.
+        """
         from apps.registrations.forms import RegistrationApplicationForm
 
         docs_fields = [
@@ -708,6 +714,7 @@ class TestGroupedFormContract:
         expected = (
             "guardian_identity_document",
             "member_identity_document",
+            "member_portrait_document",
         )
         assert docs_fields == expected, (
             f"Documents section fields must be {expected}, got {docs_fields}."
@@ -758,9 +765,9 @@ class TestGroupedFormContract:
         sections = list(form.grouped_fields())
 
         expected_counts = {
-            "documents": 2,
+            "documents": 3,
             "guardian": 5,
-            "member": 8,
+            "member": 7,
             "agreement": 2,
         }
         for name, fields in sections:

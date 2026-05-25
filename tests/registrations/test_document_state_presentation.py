@@ -237,7 +237,11 @@ class TestReplaceActionVisible:
     """Workspace must show a replace action for existing documents."""
 
     def test_replace_action_visible_when_document_exists(self):
-        """Workspace must show a replace action when an active document exists."""
+        """Workspace must show a replace action when an active document exists.
+
+        Slice D — the "replace" action is the upload-slot buttons themselves,
+        rendered inside the document card alongside the active-state hint.
+        """
         client = Client()
         acct, app = _create_workspace_draft_with_guardian_doc()
         _login(client, acct)
@@ -246,7 +250,12 @@ class TestReplaceActionVisible:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert "Replace" in content or "Aizvietot" in content
+        assert "Aizvietojiet tikai tad" in content, (
+            "Document card must still show the replace-only-if-wrong hint."
+        )
+        assert "Augšupielādēt failu" in content, (
+            "Upload buttons must be visible even when a document is already attached."
+        )
 
 
 # ===========================================================================
@@ -299,7 +308,14 @@ class TestReplaceUploadLinksPointToFileInputs:
     """Replace and upload actions must link to the correct file input fields."""
 
     def test_replace_link_points_to_guardian_identity_input(self):
-        """Guardian identity replace link must target id_guardian_identity_document."""
+        """Guardian identity replace label must point at id_guardian_identity_document.
+
+        Slice D — the Aizvietot anchor was replaced by
+        <label for="id_guardian_identity_document"> on both the file-picker
+        and camera labels inside the document card.
+        """
+        import re
+
         client = Client()
         acct, app = _create_workspace_draft_with_guardian_doc()
         _login(client, acct)
@@ -308,10 +324,19 @@ class TestReplaceUploadLinksPointToFileInputs:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert 'href="#id_guardian_identity_document"' in content
+        assert re.search(
+            r'<label[^>]*for="id_guardian_identity_document"',
+            content,
+        ), "Upload labels must point at the canonical file input via for-attribute."
 
     def test_upload_link_points_to_guardian_identity_input(self):
-        """Empty-state upload link must target id_guardian_identity_document."""
+        """Empty-state upload label must point at id_guardian_identity_document.
+
+        Same shape as the active-state test, different fixture (no document
+        attached). Verifies the for= wiring is present in the empty-state card.
+        """
+        import re
+
         acct = ParentAccount.objects.create(
             email="uploadlink@example.com",
             phone="+37120000001",
@@ -340,7 +365,10 @@ class TestReplaceUploadLinksPointToFileInputs:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert 'href="#id_guardian_identity_document"' in content
+        assert re.search(
+            r'<label[^>]*for="id_guardian_identity_document"',
+            content,
+        ), "Upload labels must point at the canonical file input via for-attribute."
 
 
 # ===========================================================================
