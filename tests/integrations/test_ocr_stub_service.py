@@ -96,6 +96,19 @@ class TestStubProviderGuardian:
         assert isinstance(result.confidence, dict)
         assert isinstance(result.flags, list)
 
+    def test_stub_guardian_result_has_date_of_birth(self, settings):
+        settings.OCR_PROVIDER_MODE = OCRProviderMode.STUB
+
+        result = extract_document_data(
+            kind="guardian_identity",
+            file_name="guardian.png",
+            content=_stub_guardian_payload(),
+            content_type="image/png",
+        )
+
+        assert "date_of_birth" in result.person_fields
+        assert result.person_fields["date_of_birth"] == "1985-03-10"
+
 
 # ---------------------------------------------------------------------------
 # Unit B — provider abstraction: stub returns member normalized result
@@ -133,6 +146,19 @@ class TestStubProviderMember:
 
         # subject is used to classify the extraction
         assert result.subject == "member"
+
+    def test_stub_member_result_has_date_of_birth(self, settings):
+        settings.OCR_PROVIDER_MODE = OCRProviderMode.STUB
+
+        result = extract_document_data(
+            kind="member_identity",
+            file_name="member.png",
+            content=_stub_member_payload(),
+            content_type="image/png",
+        )
+
+        assert "date_of_birth" in result.person_fields
+        assert result.person_fields["date_of_birth"] == "2015-06-15"
 
 
 # ---------------------------------------------------------------------------

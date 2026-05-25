@@ -585,3 +585,107 @@ class TestOcrFailurePersistence:
         )
         assert identity_doc.ocr_status == Document.OcrStatus.FAILED
         assert identity_doc.ocr_error_code == "invalid_response"
+
+
+# ===========================================================================
+# _ocr_extracted_fields — date_of_birth mapping
+# ===========================================================================
+
+
+class TestOcrExtractedFieldsDob:
+    """_ocr_extracted_fields must map date_of_birth → member_birth_date for member docs."""
+
+    def test_member_identity_dob_maps_to_member_birth_date(self, settings, parent_account):
+        from apps.documents.models import Document, DocumentExtraction
+        from apps.documents.ocr import encrypt_json
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.views import _ocr_extracted_fields
+
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        app = RegistrationApplication.objects.create(
+            parent_account=parent_account,
+            guardian_email=parent_account.email,
+            guardian_phone="+37100000099",
+            status=RegistrationApplication.Status.SUBMITTED,
+        )
+        doc = Document.objects.create(
+            application=app,
+            kind=Document.Kind.MEMBER_IDENTITY,
+            file="private-uploads/test/dob_member.png",
+            content_type="image/png",
+            ocr_status=Document.OcrStatus.COMPLETED,
+        )
+        DocumentExtraction.objects.create(
+            document=doc,
+            subject_role="member",
+            provider="stub",
+            extraction_schema_version="v1",
+            encrypted_payload=encrypt_json({
+                "subject": "member",
+                "person_fields": {
+                    "first_name": "Jānis",
+                    "last_name": "Bērziņš",
+                    "personal_id": "010125-99001",
+                    "date_of_birth": "2015-06-15",
+                },
+                "document_metadata": {},
+                "confidence": {},
+                "flags": [],
+                "raw_reference": {"provider": "stub"},
+            }),
+            encrypted_summary=encrypt_json("noop"),
+        )
+
+        result = _ocr_extracted_fields(doc)
+
+        assert result.get("member_birth_date") == "2015-06-15"
+
+    def test_guardian_identity_dob_not_mapped(self, settings, parent_account):
+        """Guardian date_of_birth is not surfaced to the form (no guardian_birth_date field)."""
+        from apps.documents.models import Document, DocumentExtraction
+        from apps.documents.ocr import encrypt_json
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.views import _ocr_extracted_fields
+
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        app = RegistrationApplication.objects.create(
+            parent_account=parent_account,
+            guardian_email=parent_account.email,
+            guardian_phone="+37100000098",
+            status=RegistrationApplication.Status.SUBMITTED,
+        )
+        doc = Document.objects.create(
+            application=app,
+            kind=Document.Kind.GUARDIAN_IDENTITY,
+            file="private-uploads/test/dob_guardian.png",
+            content_type="image/png",
+            ocr_status=Document.OcrStatus.COMPLETED,
+        )
+        DocumentExtraction.objects.create(
+            document=doc,
+            subject_role="guardian",
+            provider="stub",
+            extraction_schema_version="v1",
+            encrypted_payload=encrypt_json({
+                "subject": "guardian",
+                "person_fields": {
+                    "first_name": "Anna",
+                    "last_name": "Bērziņa",
+                    "personal_id": "010101-98001",
+                    "date_of_birth": "1985-03-10",
+                },
+                "document_metadata": {},
+                "confidence": {},
+                "flags": [],
+                "raw_reference": {"provider": "stub"},
+            }),
+            encrypted_summary=encrypt_json("noop"),
+        )
+
+        result = _ocr_extracted_fields(doc)
+
+        # No guardian_birth_date form field; DOB must not appear in result.
+        assert "guardian_birth_date" not in result
+        assert "date_of_birth" not in result

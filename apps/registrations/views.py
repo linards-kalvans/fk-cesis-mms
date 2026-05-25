@@ -660,6 +660,9 @@ def _ocr_extracted_fields(document: Document) -> dict[str, str]:
             fields["member_full_name"] = full_name
         if pid:
             fields["member_personal_id"] = pid
+        dob = str(person_fields.get("date_of_birth", "")).strip()
+        if dob:
+            fields["member_birth_date"] = dob
     return fields
 
 
