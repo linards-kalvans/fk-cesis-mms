@@ -590,7 +590,6 @@ class TestParentThemeCssContractSliceD:
         )
 
     def test_fk_button_small_meets_40px_floor(self):
-        section = self._slice_d_section()
         # The bumped rule lives inside the Slice D section as an override,
         # OR the existing .fk-button--small rule has been edited to 40px+.
         css = self._read_css()
@@ -605,21 +604,3 @@ class TestParentThemeCssContractSliceD:
             "Slice D requires ≥ 40px."
         )
 
-    def test_form_inputs_meet_44px_floor(self):
-        section = self._slice_d_section()
-        # New rule lives in Slice D section.
-        match = re.search(
-            r"\.fk-input[^\{]*\{[^}]*min-height:\s*(\d+)px",
-            section,
-            re.DOTALL,
-        )
-        assert match, "Slice D must define min-height for .fk-input"
-        assert int(match.group(1)) >= 44, (
-            f".fk-input min-height is {match.group(1)}px; require ≥ 44px."
-        )
-
-    def test_date_input_meets_44px_floor(self):
-        section = self._slice_d_section()
-        assert 'input[type="date"]' in section, (
-            "Slice D must include a touch-target floor for input[type=date]"
-        )

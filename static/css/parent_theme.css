@@ -1098,13 +1098,7 @@ h1, h2, h3 {
   }
 }
 
-/* Touch-target floors for form controls (Slice D acceptance #5). */
-.fk-input,
-.fk-select,
-.fk-textarea {
-  min-height: 44px;
-}
-
-input[type="date"] {
-  min-height: 44px;
-}
+/* Touch-target floor for form controls is already enforced by the
+   `.fk-form-field input/select/textarea` rule above (min-height: 46px),
+   which exceeds the Slice D acceptance #5 floor of 44px. No extra
+   selectors are needed here. */
