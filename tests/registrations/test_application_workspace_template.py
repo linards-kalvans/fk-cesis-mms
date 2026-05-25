@@ -368,6 +368,16 @@ class TestSliceDWorkspaceTemplate:
             ".fk-address-row container so the mobile stack CSS rule can target it."
         )
 
+    def test_no_leaked_django_comment_markers(self, draft_application, verified_client):
+        # Django's {# ... #} is single-line only; multi-line forms render as
+        # literal text including the {# and #} sequences. Catch the whole
+        # class of bug with one substring check on the rendered workspace.
+        html = self._html(draft_application, verified_client)
+        assert "{#" not in html, (
+            "Rendered HTML contains a literal '{#' — a multi-line {# ... #} "
+            "comment is leaking into the page. Convert it to {% comment %}...{% endcomment %}."
+        )
+
 
 @pytest.mark.django_db
 class TestSliceDViewContext:

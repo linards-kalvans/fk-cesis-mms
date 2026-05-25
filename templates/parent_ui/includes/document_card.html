@@ -30,10 +30,6 @@
       {% with field_id=document_field_id_map|get_item:kind %}
         {% with bound_field=document_bound_fields|get_item:kind %}
           <div class="fk-upload-slot">
-            {# Canonical hidden file input. Form-side widget attrs are applied by
-               RegistrationApplicationForm.__init__ (data-async-upload,
-               data-progress-slot, data-step-required, etc.) Task 9 adds the
-               fk-visually-hidden class. #}
             {{ bound_field }}
 
             <label for="{{ field_id }}" class="fk-button fk-button--secondary fk-button--full">
