@@ -4,6 +4,7 @@ import re
 from html.parser import HTMLParser
 
 import pytest
+from django.conf import settings
 from django.urls import reverse
 
 # English tokens that should never appear in user-visible copy on parent surfaces.
@@ -18,6 +19,9 @@ ENGLISH_TOKENS = (
 # Latvian phrases that share letters with an English token (e.g. the
 # Latvian preposition "no" meaning "from"). Stripped from rendered HTML
 # *before* extracting visible text, so the token scan never sees them.
+# When adding a new guard for a Latvian phrase containing "no", add the
+# whole phrase here (e.g. "no pieteikuma"), not the bare word "no" —
+# the bare token would mask real English "no" leaks.
 ALLOWED_FRAGMENTS = (
     "FK Cēsis",            # brand
     "no pieteikuma",       # Latvian "from the application"
@@ -109,6 +113,8 @@ class TestParentSurfaceCopyContract:
     ):
         from apps.registrations.models import RegistrationApplication
 
+        # verified_client depends on parent_account in conftest.py (function-scoped),
+        # so the application is correctly owned by the logged-in user.
         RegistrationApplication.objects.create(
             parent_account=parent_account,
             status=RegistrationApplication.Status.DRAFT,
@@ -151,8 +157,9 @@ class TestNewRegistrationTemplateCopy:
     def test_new_registration_template_has_no_english_tokens(self):
         from pathlib import Path
 
-        source = Path(
-            "templates/registrations/new_registration.html"
+        source = (
+            Path(settings.BASE_DIR)
+            / "templates/registrations/new_registration.html"
         ).read_text(encoding="utf-8")
         # Strip {% comment %}…{% endcomment %} blocks (multiline).
         cleaned = re.sub(
