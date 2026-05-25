@@ -42,6 +42,7 @@ from apps.registrations.presentation import (
     FIELD_NAME_BY_KIND,
     active_documents_by_kind,
     documents_by_field_name,
+    parse_ocr_summary,
     source_label,
     workspace_mode,
 )
@@ -265,14 +266,14 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             }
         )
 
-    ocr_decrypted_summaries: dict[str, str | None] = {}
+    ocr_decrypted_summaries: dict[str, list[tuple[str, str]] | None] = {}
     for doc in application.documents.filter(deleted_at__isnull=True).select_related("extraction"):
         extraction = getattr(doc, "extraction", None)
         if extraction is None or not extraction.encrypted_summary:
             continue
         try:
             summary = decrypt_json(extraction.encrypted_summary)
-            ocr_decrypted_summaries[doc.kind] = str(summary)
+            ocr_decrypted_summaries[doc.kind] = parse_ocr_summary(str(summary))
         except Exception:
             ocr_decrypted_summaries[doc.kind] = None
 

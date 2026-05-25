@@ -93,3 +93,42 @@ def classify_field_action(current_value: str | None, ocr_value: str | None) -> s
     if cur.casefold() == ocr.casefold():
         return "noop"
     return "suggest"
+
+
+# Latvian labels for OCR-extracted field keys. Keys match the raw key
+# names emitted by apps/integrations/tasks.py when building the
+# encrypted summary; values are the human-readable Latvian labels shown
+# in the parent workspace's "OCR kopsavilkums" section.
+OCR_FIELD_LABELS: dict[str, str] = {
+    "first_name": "Vārds",
+    "last_name": "Uzvārds",
+    "personal_id": "Personas kods",
+    "document_number": "Dokumenta numurs",
+    "issuer": "Izsniedzējs",
+    "issuance_date": "Izsniegšanas datums",
+    "expiry_date": "Derīguma termiņš",
+}
+
+
+def parse_ocr_summary(summary: str | None) -> list[tuple[str, str]]:
+    """Convert a multi-line ``key: value`` OCR summary string into
+    ``[(label, value), …]`` tuples for template rendering.
+
+    Unknown keys fall back to a title-cased version of the raw key so the
+    workspace never renders the underscored identifier directly. Empty or
+    whitespace-only input returns an empty list.
+    """
+    if not summary:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for line in summary.splitlines():
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        label = OCR_FIELD_LABELS.get(key, key.replace("_", " ").title())
+        pairs.append((label, value))
+    return pairs

@@ -108,10 +108,14 @@ class TestWorkspaceOcrDecryption:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Decrypted guardian summary contains "issuer: MLP" from stub provider
-        assert "issuer: MLP" in content, (
+        # Decrypted guardian summary surfaces the stub provider's "issuer"
+        # field — rendered with the Latvian label "Izsniedzējs" via
+        # OCR_FIELD_LABELS, and the raw value "MLP" alongside it.
+        assert "Izsniedzējs" in content and "MLP" in content, (
             "Workspace must decrypt and render guardian extraction summary content."
         )
+        # The raw underscored key must no longer leak into rendered HTML.
+        assert "issuer: MLP" not in content
 
     def test_workspace_shows_decrypted_member_summary(self, settings):
         """Workspace page must show decrypted member identity summary content."""
