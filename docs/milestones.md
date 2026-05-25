@@ -76,12 +76,12 @@ Do **not** use archived implementation plans for current planning unless user ex
 - audit/event baseline still incomplete (P7 target)
 
 ### Registration UX gaps
-- step-gated wizard validation with background draft auto-save not yet implemented (P4 target)
-- camera-capture option for document/photo upload not yet implemented (P4 target)
-- personal-data consent gate on the ID-documents step not yet implemented (P4 target)
-- OCR processing UX (spinner, success confirmation, name title-casing) not yet implemented (P4 target)
-- Latvian copy normalization across parent-facing surfaces still incomplete (P4 target)
-- mobile-first responsiveness on the parent registration workspace still pending (P4 target)
+- step-gated wizard validation with background draft auto-save — delivered in P4 Slice C
+- camera-capture option for document/photo upload — delivered in P4 Slice D
+- personal-data consent gate on the ID-documents step — delivered in P4 Slice C
+- OCR processing UX (spinner, success confirmation, name title-casing) — delivered in P4 Slices A + B
+- Latvian copy normalization across parent-facing surfaces still incomplete (deferred to P4 Slice E)
+- mobile-first responsiveness on the parent registration workspace — workspace delivered in P4 Slice D; entry/chooser/portal mobile polish deferred to P4 Slice E
 - unnecessary re-upload can replace earlier file and create confusing admin rows (P7 target)
 
 ### Admin UX gaps
@@ -176,6 +176,8 @@ Do **not** use archived implementation plans for current planning unless user ex
 - No regression of P3 secure-storage posture: encrypted payload + summary still persisted; non-blocking failure path preserved.
 
 ### P4 — Parent-flow UX polish + mobile-first workspace
+**Status:** Slices A–D delivered; Slice E (entry/chooser/portal polish + Latvian copy audit) outstanding.
+
 **Why fourth**
 - P3.5 deferred its visual polish (spinners, chip styling, source badges, visibility-aware polling, failure-message Latvianization); consolidating leftovers now closes that loop before any new workflow build
 - parents are using the live LAN baseline now; compounding clarity on their flow before staff-workflow expansion yields faster ground-truth value
