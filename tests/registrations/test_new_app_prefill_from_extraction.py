@@ -475,27 +475,46 @@ class TestPrefillNoDoubling:
         # Must be exactly "Anna Bērziņa", not "Anna Bērziņa Anna Bērziņa".
         assert prefill["guardian_full_name"] == "Anna Bērziņa"
 
-    def test_guardian_phone_prefilled_from_latest_application(self):
-        """Guardian phone must come from the most recent application, not the account."""
-        from apps.registrations.models import RegistrationApplication
+    def test_submit_syncs_account_phone_from_application(self, settings):
+        """Submitting an application updates account.phone so future prefill uses the new value."""
         from apps.registrations.services import get_application_prefill
 
+        settings.OCR_PROVIDER_MODE = "stub"
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        kit = _ensure_kit_sizes()
         account = ParentAccount.objects.create(
-            email="phoneprefill@example.com",
+            email="phonesync@example.com",
             phone="+37120000001",  # account registration phone
         )
-        RegistrationApplication.objects.create(
-            parent_account=account,
-            guardian_email=account.email,
-            guardian_full_name="Anna Bērziņa",
-            guardian_personal_id="010101-72000",
-            guardian_phone="+37120000999",  # contact phone entered in prior app
-            status=RegistrationApplication.Status.SUBMITTED,
+
+        app = create_or_update_draft(
+            data={
+                "guardian_email": account.email,
+                "guardian_full_name": "Anna Bērziņa",
+                "guardian_personal_id": "010101-72000",
+                "guardian_phone": "+37120000999",  # contact phone for this app
+                "guardian_declared_address": "Riga",
+                "member_full_name": "Child One",
+                "member_personal_id": "010125-72001",
+                "member_birth_date": "2018-01-01",
+                "member_kit_size_shirt": kit["shirt"].pk,
+                "member_kit_size_shorts": kit["shorts"].pk,
+            },
+            files={
+                "guardian_identity_document": _make_png("gid.png"),
+                "member_identity_document": _make_png("mid.png"),
+                "member_portrait_document": _make_png("mp.png"),
+            },
+            verified_account=account,
         )
+        submit_application(app, account)
 
+        account.refresh_from_db()
+        assert account.phone == "+37120000999"
+
+        # Subsequent new-app prefill reads account.phone — now in sync.
         prefill = get_application_prefill(account)
-
-        # Prior application's guardian_phone wins over account.phone.
         assert prefill["guardian_phone"] == "+37120000999"
 
     def test_member_fields_absent_from_new_app_prefill(self, settings):
