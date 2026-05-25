@@ -197,7 +197,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - minimal schema change scoped to consent: two new nullable fields on `RegistrationApplication` (`personal_data_consent_at`, `personal_data_consent_version`); no other model changes, no admin redesign, no new business rules
 
 ### P4.5 — Parent-flow quality-debt sweep
-**Status:** queued; surfaced during P4 Slice E LAN verification (2026-05-25).
+**Status:** complete (2026-05-25)
 
 **Why interleaved**
 - Each item is a real user-visible defect or UX gap surfaced during the Slice E manual LAN check on 192.168.3.245. They predate Slice E (earlier P3 / P3.5 / P4 Slice A–B), so they were correctly out of Slice E scope, but they should land before P5's approval-to-agreement work starts shaping staff workflow on top of the same parent surfaces.
