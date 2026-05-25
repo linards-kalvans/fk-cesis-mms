@@ -141,7 +141,7 @@ Target Django monolith with domain apps:
   - Document card DOM updates to "Aktīvs" state immediately after async upload: `markCardAsUploaded` in `async_upload.js` swaps badge + body and inserts the `data-uploaded-document` hook (`commit 38bab23`).
   - Step-gating now recognises pre-uploaded documents on draft resume: `document_card.html` emits `[data-uploaded-document]` when a doc is present; `wizard.js::isFileFieldFilled` reads it via `.fk-upload-slot` (`commit aca78bf`).
   - Mobile wizard: stepper clicks restricted to `visitedSteps` Set (prevents bypassing step gating by tapping ahead); `fk-step--visited` CSS class marks navigable steps; `.fk-step-number` bumped to 44 × 44 px for reliable touch targets (`commit e3a0d18`).
-  - Guardian phone now prefilled from the latest application's `guardian_phone` (falls back to `account.phone` only when no prior app exists or its phone is empty). The contact phone the parent typed into a prior application is the authoritative source over the registration-time phone (`commit 1f23a7d`).
+  - Guardian phone now stays in sync with the parent's most recent application: `submit_application` updates `account.phone` to match `application.guardian_phone` whenever they differ. `account.phone` remains the single source of truth for new-app prefill — no read-time overrides (`commits 1f23a7d`, `ba0b01a`).
   - Test suite: 856 passed; ruff and mypy clean.
 
 ### Test suite consolidation (2026-05-24)
