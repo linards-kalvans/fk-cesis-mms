@@ -31,6 +31,7 @@
         {% with bound_field=document_bound_fields|get_item:kind %}
           <div class="fk-upload-slot">
             {{ bound_field }}
+            {% if document %}<span data-uploaded-document hidden></span>{% endif %}
 
             <label for="{{ field_id }}" class="fk-button fk-button--secondary fk-button--full">
               <svg class="fk-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

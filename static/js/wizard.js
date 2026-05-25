@@ -53,6 +53,8 @@
       var marker = input.closest('.fk-form-field').querySelector('[data-uploaded-document]');
       if (marker) return true;
     }
+    var slot = input.closest('.fk-upload-slot');
+    if (slot && slot.querySelector('[data-uploaded-document]')) return true;
     return false;
   }
 
