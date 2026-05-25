@@ -119,8 +119,6 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
                 "guardian_declared_address": latest.guardian_declared_address,
             }
         )
-        if latest.guardian_phone:
-            prefill["guardian_phone"] = latest.guardian_phone
 
     # Merge OCR-extracted values from prior applications
     # OCR values take priority when extraction exists; model values used as fallback.
@@ -604,6 +602,16 @@ def submit_application(
     application.reviewed_by = None
     application.reviewed_at = None
     application.save(update_fields=["status", "submitted_at", "updated_at", "review_message", "reviewed_by_id", "reviewed_at"])
+
+    # Sync the parent account's phone to the contact phone the parent entered
+    # in this application. account.phone is the source of truth for prefill;
+    # keeping it current means later new-app prefill suggests the right phone.
+    if application.parent_account_id is not None and application.guardian_phone:
+        account = application.parent_account
+        if account.phone != application.guardian_phone:
+            account.phone = application.guardian_phone
+            account.save(update_fields=["phone", "updated_at"])
+
     return application
 
 
