@@ -153,11 +153,18 @@ document.addEventListener('DOMContentLoaded',function(){
         {% if ocr_decrypted_summaries %}
         <div class="fk-summary-section">
           <h3 class="fk-summary-section-title">OCR kopsavilkums</h3>
-          {% for doc_kind, summary in ocr_decrypted_summaries.items %}
-            {% if summary %}
-              <div class="fk-summary-item">
-                <span>{{ doc_kind }}</span>
-                <strong style="white-space:pre-wrap;">{{ summary }}</strong>
+          {% for doc_kind, summary_pairs in ocr_decrypted_summaries.items %}
+            {% if summary_pairs %}
+              <div class="fk-summary-item fk-summary-item--ocr">
+                <span>{{ document_kind_labels|get_item:doc_kind }}</span>
+                <dl class="fk-ocr-summary-list">
+                  {% for label, value in summary_pairs %}
+                  <div class="fk-ocr-summary-row">
+                    <dt>{{ label }}</dt>
+                    <dd>{{ value }}</dd>
+                  </div>
+                  {% endfor %}
+                </dl>
               </div>
             {% endif %}
           {% endfor %}
@@ -211,9 +218,19 @@ document.addEventListener('DOMContentLoaded',function(){
     {% if ocr_decrypted_summaries and section_name == "documents" %}
       <div class="fk-summary-section">
         <h3 class="fk-summary-section-title">OCR kopsavilkums</h3>
-        {% for doc_kind, summary in ocr_decrypted_summaries.items %}
-          {% if summary %}
-            <p><strong>{{ doc_kind }}:</strong> {{ summary }}</p>
+        {% for doc_kind, summary_pairs in ocr_decrypted_summaries.items %}
+          {% if summary_pairs %}
+            <div class="fk-summary-item fk-summary-item--ocr">
+              <span>{{ document_kind_labels|get_item:doc_kind }}</span>
+              <dl class="fk-ocr-summary-list">
+                {% for label, value in summary_pairs %}
+                <div class="fk-ocr-summary-row">
+                  <dt>{{ label }}</dt>
+                  <dd>{{ value }}</dd>
+                </div>
+                {% endfor %}
+              </dl>
+            </div>
           {% endif %}
         {% endfor %}
       </div>

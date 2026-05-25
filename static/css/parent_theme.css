@@ -870,6 +870,33 @@ h1, h2, h3 {
   }
 }
 
+/* ── OCR summary review list (P4 Slice E follow-up) ── */
+
+.fk-ocr-summary-list {
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.fk-ocr-summary-row {
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.fk-ocr-summary-row dt {
+  margin: 0;
+  color: var(--fk-muted);
+  font-size: 0.9rem;
+}
+
+.fk-ocr-summary-row dd {
+  margin: 0;
+  font-weight: 600;
+}
+
 /* ── OCR async UX (P4 Slice B) ── */
 
 .fk-spinner {
