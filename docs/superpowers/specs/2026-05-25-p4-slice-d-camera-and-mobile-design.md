@@ -31,15 +31,16 @@ None. Slice D inserts cleanly between Slice C (landed) and Slice E (still to pla
 
 ### Camera capture wiring
 
-Each of the three document slots exposes two buttons inside the `document_card.html` partial:
-- **"Augšupielādēt failu"** — triggers a hidden `<input type="file">` (the canonical form field).
-- **"Uzņemt attēlu"** — triggers a hidden `<input type="file" accept="image/*" capture="environment">` with the same `name` and `data-async-upload`/`data-progress-slot` attributes as the canonical input. This input is markup-only — it's not declared on the Django form, but it carries the same `name` so file data flows through the existing form binding on submit.
+Each of the three document slots exposes two `<label>` controls inside the `document_card.html` partial — both pointing at a **single** hidden canonical `<input type="file">` per slot:
 
-Both inputs route through `static/js/async_upload.js` unchanged (same binding selector `[data-async-upload]`). The server-side upload endpoint does not need to know which input fired.
+- **"Augšupielādēt failu"** — a `<label for="id_<field>">` styled as a button. Native label→input wiring triggers the standard file picker. No JS required.
+- **"Uzņemt attēlu"** — a second `<label for="id_<field>">` styled as a button, marked `data-camera-affordance`. A tiny JS shim listens for clicks on these labels, calls `event.preventDefault()`, sets `accept="image/*"` and `capture="environment"` on the canonical input, then calls `input.click()` to open the device camera.
 
-The "Uzņemt attēlu" button + its hidden input are wrapped in `<span class="fk-camera-only">…</span>` and hidden via CSS: `@media not (pointer: coarse) { .fk-camera-only { display: none; } }`. No JS feature detection, no UA sniffing.
+Only one canonical input per slot means: form binding is unchanged, `async_upload.js` keeps its single `[data-async-upload]` binding per slot, and `wizard.js` step-gating (which checks `input.files.length` on `[data-step-required]` inputs) works without modification.
 
-When JavaScript is unavailable, the visible "Augšupielādēt failu" button uses native `<label for="…">` to trigger the canonical hidden input — the sync upload fallback path still works.
+The "Uzņemt attēlu" label is wrapped in `<span class="fk-camera-only">…</span>` and hidden via CSS: `@media not (pointer: coarse) { .fk-camera-only { display: none; } }`. No JS feature detection, no UA sniffing.
+
+When JavaScript is unavailable, the camera label loses its shim but still functions as a plain `<label for>` — clicking it opens the standard file picker (identical to the "Augšupielādēt failu" label). The non-JS fallback is graceful degradation, not a broken state.
 
 ### Document-card refactor
 
@@ -47,13 +48,49 @@ When JavaScript is unavailable, the visible "Augšupielādēt failu" button uses
 
 - Status block (kind label, "Aktīvs"/"Nav augšupielādēts" badge, filename, hint) stays as today.
 - A new `.fk-upload-slot` block appended to each card contains:
-  - Hidden `<input type="file">` (canonical, carries all `data-async-upload`/`data-progress-slot`/`data-step-required` attrs).
-  - Visible `<button class="fk-button fk-button--secondary fk-button--full">` labeled "Augšupielādēt failu" that triggers the canonical input.
-  - `.fk-camera-only` wrapper containing hidden camera input + visible "Uzņemt attēlu" button.
+  - Hidden `<input type="file">` (canonical, carries all `data-async-upload`/`data-progress-slot`/`data-step-required` attrs; visually hidden via `.fk-visually-hidden` so it stays in the accessibility tree).
+  - Visible `<label for="id_<field>" class="fk-button fk-button--secondary fk-button--full">` labeled "Augšupielādēt failu". Native `<label for>` semantics trigger the canonical input.
+  - `.fk-camera-only` wrapper containing a second `<label for="id_<field>" data-camera-affordance class="fk-button fk-button--secondary fk-button--full">` labeled "Uzņemt attēlu".
 - The existing "Aizvietot" anchor link is removed.
 - `application_workspace.html` stops rendering visible file inputs in the documents step. The step body becomes: consent block + `{% include document_card.html %}` (3 cards) + member-portrait card.
 
-Form binding posture is unchanged. `apps/registrations/forms.py` still declares the three `FileField`s; `__init__` keeps setting the `data-*` attrs on the canonical input via widget attrs. The template wires the camera input by name/attrs only.
+Form binding posture is unchanged. `apps/registrations/forms.py` still declares the three `FileField`s; `__init__` keeps setting the `data-*` attrs on the canonical input via widget attrs. The camera label is template-only (no second input, no form-side changes).
+
+A small JS shim — added to `static/js/async_upload.js` (or a new top-of-file helper, depending on file size) — wires up `label[data-camera-affordance]`:
+
+```js
+document.querySelectorAll('label[data-camera-affordance]').forEach(function (lbl) {
+  lbl.addEventListener('click', function (event) {
+    event.preventDefault();
+    var input = document.getElementById(lbl.getAttribute('for'));
+    if (!input) return;
+    input.setAttribute('accept', 'image/*');
+    input.setAttribute('capture', 'environment');
+    input.click();
+  });
+});
+```
+
+`accept` is set defensively — if the canonical input already has `accept`, this is a no-op of the same value. The shim runs idempotently on every click. Setting `capture` does not stick across the "Augšupielādēt failu" label path because that label uses native `<label for>` wiring, which simply triggers `input.click()` without touching attributes — but to avoid a stale `capture` causing the file-picker label to open the camera, the shim also resets `capture` on the canonical input on the next `change` event:
+
+```js
+function resetCaptureOnChange(input) {
+  input.addEventListener('change', function () {
+    input.removeAttribute('capture');
+  });
+}
+```
+
+Edge case: if the user cancels the camera picker without selecting a file, `change` does not fire, so `capture` stays set. The next "Augšupielādēt failu" click would then re-open the camera. To handle this, the file label also gets a `pointerdown` listener that clears `capture` defensively before the native label→input click runs:
+
+```js
+document.querySelectorAll('label.fk-button[for]:not([data-camera-affordance])').forEach(function (lbl) {
+  lbl.addEventListener('pointerdown', function () {
+    var input = document.getElementById(lbl.getAttribute('for'));
+    if (input) input.removeAttribute('capture');
+  });
+});
+```
 
 ### Mobile-first wizard layout
 
@@ -101,23 +138,25 @@ Two layers:
 
 - The `(pointer: coarse)` media query is a sufficient proxy for "device that honors `capture`". A touchscreen laptop will show both buttons; that's acceptable (no broken UX, just a redundant control). Modern mobile browsers all match `pointer: coarse`.
 - The existing async upload + OCR enqueue path from Slice B is stable; we add a second input but do not change the binding or polling logic.
-- Submitting the form when only the camera input has a file works because both inputs share the same `name`; Django's `MultiPartParser` exposes the last value with that name on the request. If both inputs are populated simultaneously (rare but possible), the camera input wins — acceptable for first slice.
+- A single canonical input per slot means form binding has exactly one source of truth; there is no "which input wins" question to resolve.
 - Sticky CTA does not collide with the on-screen keyboard on iOS Safari. If field-keyboard scenarios surface a regression during manual verification, we'll fall back to `position: fixed` with a viewport-padding adjustment, but the default sticky path is preferred.
 
 ## Acceptance criteria
 
 This slice is complete when all of the following are true:
 
-1. **Camera capture buttons present and wired**:
-   - Each document card renders both "Augšupielādēt failu" and "Uzņemt attēlu" buttons backed by hidden file inputs.
-   - The camera input has `accept="image/*"` and `capture="environment"`.
-   - Both inputs share the canonical form field's `name` and `data-async-upload` attrs.
+1. **Camera capture labels present and wired**:
+   - Each document card renders both "Augšupielādēt failu" and "Uzņemt attēlu" labels pointing at a single canonical hidden `<input type="file">`.
+   - The camera label has the `data-camera-affordance` marker attribute.
+   - A JS shim on `label[data-camera-affordance]` calls `event.preventDefault()`, sets `accept="image/*"` + `capture="environment"` on the canonical input, then calls `input.click()`.
+   - The non-camera file label uses a `pointerdown` listener to clear `capture` defensively.
+   - The async upload binding on `[data-async-upload]` is unchanged (single input per slot).
    - `.fk-camera-only` wrapper is present on the camera control.
 2. **Camera control hidden on non-coarse pointers**:
    - CSS `@media not (pointer: coarse) { .fk-camera-only { display: none; } }` is in `parent_theme.css`.
    - No JS-based show/hide; no UA sniffing.
 3. **Document-card refactor complete**:
-   - `document_card.html` renders the upload-slot block with both inputs and both buttons.
+   - `document_card.html` renders the upload-slot block with a single canonical hidden input and two visible labels (file + camera).
    - The "Aizvietot" anchor link is removed.
    - `application_workspace.html` documents step renders only via the partial (no duplicate file inputs).
 4. **Mobile-first workspace**:
@@ -134,11 +173,11 @@ This slice is complete when all of the following are true:
    - Non-blocking OCR failure path still passes its test.
    - Ownership/security posture unchanged.
 7. **Tests cover**:
-   - Documents step renders 3 cards with both file + camera inputs per kind.
+   - Documents step renders 3 cards, each with a single hidden file input plus both file and camera labels (`label[for="…"]` and `label[for="…"][data-camera-affordance]`).
    - "Aizvietot" anchor link is no longer rendered (regression guard).
    - Sticky-CTA marker class is on per-step nav rows.
-   - Async upload endpoint accepts a POST from the camera input the same way as from the file-picker input.
-   - Visual contract test extended with the new selectors (`.fk-upload-slot`, `.fk-camera-only`, `.fk-wizard-nav--sticky`).
+   - JS-contract assertion that the camera shim is present in `async_upload.js` (preventDefault + setAttribute('capture', 'environment') + input.click()).
+   - Visual contract test extended with the new selectors (`.fk-upload-slot`, `.fk-camera-only`, `.fk-wizard-nav--sticky`, `.fk-visually-hidden`).
 8. **Verification gates green**:
    - `uv run pytest -q` green.
    - `uv run ruff check .` green.
@@ -158,6 +197,5 @@ Verification gates the slice as a whole, not individual tasks:
 
 ## Open questions
 
-None at design time. The two areas where implementation could surface a question:
+None at design time. The one area where implementation could surface a question:
 - Sticky CTA + iOS Safari on-screen keyboard interaction — fall back to `position: fixed` with a viewport-aware padding if a regression is observed.
-- Form binding when both file inputs are populated — default to "camera wins" (Django's last-value semantics). Revisit only if user testing surfaces confusion.
