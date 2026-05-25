@@ -604,3 +604,33 @@ class TestParentThemeCssContractSliceD:
             "Slice D requires ≥ 40px."
         )
 
+    def test_workspace_container_uses_clamp_padding(self):
+        section = self._slice_d_section()
+        # Padding-inline declaration on .fk-workspace (or .fk-application-workspace)
+        # uses clamp(16px, 4vw, 32px).
+        assert "clamp(16px, 4vw, 32px)" in section, (
+            "Workspace container must use clamp(16px, 4vw, 32px) padding."
+        )
+
+    def test_address_sync_row_stacks_at_mobile(self):
+        section = self._slice_d_section()
+        # Slice D section must contain a media query block for max-width 720
+        # that targets .fk-address-row with flex-direction: column.
+        assert ".fk-address-row" in section, (
+            "Slice D must define stacking behavior for the address-sync row."
+        )
+
+    def test_save_pill_flows_inline_on_mobile(self):
+        section = self._slice_d_section()
+        # The save-pill (.fk-save-indicator) needs to switch from absolute
+        # positioning to static/in-flow on mobile.
+        match = re.search(
+            r"\.fk-save-indicator[^\{]*\{[^}]*position:\s*static",
+            section,
+            re.DOTALL,
+        )
+        assert match, (
+            "Slice D must reposition .fk-save-indicator to position: static "
+            "on mobile (max-width: 720px)."
+        )
+

@@ -1102,3 +1102,35 @@ h1, h2, h3 {
    `.fk-form-field input/select/textarea` rule above (min-height: 46px),
    which exceeds the Slice D acceptance #5 floor of 44px. No extra
    selectors are needed here. */
+
+/* Container padding (clamp-based, scales with viewport). Applies to
+   both the workspace shell and the new-app body. */
+.fk-application-workspace,
+.fk-workspace {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+
+/* Address-sync row — wraps the actual-address input + "same as guardian"
+   checkbox. Stacked on mobile so each control has its own row. */
+.fk-address-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+@media (max-width: 720px) {
+  .fk-address-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Save indicator: move into the flow above the active step so it
+     doesn't overlap the sticky CTA. Existing rule pins it absolute
+     at top-right of the workspace; the override puts it in normal flow
+     and right-aligns it. */
+  .fk-save-indicator {
+    position: static;
+    margin-left: auto;
+    margin-bottom: 8px;
+  }
+}
