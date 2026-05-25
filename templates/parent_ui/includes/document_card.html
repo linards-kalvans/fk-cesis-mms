@@ -18,16 +18,38 @@
           <p class="fk-document-card__hint">
             Aizvietojiet tikai tad, ja dokuments ir nepareizs vai novecojis.
           </p>
-          <a href="#{{ document_field_id_map|get_item:kind }}" class="fk-button fk-button--secondary fk-button--small fk-document-card__replace">Aizvietot</a>
         {% endif %}
       {% else %}
         <p class="fk-document-card__empty">
           Dokuments nav augšupielādēts.
-          {% if workspace_mode == "editable" %}
-            <a href="#{{ document_field_id_map|get_item:kind }}" class="fk-link">Augšupielādēt</a>
-          {% endif %}
         </p>
       {% endif %}
     </div>
+
+    {% if workspace_mode == "editable" %}
+      {% with field_id=document_field_id_map|get_item:kind %}
+        {% with bound_field=document_bound_fields|get_item:kind %}
+          <div class="fk-upload-slot">
+            {# Canonical hidden file input. Form-side widget attrs are applied by
+               RegistrationApplicationForm.__init__ (data-async-upload,
+               data-progress-slot, data-step-required, etc.) Task 9 adds the
+               fk-visually-hidden class. #}
+            {{ bound_field }}
+
+            <label for="{{ field_id }}" class="fk-button fk-button--secondary fk-button--full">
+              Augšupielādēt failu
+            </label>
+
+            <span class="fk-camera-only">
+              <label for="{{ field_id }}" data-camera-affordance class="fk-button fk-button--secondary fk-button--full">
+                Uzņemt attēlu
+              </label>
+            </span>
+
+            <p id="{{ field_id }}_progress" class="fk-form-progress" data-state="idle" hidden></p>
+          </div>
+        {% endwith %}
+      {% endwith %}
+    {% endif %}
   </div>
 {% endfor %}
