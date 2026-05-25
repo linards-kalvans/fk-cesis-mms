@@ -134,6 +134,15 @@ Target Django monolith with domain apps:
     - **Review step showed redundant "Saglabāt melnrakstu" button (commits `6732f4b`, `fb16bb1`):** removed save_draft button and `.fk-wizard-actions` wrapper from review step in both `application_workspace.html` and `new_registration.html`; "Iesniegt pieteikumu" now uses `fk-button--primary fk-button--full` matching the Turpināt style. New test file `tests/registrations/test_review_step_submit.py` (5 tests).
   - Test suite: 847 passed (up from 798 baseline); ruff and mypy clean.
 
+- **P4.5 delivered — parent-flow quality-debt sweep (2026-05-25)**
+  - Guardian full-name no longer doubled in new-app prefill: `_merge_ocr_extractions` removed model-value fallback; OCR wins unconditionally (`commit 58115e1` + `0a80b4e`).
+  - Member OCR fields no longer bleed into new-app prefill: member block removed from `_merge_ocr_extractions`; each new registration starts with a fresh child record. Two stale tests updated (`commit 15bcf86`).
+  - OCR stub now emits `date_of_birth` in `person_fields` (member: `2015-06-15`, guardian: `1985-03-10`). `_ocr_extracted_fields` maps `date_of_birth` → `member_birth_date` for member identity docs so the workspace prefill path can populate the DOB field after OCR completes (`commit 77e7fc4`).
+  - Document card DOM updates to "Aktīvs" state immediately after async upload: `markCardAsUploaded` in `async_upload.js` swaps badge + body and inserts the `data-uploaded-document` hook (`commit 38bab23`).
+  - Step-gating now recognises pre-uploaded documents on draft resume: `document_card.html` emits `[data-uploaded-document]` when a doc is present; `wizard.js::isFileFieldFilled` reads it via `.fk-upload-slot` (`commit aca78bf`).
+  - Mobile wizard: stepper clicks restricted to `visitedSteps` Set (prevents bypassing step gating by tapping ahead); `fk-step--visited` CSS class marks navigable steps; `.fk-step-number` bumped to 44 × 44 px for reliable touch targets (`commit e3a0d18`).
+  - Test suite: 855 passed; ruff and mypy clean.
+
 ### Test suite consolidation (2026-05-24)
 - `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.
 - Shared fixture homes (use these for new tests instead of repeating per-test bootstrap):
