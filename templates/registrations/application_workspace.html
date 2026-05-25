@@ -80,14 +80,18 @@
             </label>
             {% include "registrations/_terms_v1.html" %}
           </div>
-          {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map workspace_mode=workspace_mode %}
+          {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map document_bound_fields=document_bound_fields workspace_mode=workspace_mode %}
         {% endif %}
         {% for bound_field in bound_fields %}
-          {% if section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
-            <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
-            {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name existing_doc=document_by_field|get_item:bound_field.name kind_label=field_kind_labels|get_item:bound_field.name %}
+          {% if section_name == "documents" and bound_field.field.widget.input_type == "file" %}
+            {# Rendered by document_card.html above — skip here to avoid duplicate input. #}
+          {% elif section_name == "member" and bound_field.name == "member_same_address_as_guardian" %}
+            <div class="fk-address-row">
+              <input type="hidden" id="member_actual_address_previous" value="{{ form.member_actual_address.value|default:'' }}">
+              {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name existing_doc=document_by_field|get_item:bound_field.name kind_label=field_kind_labels|get_item:bound_field.name %}
+            </div>
             <script>
-// SameAddressSync
+// SameAddressSync — unchanged from before Slice D
 document.addEventListener('DOMContentLoaded',function(){
   var cb=document.getElementById('id_member_same_address_as_guardian');
   var addr=document.getElementById('id_member_actual_address');
@@ -105,7 +109,7 @@ document.addEventListener('DOMContentLoaded',function(){
             {% include "parent_ui/includes/form_field.html" with field=bound_field source_label=field_source_labels|get_item:bound_field.name existing_doc=document_by_field|get_item:bound_field.name kind_label=field_kind_labels|get_item:bound_field.name %}
           {% endif %}
         {% endfor %}
-        <div class="fk-wizard-nav">
+        <div class="fk-wizard-nav fk-wizard-nav--sticky">
           {% if not forloop.first %}
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
           {% else %}
@@ -160,9 +164,9 @@ document.addEventListener('DOMContentLoaded',function(){
         </div>
         {% endif %}
         <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
-        <div class="fk-wizard-nav" style="margin-top:22px;">
+        <div class="fk-wizard-nav fk-wizard-nav--sticky" style="margin-top:22px;">
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
-          <div class="fk-wizard-nav-actions">
+          <div class="fk-wizard-actions">
             <button type="submit" name="submit_action" value="save_draft" class="fk-button fk-button--secondary">Saglabāt melnrakstu</button>
             <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--red">Iesniegt pieteikumu</button>
           </div>

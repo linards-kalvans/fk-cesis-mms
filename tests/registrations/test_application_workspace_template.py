@@ -329,3 +329,41 @@ def test_template_consent_checkbox_unchecked_when_no_consent():
     assert not re.search(r"\bchecked\b", tag), (
         f"Consent checkbox should NOT be checked on fresh draft; tag: {tag}"
     )
+
+
+@pytest.mark.django_db
+class TestSliceDWorkspaceTemplate:
+    """P4 Slice D — workspace template markers."""
+
+    def _html(self, draft_application, verified_client):
+        response = verified_client.get(f"/applications/{draft_application.id}/")
+        assert response.status_code == 200
+        return response.content.decode()
+
+    def test_per_step_nav_has_sticky_modifier(self, draft_application, verified_client):
+        html = self._html(draft_application, verified_client)
+        wizard_navs = re.findall(r'<div[^>]*class="[^"]*fk-wizard-nav[^"]*"[^>]*>', html)
+        assert len(wizard_navs) >= 2, (
+            f"Expected at least 2 wizard nav rows (per-step + review), found {len(wizard_navs)}."
+        )
+        for nav in wizard_navs:
+            assert "fk-wizard-nav--sticky" in nav, (
+                f"Wizard nav row is missing the --sticky modifier: {nav}"
+            )
+
+    def test_documents_step_renders_no_dropzone_markup(self, draft_application, verified_client):
+        # The old fk-dropzone label (from form_field.html's file branch) must
+        # not appear anywhere in the documents step body. Upload UI is the
+        # partial's job now.
+        html = self._html(draft_application, verified_client)
+        assert "fk-dropzone" not in html, (
+            "fk-dropzone markup must not be rendered in Slice D. "
+            "document_card.html owns the file inputs."
+        )
+
+    def test_address_sync_row_has_wrapper_class(self, draft_application, verified_client):
+        html = self._html(draft_application, verified_client)
+        assert "fk-address-row" in html, (
+            "Slice D wraps the actual-address + same-as-guardian fields in a "
+            ".fk-address-row container so the mobile stack CSS rule can target it."
+        )
