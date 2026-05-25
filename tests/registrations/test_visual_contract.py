@@ -674,3 +674,30 @@ class TestSingleHeroCard:
         resp = c.get("/portal/")
         assert resp.status_code == 200
         assert "<h1></h1>" not in resp.content.decode()
+
+
+class TestVisualContractSliceD:
+    """Cross-page visual selectors introduced by Slice D."""
+
+    @staticmethod
+    def _css() -> str:
+        from pathlib import Path
+        return (
+            Path(__file__).resolve().parents[2]
+            / "static" / "css" / "parent_theme.css"
+        ).read_text(encoding="utf-8")
+
+    def test_upload_slot_selector_present(self):
+        assert ".fk-upload-slot" in self._css()
+
+    def test_camera_only_selector_present(self):
+        assert ".fk-camera-only" in self._css()
+
+    def test_wizard_nav_sticky_selector_present(self):
+        assert ".fk-wizard-nav--sticky" in self._css()
+
+    def test_visually_hidden_selector_present(self):
+        assert ".fk-visually-hidden" in self._css()
+
+    def test_address_row_selector_present(self):
+        assert ".fk-address-row" in self._css()
