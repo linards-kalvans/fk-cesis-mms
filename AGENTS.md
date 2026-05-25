@@ -123,8 +123,13 @@ Target Django monolith with domain apps:
   - `/portal/`: replaced the bespoke `<div class="fk-empty-state">` markup with the shared `empty_state.html` partial (now accepts optional `cta_url`/`cta_label`); stripped inline `style="margin-top:…"` attributes inside the application-card region in favour of a `.fk-app-meta--review` modifier; action anchors and helper-card CTA gain `fk-button--full`. Dynamic `<span style="width:N%">` widths inside `.fk-progress-bar` preserved (encode content, not styling).
   - CSS: `.fk-page-intro` helper added; new `@media (max-width: 720px)` block stacks `.fk-applications`, `.fk-application-card`, `.fk-app-actions .fk-button`, `.fk-helper-card` for the mobile baseline.
   - Latvian copy: new regression test `tests/registrations/test_parent_surface_copy_contract.py` scans rendered visible text on `/register/`, `/register/verify/`, `/portal/` (empty + with apps), `/applications/<id>/`, plus a static scan of `new_registration.html`, for English-token leakage. Token list fixed; legitimate fragments allowlisted in code with comments. Initial sweep found no English leaks (codebase was already Latvian-by-default; three Latvian-phrase guards were added to absorb the Latvian preposition "no").
-  - Manual LAN verification on 192.168.3.245 (2026-05-25): PENDING — user to fill in.
-  - Test suite: 818 passed (up from 798 baseline); ruff and mypy clean.
+  - Manual LAN verification on 192.168.3.245 (2026-05-25):
+    - Slice E surfaces (`/register/`, `/register/verify/`, `/portal/`) rendered correctly at narrow viewports with full-width CTAs and no English-text leakage.
+    - LAN check also surfaced two regressions adjacent to Slice E that were fixed in follow-up commits (see below) and six pre-existing bugs that are out of Slice E scope and have been queued as P4.5 (see `docs/milestones.md`).
+  - Slice E LAN follow-up fixes (also 2026-05-25):
+    - **Wizard CTA cut off on mobile (commit `80b3109`):** `.fk-wizard-nav .fk-button` now stretches to fill its grid track inside the 720px media block (`width: 100%; box-sizing: border-box`). Regression test added under `TestParentThemeCssPortalMobile`.
+    - **OCR summary rendered raw field IDs (commit `8351c2a`):** added `OCR_FIELD_LABELS` and `parse_ocr_summary` in `apps/registrations/presentation.py`; the workspace view now passes structured `(label, value)` tuples; the template renders a Latvian-labeled `<dl>` with the kind label resolved via `document_kind_labels`. Encryption/storage unchanged. New test file `tests/registrations/test_ocr_summary_presentation.py` covers helper + rendered DOM + CSS contract. One existing assertion in `test_workspace_ocr_decryption.py` was updated to match the new presentation contract.
+  - Test suite: 830 passed (up from 798 baseline); ruff and mypy clean.
 
 ### Test suite consolidation (2026-05-24)
 - `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.

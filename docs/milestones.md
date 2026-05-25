@@ -176,7 +176,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - No regression of P3 secure-storage posture: encrypted payload + summary still persisted; non-blocking failure path preserved.
 
 ### P4 — Parent-flow UX polish + mobile-first workspace
-**Status:** complete (2026-05-25) — Slices A–E delivered.
+**Status:** complete (2026-05-25) — Slices A–E delivered. Six pre-existing parent-flow defects surfaced during Slice E LAN verification are tracked in the new P4.5 quality-debt sweep below.
 
 **Why fourth**
 - P3.5 deferred its visual polish (spinners, chip styling, source badges, visibility-aware polling, failure-message Latvianization); consolidating leftovers now closes that loop before any new workflow build
@@ -195,6 +195,25 @@ Do **not** use archived implementation plans for current planning unless user ex
 - entry + chooser + portal polished: `/register/`, `/register/verify/`, `/portal/`, parent registration list audited for mobile breakpoints, empty/error state clarity, visual cohesion with workspace
 - cross-cutting UX primitives: shared empty-state and error-state partials; consistent spinner/toast/inline-error patterns
 - minimal schema change scoped to consent: two new nullable fields on `RegistrationApplication` (`personal_data_consent_at`, `personal_data_consent_version`); no other model changes, no admin redesign, no new business rules
+
+### P4.5 — Parent-flow quality-debt sweep
+**Status:** queued; surfaced during P4 Slice E LAN verification (2026-05-25).
+
+**Why interleaved**
+- Each item is a real user-visible defect or UX gap surfaced during the Slice E manual LAN check on 192.168.3.245. They predate Slice E (earlier P3 / P3.5 / P4 Slice A–B), so they were correctly out of Slice E scope, but they should land before P5's approval-to-agreement work starts shaping staff workflow on top of the same parent surfaces.
+
+**Target outcome**
+- Member identity document + member portrait correctly reflect upload state on the workspace (not "not added" after a successful upload + OCR completion).
+- New-registration prefill: member fields are not auto-filled from prior applications (only guardian fields carry over); guardian-field prefill does not double the value.
+- OCR stub emits the canonical fields the live extractor produces, including `date_of_birth`, so the workspace's prefill path can populate member birth date.
+- Mobile users can jump between wizard steps non-linearly (back-navigation already works; forward jump to a previously-visited step should also work).
+- New-registration summary step shows "Iesniegt pieteikumu" as the primary action and drops the redundant "Saglabāt melnrakstu" button (autosave already persists the draft).
+- On `edit` / `fix_requested` resumption, the step-gating logic recognises pre-filled valid values on initial load and enables "Turpināt →" without requiring a re-touch.
+
+**Out of scope for P4.5**
+- Anything that requires a model migration beyond what is needed for the OCR stub schema alignment.
+- Translation infrastructure or admin redesigns.
+- New OCR providers.
 
 ### P5 — Approval-to-agreement flow
 **Why fifth**
