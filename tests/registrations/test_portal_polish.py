@@ -145,12 +145,17 @@ class TestParentThemeCssPortalMobile:
             re.DOTALL,
         )
         joined = "\n".join(bodies)
-        assert ".fk-applications" in joined
-        assert "grid-template-columns: 1fr" in joined
+        assert re.search(
+            r"\.fk-applications\s*\{[^}]*grid-template-columns\s*:\s*1fr",
+            joined,
+        ), ".fk-applications must declare grid-template-columns: 1fr"
         assert ".fk-application-card" in joined
         assert ".fk-app-actions" in joined
         assert ".fk-helper-card" in joined
 
     def test_review_meta_modifier_has_spacing_rule(self):
         css = self._css()
-        assert re.search(r"\.fk-app-meta--review\s*\{", css)
+        assert re.search(
+            r"\.fk-app-meta--review\s*\{[^}]*margin-top\s*:",
+            css,
+        ), ".fk-app-meta--review must declare margin-top"
