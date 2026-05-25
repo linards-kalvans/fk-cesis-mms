@@ -113,8 +113,8 @@ class TestNewAppPrefillFromExtraction:
             "New app form must prefill OCR-extracted guardian values from prior apps."
         )
 
-    def test_new_app_form_shows_ocr_member_first_name(self, settings):
-        """New app form must show OCR-extracted member first_name as prefill."""
+    def test_new_app_form_does_not_prefill_member_fields_from_prior_ocr(self, settings):
+        """New app form must NOT prefill member fields from prior app OCR — each child is new."""
         settings.OCR_PROVIDER_MODE = "stub"
         settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
 
@@ -124,7 +124,6 @@ class TestNewAppPrefillFromExtraction:
             phone="+37120000041",
         )
 
-        # Create prior app with member identity doc (triggers OCR stub)
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
@@ -147,14 +146,6 @@ class TestNewAppPrefillFromExtraction:
         )
         submit_application(app, account)
 
-        # Verify member extraction exists
-        member_doc = app.documents.get(
-            kind=Document.Kind.MEMBER_IDENTITY, deleted_at__isnull=True
-        )
-        extraction = DocumentExtraction.objects.get(document=member_doc)
-        assert extraction.encrypted_payload != ""
-
-        # New app form must show OCR-extracted member values
         client = Client()
         _login(client, account)
 
@@ -162,9 +153,10 @@ class TestNewAppPrefillFromExtraction:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Stub OCR extracts first_name="Jānis" for member_identity
-        assert "Jānis" in content, (
-            "New app form must prefill OCR-extracted member values from prior apps."
+        # Stub member OCR returns first_name="Jānis". It must NOT appear as a
+        # prefilled value in the new app form — each registration is a fresh child.
+        assert 'value="Jānis' not in content, (
+            "New app form must not prefill member OCR name from prior app."
         )
 
     def test_new_app_form_ocr_wins_over_model_fallback_for_guardian_identity(self, settings):
@@ -308,7 +300,7 @@ class TestPrefillNormalization:
         # OCR value wins; must be exactly the normalized OCR name (no model-value prefix).
         assert prefill["guardian_full_name"] == "Jānis Bērziņš"
 
-    def test_member_full_name_prefill_is_title_case(self, settings):
+    def test_member_full_name_absent_from_new_app_prefill(self, settings):
         from apps.registrations.services import get_application_prefill
 
         account = ParentAccount.objects.create(
@@ -325,8 +317,8 @@ class TestPrefillNormalization:
 
         prefill = get_application_prefill(account)
 
-        assert "Anna Kalniņa-Bērziņa" in str(prefill["member_full_name"])
-        assert "ANNA" not in str(prefill["member_full_name"])
+        # Member fields must not bleed into new-app prefill.
+        assert "member_full_name" not in prefill
 
 
 # ===========================================================================
@@ -482,3 +474,56 @@ class TestPrefillNoDoubling:
 
         # Must be exactly "Anna Bērziņa", not "Anna Bērziņa Anna Bērziņa".
         assert prefill["guardian_full_name"] == "Anna Bērziņa"
+
+    def test_member_fields_absent_from_new_app_prefill(self, settings):
+        from apps.documents.models import Document, DocumentExtraction
+        from apps.documents.ocr import encrypt_json
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import get_application_prefill
+
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        account = ParentAccount.objects.create(
+            email="nomemberbleed@example.com",
+            phone="+37120000071",
+        )
+        app = RegistrationApplication.objects.create(
+            parent_account=account,
+            guardian_email=account.email,
+            guardian_full_name="Prior Guardian",
+            guardian_personal_id="010101-71000",
+            guardian_phone="+37120000071",
+            status=RegistrationApplication.Status.SUBMITTED,
+        )
+        doc = Document.objects.create(
+            application=app,
+            kind=Document.Kind.MEMBER_IDENTITY,
+            file="private-uploads/test/nomemberbleed.png",
+            content_type="image/png",
+            ocr_status=Document.OcrStatus.COMPLETED,
+        )
+        DocumentExtraction.objects.create(
+            document=doc,
+            subject_role="member",
+            provider="tiny_idp",
+            extraction_schema_version="v1",
+            encrypted_payload=encrypt_json({
+                "subject": "member",
+                "person_fields": {
+                    "first_name": "JĀNIS",
+                    "last_name": "BĒRZIŅŠ",
+                    "personal_id": "010125-71000",
+                },
+                "document_metadata": {},
+                "confidence": {},
+                "flags": [],
+                "raw_reference": {"provider": "tiny_idp"},
+            }),
+            encrypted_summary=encrypt_json("noop"),
+        )
+
+        prefill = get_application_prefill(account)
+
+        # Member fields must NOT appear in new-app prefill.
+        assert "member_full_name" not in prefill
+        assert "member_personal_id" not in prefill
