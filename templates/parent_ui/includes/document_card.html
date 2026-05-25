@@ -3,7 +3,7 @@
 {% for kind, document in document_state.items %}
   <div class="fk-document-card">
     <div class="fk-document-card__header">
-      <span class="fk-document-card__kind">{% if document %}{{ document.get_kind_display }}{% else %}{{ document_kind_labels|get_item:kind }}{% endif %}</span>
+      <span class="fk-document-card__kind">{{ document_kind_labels|get_item:kind }}</span>
       {% if document %}
         <span class="fk-source-badge fk-source-badge--active">Aktīvs</span>
       {% else %}
