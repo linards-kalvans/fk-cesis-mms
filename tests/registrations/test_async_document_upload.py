@@ -528,3 +528,63 @@ class TestParentThemeCssContractSliceC:
         # No 6-digit hex literals allowed in the new section.
         matches = re.findall(r"#[0-9a-fA-F]{6}\b", section)
         assert matches == [], f"Unexpected new hex color literals in Slice C section: {matches}"
+
+
+class TestParentThemeCssContractSliceD:
+    """P4 Slice D — CSS hooks for upload slots, camera affordance, mobile layout."""
+
+    SECTION_HEADER = "P4 Slice D"
+
+    @staticmethod
+    def _read_css() -> str:
+        path = Path(__file__).resolve().parents[2] / "static" / "css" / "parent_theme.css"
+        return path.read_text(encoding="utf-8")
+
+    def _slice_d_section(self) -> str:
+        css = self._read_css()
+        idx = css.find(self.SECTION_HEADER)
+        assert idx != -1, f"Section header containing {self.SECTION_HEADER!r} not found"
+        return css[idx:]
+
+    def test_visually_hidden_class_defined(self):
+        section = self._slice_d_section()
+        assert ".fk-visually-hidden" in section, "Missing .fk-visually-hidden"
+        # Must be accessible (screen-reader-only), not display:none.
+        assert "position: absolute" in section or "clip:" in section, (
+            "fk-visually-hidden must use position:absolute / clip technique, "
+            "not display:none, so screen readers can still discover the input."
+        )
+
+    def test_upload_slot_class_defined(self):
+        section = self._slice_d_section()
+        assert ".fk-upload-slot" in section, "Missing .fk-upload-slot"
+
+    def test_camera_only_class_defined_and_hidden_on_fine_pointer(self):
+        section = self._slice_d_section()
+        assert ".fk-camera-only" in section, "Missing .fk-camera-only"
+        assert "@media not (pointer: coarse)" in section, (
+            "Missing `@media not (pointer: coarse)` block that hides .fk-camera-only "
+            "on devices without a coarse pointer (desktop)."
+        )
+
+    def test_checkbox_row_class_defined(self):
+        section = self._slice_d_section()
+        assert ".fk-checkbox-row" in section, "Missing .fk-checkbox-row"
+        # Must enforce 44px touch target.
+        import re
+        match = re.search(
+            r"\.fk-checkbox-row\s*\{[^}]*min-height:\s*44px",
+            section,
+            re.DOTALL,
+        )
+        assert match, ".fk-checkbox-row must set min-height: 44px"
+
+    def test_wizard_nav_sticky_modifier_defined(self):
+        section = self._slice_d_section()
+        assert ".fk-wizard-nav--sticky" in section, "Missing .fk-wizard-nav--sticky"
+        assert "position: sticky" in section, (
+            "Sticky CTA modifier must use position: sticky inside the appropriate media query."
+        )
+        assert "(pointer: coarse)" in section, (
+            "Sticky CTA must be gated by `(pointer: coarse)` media query."
+        )

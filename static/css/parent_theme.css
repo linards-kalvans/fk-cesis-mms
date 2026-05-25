@@ -1034,3 +1034,66 @@ h1, h2, h3 {
   transform: none;
   box-shadow: none;
 }
+
+/* ── P4 Slice D — upload slots, camera affordance, mobile polish ── */
+
+/* Screen-reader-accessible hidden helper. Used by the canonical file input
+   inside .fk-upload-slot so the upload button (a <label for>) still works
+   and AT users can discover the input via label association. */
+.fk-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Upload slot — appears once per document card, holds the canonical hidden
+   input + the two visible labels (file + camera). */
+.fk-upload-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Camera control visibility — only show on devices with a coarse pointer
+   (touch). Desktop browsers ignore the `capture` attribute, so the camera
+   button would just open the regular file picker — redundant. */
+@media not (pointer: coarse) {
+  .fk-camera-only { display: none; }
+}
+
+/* Checkbox row wrapper — used on the consent checkbox + address-sync
+   checkbox so the entire row is tappable (not just the 16px native box). */
+.fk-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+}
+
+/* Sticky wizard nav (mobile-only). The base .fk-wizard-nav layout stays
+   inline; the --sticky modifier opts into sticky positioning, gated by
+   `(pointer: coarse) and (max-width: 720px)` so desktop users with narrow
+   windows are not affected. */
+.fk-wizard-nav--sticky {
+  /* No effect outside the mobile media query. */
+}
+
+@media (pointer: coarse) and (max-width: 720px) {
+  .fk-wizard-nav--sticky {
+    position: sticky;
+    bottom: 0;
+    background: var(--fk-bg, #fff);
+    padding: 12px 0;
+    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.04);
+    z-index: 10;
+  }
+}
