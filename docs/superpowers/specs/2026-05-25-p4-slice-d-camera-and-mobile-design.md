@@ -74,7 +74,7 @@ Two layers:
 **Class-level minimums** in `static/css/parent_theme.css`:
 - `.fk-button` → `min-height: 44px`, `min-width: 44px`.
 - `.fk-button--small` → `min-height: 40px` (kept usable for niche callsites; primary user was the removed "Aizvietot" link).
-- `.fk-input`, `.fk-select`, `.fk-textarea`, `input[type="date"]`, `input[type="file"]` → `min-height: 44px` (single-line controls only).
+- `.fk-input`, `.fk-select`, `.fk-textarea`, `input[type="date"]` → `min-height: 44px` (single-line controls only). File inputs are visually hidden after the document-card refactor; their tap surface is the visible "Augšupielādēt failu" / "Uzņemt attēlu" buttons, which inherit the `.fk-button` floor.
 - `.fk-checkbox-row` wrapper: `min-height: 44px`, `padding: 10px 0` so the full label is tappable, not just the native checkbox box. Applied to the existing consent checkbox and the address-sync checkbox.
 
 **Step-1 documents-step sweep** — manual audit of every interactive element:
@@ -126,7 +126,7 @@ This slice is complete when all of the following are true:
    - Container padding uses `clamp(16px, 4vw, 32px)`.
    - Address-sync row stacks on `(max-width: 720px)`.
 5. **Touch-target floors enforced**:
-   - `.fk-button`, `.fk-input`, `.fk-select`, `.fk-textarea`, `input[type="date"]`, `input[type="file"]` ≥44 px `min-height`.
+   - `.fk-button`, `.fk-input`, `.fk-select`, `.fk-textarea`, `input[type="date"]` ≥44 px `min-height`. Hidden file inputs are exempted (tap surface lives on the visible buttons).
    - `.fk-checkbox-row` wrapper applied to consent + address-sync checkboxes.
 6. **No regression**:
    - Existing async upload, OCR polling, suggestion accept/dismiss still work.
