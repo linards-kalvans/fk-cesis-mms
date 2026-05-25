@@ -367,3 +367,23 @@ class TestSliceDWorkspaceTemplate:
             "Slice D wraps the actual-address + same-as-guardian fields in a "
             ".fk-address-row container so the mobile stack CSS rule can target it."
         )
+
+
+@pytest.mark.django_db
+class TestSliceDViewContext:
+    """Slice D — document_bound_fields is passed to the workspace template."""
+
+    def test_workspace_context_includes_document_bound_fields(self, draft_application, verified_client):
+        response = verified_client.get(f"/applications/{draft_application.id}/")
+        assert response.status_code == 200
+        ctx = response.context
+        assert "document_bound_fields" in ctx, (
+            "View must pass document_bound_fields so the document_card partial "
+            "can render the canonical file input via {{ bound_field }}."
+        )
+        bound_fields = ctx["document_bound_fields"]
+        for kind in ("guardian_identity", "member_identity", "member_portrait"):
+            assert kind in bound_fields, f"Missing bound field for kind: {kind}"
+            assert bound_fields[kind].name.endswith("_document"), (
+                f"Bound field for {kind} should be the *_document FileField."
+            )
