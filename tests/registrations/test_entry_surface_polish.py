@@ -53,7 +53,13 @@ class TestStartRegistrationPolish:
 
 class TestParentThemeCssEntrySurfaces:
     def test_fk_page_intro_class_defined(self):
-        css = Path("static/css/parent_theme.css").read_text(encoding="utf-8")
+        css_path = (
+            Path(__file__).resolve().parents[2]
+            / "static"
+            / "css"
+            / "parent_theme.css"
+        )
+        css = css_path.read_text(encoding="utf-8")
         assert re.search(r"\.fk-page-intro\s*\{", css), (
             ".fk-page-intro helper class must be defined in parent_theme.css"
         )
