@@ -830,6 +830,15 @@ h1, h2, h3 {
   .fk-wizard-nav .fk-button {
     width: 100%;
     box-sizing: border-box;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+  .fk-wizard-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 

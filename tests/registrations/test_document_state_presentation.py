@@ -215,13 +215,14 @@ class TestDocumentKindLabelVisible:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Use the model's actual display name so the test adapts to
-        # whatever language the production code uses.
+        # Latvian display label, see DOCUMENT_KIND_LABELS.
+        from apps.registrations.presentation import DOCUMENT_KIND_LABELS
+
         active_doc = app.documents.filter(
             kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
         ).first()
         assert active_doc is not None
-        expected_label = active_doc.get_kind_display()
+        expected_label = DOCUMENT_KIND_LABELS[Document.Kind.GUARDIAN_IDENTITY.value]
         assert expected_label in content, (
             f"Workspace must show the kind label '{expected_label}' "
             f"for the active guardian identity document."
@@ -429,12 +430,15 @@ class TestDocumentCardsReadOnlyMode:
         content = resp.content.decode()
         # Filename must still be visible
         assert "readonly_id.pdf" in content
-        # Kind label must still be visible
+        # Kind label must still be visible — Latvian display label,
+        # see DOCUMENT_KIND_LABELS.
+        from apps.registrations.presentation import DOCUMENT_KIND_LABELS
+
         active_doc = app.documents.filter(
             kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
         ).first()
         assert active_doc is not None
-        assert active_doc.get_kind_display() in content
+        assert DOCUMENT_KIND_LABELS[Document.Kind.GUARDIAN_IDENTITY.value] in content
         # Replace action must NOT appear (read-only)
         assert "Aizvietot" not in content
 
@@ -523,8 +527,11 @@ class TestEmptyStateDocumentKindLabels:
         assert resp.status_code == 200
         content = resp.content.decode()
 
-        # The display label from the model must appear
-        expected_label = Document.Kind.GUARDIAN_IDENTITY.label
+        # The display label must appear — Latvian display label,
+        # see DOCUMENT_KIND_LABELS.
+        from apps.registrations.presentation import DOCUMENT_KIND_LABELS
+
+        expected_label = DOCUMENT_KIND_LABELS[Document.Kind.GUARDIAN_IDENTITY.value]
         assert expected_label in content, (
             f"Empty-state card must show the display label '{expected_label}', "
             f"not the raw key '{Document.Kind.GUARDIAN_IDENTITY.value}'."
@@ -572,7 +579,10 @@ class TestEmptyStateDocumentKindLabels:
         assert resp.status_code == 200
         content = resp.content.decode()
 
-        expected_label = Document.Kind.MEMBER_IDENTITY.label
+        # Latvian display label, see DOCUMENT_KIND_LABELS.
+        from apps.registrations.presentation import DOCUMENT_KIND_LABELS
+
+        expected_label = DOCUMENT_KIND_LABELS[Document.Kind.MEMBER_IDENTITY.value]
         assert expected_label in content, (
             f"Empty-state card must show the display label '{expected_label}'."
         )
@@ -618,7 +628,10 @@ class TestEmptyStateDocumentKindLabels:
         assert resp.status_code == 200
         content = resp.content.decode()
 
-        expected_label = Document.Kind.MEMBER_PORTRAIT.label
+        # Latvian display label, see DOCUMENT_KIND_LABELS.
+        from apps.registrations.presentation import DOCUMENT_KIND_LABELS
+
+        expected_label = DOCUMENT_KIND_LABELS[Document.Kind.MEMBER_PORTRAIT.value]
         assert expected_label in content, (
             f"Empty-state card must show the display label '{expected_label}'."
         )

@@ -179,3 +179,33 @@ class TestParentThemeCssPortalMobile:
             r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*box-sizing\s*:\s*border-box",
             joined,
         ), ".fk-wizard-nav .fk-button must declare box-sizing: border-box"
+
+    def test_wizard_nav_buttons_shrink_padding_under_720(self):
+        css = self._css()
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        # The fk-wizard-nav .fk-button rule must declare a tighter horizontal
+        # padding than the base 0 28px so long Latvian labels fit.
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*padding\s*:\s*0\s+14px",
+            joined,
+        ), ".fk-wizard-nav .fk-button must downscale padding to 0 14px on mobile"
+
+    def test_wizard_actions_stack_vertically_under_720(self):
+        css = self._css()
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        # .fk-wizard-actions must stack to one column on mobile so the
+        # summary step's Save + Submit pair don't fight for half the viewport.
+        assert re.search(
+            r"\.fk-wizard-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr",
+            joined,
+        ), ".fk-wizard-actions must use grid-template-columns: 1fr on mobile"

@@ -6,10 +6,13 @@ Task 3 scope only — no business logic, no admin UX, no OCR provider work.
 from apps.documents.models import Document
 from apps.registrations.models import RegistrationApplication
 
-# Canonical mapping: underscored kind key → human-readable display label.
-# Used by document_card.html for empty-state labels.
+# Canonical Latvian display labels for document kinds, shown on the
+# parent workspace. Admin surfaces continue to use Document.Kind's
+# get_kind_display() which carries the underlying enum labels.
 DOCUMENT_KIND_LABELS: dict[str, str] = {
-    kind.value: kind.label for kind in list(Document.Kind)
+    "guardian_identity": "Vecāka personu apliecinošs dokuments",
+    "member_identity": "Bērna personu apliecinošs dokuments",
+    "member_portrait": "Bērna foto",
 }
 
 # Canonical mapping: kind key → form field id anchor.
