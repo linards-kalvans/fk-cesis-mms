@@ -167,8 +167,13 @@ class TestNewAppPrefillFromExtraction:
             "New app form must prefill OCR-extracted member values from prior apps."
         )
 
-    def test_new_app_form_fallback_to_model_values(self, settings):
-        """New app form falls back to model values when no extraction exists."""
+    def test_new_app_form_ocr_wins_over_model_fallback_for_guardian_identity(self, settings):
+        """OCR extraction wins over model value for guardian identity when extraction exists.
+
+        The test uploads a guardian identity doc which triggers stub OCR.
+        The stub always returns ("Anna", "Bērziņa") for guardian_identity.
+        The new-app form must show the OCR-extracted name, not the model value.
+        """
         settings.OCR_PROVIDER_MODE = "stub"
         settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
 
@@ -178,7 +183,7 @@ class TestNewAppPrefillFromExtraction:
             phone="+37120000042",
         )
 
-        # Create prior app with docs (triggers OCR but form still falls back to model)
+        # Create prior app with docs (triggers OCR stub for guardian_identity)
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
@@ -208,8 +213,13 @@ class TestNewAppPrefillFromExtraction:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Must fall back to model field value
-        assert "Fallback Parent" in content
+        # OCR stub returns ("Anna", "Bērziņa") for guardian_identity — OCR wins.
+        assert "Anna Bērziņa" in content, (
+            "New app form must show OCR-extracted guardian name, not model fallback value."
+        )
+        assert "Fallback Parent" not in content, (
+            "Model fallback value must not appear when OCR extraction exists."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -295,9 +305,8 @@ class TestPrefillNormalization:
 
         prefill = get_application_prefill(account)
 
-        # Prior-app model values are "Prior Parent"; OCR overlay appends normalized.
-        assert "Jānis Bērziņš" in str(prefill["guardian_full_name"])
-        assert "JĀNIS" not in str(prefill["guardian_full_name"])
+        # OCR value wins; must be exactly the normalized OCR name (no model-value prefix).
+        assert prefill["guardian_full_name"] == "Jānis Bērziņš"
 
     def test_member_full_name_prefill_is_title_case(self, settings):
         from apps.registrations.services import get_application_prefill
@@ -416,3 +425,60 @@ class TestGuardianAutoReuseDefault:
         assert not has_reusable_hint, (
             "New app form must not show reusable hint without prior app."
         )
+
+
+class TestPrefillNoDoubling:
+    """Guardian name from OCR must not be appended to the model value."""
+
+    def test_guardian_full_name_not_doubled_when_ocr_matches_model(self, settings):
+        from apps.documents.models import Document, DocumentExtraction
+        from apps.documents.ocr import encrypt_json
+        from apps.registrations.models import RegistrationApplication
+        from apps.registrations.services import get_application_prefill
+
+        settings.OCR_ENCRYPTION_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
+
+        account = ParentAccount.objects.create(
+            email="nodoubling@example.com",
+            phone="+37120000070",
+        )
+        # Prior app model stores the same name OCR will return (normalized).
+        app = RegistrationApplication.objects.create(
+            parent_account=account,
+            guardian_email=account.email,
+            guardian_full_name="Anna Bērziņa",
+            guardian_personal_id="010101-70000",
+            guardian_phone="+37120000070",
+            status=RegistrationApplication.Status.SUBMITTED,
+        )
+        doc = Document.objects.create(
+            application=app,
+            kind=Document.Kind.GUARDIAN_IDENTITY,
+            file="private-uploads/test/nodoubling.png",
+            content_type="image/png",
+            ocr_status=Document.OcrStatus.COMPLETED,
+        )
+        DocumentExtraction.objects.create(
+            document=doc,
+            subject_role="guardian",
+            provider="tiny_idp",
+            extraction_schema_version="v1",
+            encrypted_payload=encrypt_json({
+                "subject": "guardian",
+                "person_fields": {
+                    "first_name": "ANNA",
+                    "last_name": "BĒRZIŅA",
+                    "personal_id": "010101-70000",
+                },
+                "document_metadata": {},
+                "confidence": {},
+                "flags": [],
+                "raw_reference": {"provider": "tiny_idp"},
+            }),
+            encrypted_summary=encrypt_json("noop"),
+        )
+
+        prefill = get_application_prefill(account)
+
+        # Must be exactly "Anna Bērziņa", not "Anna Bērziņa Anna Bērziņa".
+        assert prefill["guardian_full_name"] == "Anna Bērziņa"
