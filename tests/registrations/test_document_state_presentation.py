@@ -658,3 +658,77 @@ class TestMemberPortraitInDocumentsSection:
         assert "member_portrait_document" not in sections["member"], (
             "member_portrait_document must no longer live in the member section."
         )
+
+
+@pytest.mark.django_db
+class TestUploadSlotMarkup:
+    """P4 Slice D — document_card.html owns the upload UI.
+
+    Each card renders:
+    - one canonical hidden <input type="file" class="fk-visually-hidden">
+    - one <label for="…"> styled as the file-picker button
+    - one .fk-camera-only wrapper containing <label for="…" data-camera-affordance>
+    """
+
+    def _workspace_html(self, draft_application, verified_client):
+        # verified_client and draft_application fixtures live in tests/registrations/conftest.py
+        response = verified_client.get(f"/applications/{draft_application.id}/")
+        assert response.status_code == 200, response.content[:300]
+        return response.content.decode()
+
+    def test_each_doc_card_has_one_canonical_hidden_input(self, draft_application, verified_client):
+        html = self._workspace_html(draft_application, verified_client)
+        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+            input_id = f"id_{field_name}"
+            assert html.count(f'id="{input_id}"') == 1, (
+                f"{input_id} must render exactly once (no duplicates)."
+            )
+            import re
+            match = re.search(rf'<input[^>]*id="{input_id}"[^>]*>', html)
+            assert match, f"<input id={input_id}> not found"
+            assert "fk-visually-hidden" in match.group(0), (
+                f"Canonical input for {field_name} must use fk-visually-hidden class."
+            )
+
+    def test_each_doc_card_has_file_label_pointing_at_canonical_input(self, draft_application, verified_client):
+        html = self._workspace_html(draft_application, verified_client)
+        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+            input_id = f"id_{field_name}"
+            import re
+            match = re.search(
+                rf'<label[^>]*for="{input_id}"[^>]*>[^<]*Augšupielādēt failu',
+                html,
+            )
+            assert match, (
+                f"File-picker label for {field_name} must contain "
+                f'`for="{input_id}"` and the text "Augšupielādēt failu".'
+            )
+
+    def test_each_doc_card_has_camera_label_with_marker(self, draft_application, verified_client):
+        html = self._workspace_html(draft_application, verified_client)
+        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+            input_id = f"id_{field_name}"
+            import re
+            match = re.search(
+                rf'<label[^>]*for="{input_id}"[^>]*data-camera-affordance[^>]*>[^<]*Uzņemt attēlu',
+                html,
+            )
+            assert match, (
+                f"Camera label for {field_name} must have `for=\"{input_id}\"`, "
+                "`data-camera-affordance` marker, and the text \"Uzņemt attēlu\"."
+            )
+
+    def test_camera_label_wrapped_in_fk_camera_only(self, draft_application, verified_client):
+        html = self._workspace_html(draft_application, verified_client)
+        assert html.count("fk-camera-only") >= 3, (
+            "Expected at least three .fk-camera-only wrappers (one per document slot)."
+        )
+
+    def test_no_aizvietot_anchor_link(self, draft_application, verified_client):
+        html = self._workspace_html(draft_application, verified_client)
+        import re
+        match = re.search(r"<a[^>]*>\s*Aizvietot\s*</a>", html)
+        assert match is None, (
+            "The Aizvietot anchor link must be removed in Slice D. "
+            "Upload-slot buttons own the replace action now."
+        )
