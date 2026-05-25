@@ -104,6 +104,49 @@
       || 'Neizdevās apstrādāt dokumentu automātiski. Lūdzu, aizpildi laukus manuāli.';
   }
 
+  function markCardAsUploaded(input) {
+    var card = input.closest('.fk-document-card');
+    if (!card) return;
+    var file = input.files && input.files[0];
+
+    // Swap header badge: inactive → active.
+    var header = card.querySelector('.fk-document-card__header');
+    if (header) {
+      var badge = header.querySelector('.fk-source-badge');
+      if (badge) {
+        badge.className = 'fk-source-badge fk-source-badge--active';
+        badge.textContent = 'Aktīvs';
+      }
+    }
+
+    // Swap body: empty message → filename + hint.
+    var body = card.querySelector('.fk-document-card__body');
+    if (body) {
+      body.innerHTML = '';
+      if (file) {
+        var fnEl = document.createElement('p');
+        fnEl.className = 'fk-document-card__filename';
+        fnEl.textContent = file.name;
+        body.appendChild(fnEl);
+      }
+      var hintEl = document.createElement('p');
+      hintEl.className = 'fk-document-card__hint';
+      hintEl.textContent = 'Dokuments jau ir augšupielādēts.';
+      body.appendChild(hintEl);
+    }
+
+    // Insert data-uploaded-document hook inside .fk-upload-slot so that
+    // wizard.js::isFileFieldFilled recognises the uploaded state on the
+    // next validation pass (item 5 complement).
+    var slot = input.closest('.fk-upload-slot');
+    if (slot && !slot.querySelector('[data-uploaded-document]')) {
+      var marker = document.createElement('span');
+      marker.setAttribute('data-uploaded-document', '');
+      marker.hidden = true;
+      slot.appendChild(marker);
+    }
+  }
+
   function applyExtractedFields(extractedFields) {
     Object.keys(extractedFields).forEach(function (fieldName) {
       var value = extractedFields[fieldName];
@@ -242,6 +285,8 @@
           return response.json();
         })
         .then(function (payload) {
+          markCardAsUploaded(input);
+
           if (payload.ocr_status === 'not_requested') {
             setProgressLabel(progressSlot, 'Augšupielādēts');
             return;
