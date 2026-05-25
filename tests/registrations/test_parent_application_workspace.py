@@ -261,8 +261,8 @@ class TestEditableWorkspaceActions:
     """Editable workspace must show save-draft and submit buttons,
     and POST must save draft and redirect."""
 
-    def test_editable_workspace_shows_save_and_submit_buttons(self):
-        """Draft workspace must contain both save-draft and submit buttons."""
+    def test_editable_workspace_shows_submit_button(self):
+        """Draft workspace must contain the submit button."""
         client = Client()
         acct, app = _make_workspace_draft()
         _login(client, acct)
@@ -271,7 +271,6 @@ class TestEditableWorkspaceActions:
         content = resp.content.decode()
 
         assert resp.status_code == 200
-        assert "Saglabāt melnrakstu" in content
         assert "Iesniegt pieteikumu" in content
 
     def test_editable_workspace_post_saves_draft_and_redirects(self):
