@@ -412,7 +412,10 @@ class TestTemplateIncludesPrimitives:
         "tpl_rel,primitive",
         [
             ("registrations/start_registration.html", "hero_card.html"),
-            ("registrations/start_registration.html", "section_card.html"),
+            # start_registration owns its section card inline (single
+            # <section class="fk-section-card">) rather than re-including the
+            # partial, so the section_card include assertion was removed in
+            # P4 Slice E Task 3 alongside the duplicate-include bug fix.
             ("registrations/start_registration.html", "error_summary.html"),
             ("registrations/verify_code.html", "hero_card.html"),
             ("registrations/verify_code.html", "section_card.html"),
@@ -608,7 +611,12 @@ class TestTemplateClassHooks:
     @pytest.mark.parametrize(
         "tpl_rel,hook",
         [
-            ("registrations/start_registration.html", "fk-eyebrow"),
+            # fk-eyebrow was previously asserted on start_registration because
+            # the form was wrapped in <div class="fk-guidance-section fk-eyebrow">.
+            # That wrapper was a typographic bug (eyebrow is a tagline style);
+            # removed in P4 Slice E Task 3. The eyebrow still renders inside the
+            # hero_card partial — that surface is covered by its own primitive
+            # tests.
             ("registrations/start_registration.html", "fk-lead"),
             ("registrations/parent_portal.html", "application-card"),
         ],
