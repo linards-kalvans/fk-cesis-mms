@@ -6,7 +6,7 @@
 {% block page_content %}
 <p class="fk-eyebrow">FK Cēsis MMS</p>
 <h1 class="fk-page-title">Mani pieteikumi</h1>
-<p class="fk-page-subtitle">Pārskatiet un turpiniet — šeit redzams katra pieteikuma statuss un nākamais solis.</p>
+<p class="fk-page-intro">Pārskatiet un turpiniet — šeit redzams katra pieteikuma statuss un nākamais solis.</p>
 
 {% include "parent_ui/includes/hero_card.html" with variant="portal" primary_application=primary_application %}
 
@@ -33,7 +33,7 @@
       <span class="fk-block-label">Statuss</span>
       {% include "parent_ui/includes/status_badge.html" with status=app.status %}
       {% if app.review_message %}
-      <div class="fk-app-meta" style="margin-top:10px;">
+      <div class="fk-app-meta fk-app-meta--review">
         <div>{{ app.review_message }}</div>
       </div>
       {% endif %}
@@ -61,9 +61,9 @@
 
     <div class="fk-app-actions">
       {% if app.status == 'draft' or app.status == 'fix_requested' %}
-        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary fk-button--full">Turpināt pieteikumu</a>
       {% else %}
-        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary">Skatīt pieteikumu</a>
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary fk-button--full">Skatīt pieteikumu</a>
       {% endif %}
     </div>
   </article>
@@ -71,11 +71,8 @@
 </section>
 
 {% else %}
-<div class="fk-empty-state" style="margin-top:28px;">
-  <h2>Nav pieteikumu</h2>
-  <p>Jums vēl nav neviena pieteikuma.</p>
-  <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--primary" style="margin-top:16px;">Sākt jaunu reģistrāciju</a>
-</div>
+{% url 'registrations:new-application' as new_application_url %}
+{% include "parent_ui/includes/empty_state.html" with title="Nav pieteikumu" body="Jums vēl nav neviena pieteikuma." cta_url=new_application_url cta_label="Sākt jaunu reģistrāciju" %}
 {% endif %}
 
 <div class="fk-helper-card">
@@ -86,6 +83,6 @@
       <p>Pārliecinies, ka esi reģistrējies ar to pašu e-pasta adresi, ko izmantoji pieteikuma izveidē.</p>
     </div>
   </div>
-  <a href="{% url 'registrations:start-registration' %}" class="fk-button fk-button--secondary">✉ Pārbaudīt citu e-pastu</a>
+  <a href="{% url 'registrations:start-registration' %}" class="fk-button fk-button--secondary fk-button--full">✉ Pārbaudīt citu e-pastu</a>
 </div>
 {% endblock %}
