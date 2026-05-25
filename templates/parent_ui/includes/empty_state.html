@@ -2,13 +2,15 @@
 Shared empty-state primitive for "no items yet" surfaces.
 
 Parameters:
-  title      — Latvian heading copy (recommended).
+  title      — Latvian heading copy (required if used).
   body       — Latvian explanatory copy (optional).
   cta_url    — URL for the optional action button (optional).
   cta_label  — Latvian label for the optional action button (optional).
 
 Both cta_url and cta_label must be provided for the CTA anchor to render;
-either alone is ignored.
+either alone is ignored. cta_url must be a server-resolved URL (e.g. via
+Django's {% url %} tag); user-controlled values must not be passed because
+Django's auto-escaping does not block javascript: URIs in href attributes.
 {% endcomment %}
 <div class="fk-empty-state" data-empty-state>
   {% if title %}<p class="fk-empty-state__title">{{ title }}</p>{% endif %}
