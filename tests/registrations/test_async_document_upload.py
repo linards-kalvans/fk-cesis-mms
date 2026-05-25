@@ -631,6 +631,27 @@ class TestParentThemeCssContractSliceD:
             "Sticky CTA must be gated by `(pointer: coarse)` media query."
         )
 
+    def test_fk_button_full_modifier_defined(self):
+        # Used by the document_card upload labels so they stretch to the
+        # full width of the .fk-upload-slot flex column.
+        css = self._read_css()
+        match = re.search(
+            r"\.fk-button--full\s*\{[^}]*width:\s*100%",
+            css,
+            re.DOTALL,
+        )
+        assert match, ".fk-button--full must set width: 100%"
+        assert "box-sizing: border-box" in css, (
+            ".fk-button--full must use box-sizing: border-box so padding stays "
+            "inside the 100% width."
+        )
+
+    def test_fk_button_icon_helper_defined(self):
+        css = self._read_css()
+        assert ".fk-button__icon" in css, (
+            "Missing .fk-button__icon helper for the inline SVG icons on upload labels."
+        )
+
     def test_fk_button_small_meets_40px_floor(self):
         # The bumped rule lives inside the Slice D section as an override,
         # OR the existing .fk-button--small rule has been edited to 40px+.

@@ -724,8 +724,9 @@ class TestUploadSlotMarkup:
             input_id = f"id_{field_name}"
             import re
             match = re.search(
-                rf'<label[^>]*for="{input_id}"[^>]*>[^<]*Augšupielādēt failu',
+                rf'<label[^>]*for="{input_id}"[^>]*>.*?Augšupielādēt failu',
                 html,
+                re.DOTALL,
             )
             assert match, (
                 f"File-picker label for {field_name} must contain "
@@ -738,8 +739,9 @@ class TestUploadSlotMarkup:
             input_id = f"id_{field_name}"
             import re
             match = re.search(
-                rf'<label[^>]*for="{input_id}"[^>]*data-camera-affordance[^>]*>[^<]*Uzņemt attēlu',
+                rf'<label[^>]*for="{input_id}"[^>]*data-camera-affordance[^>]*>.*?Uzņemt attēlu',
                 html,
+                re.DOTALL,
             )
             assert match, (
                 f"Camera label for {field_name} must have `for=\"{input_id}\"`, "
@@ -760,3 +762,21 @@ class TestUploadSlotMarkup:
             "The Aizvietot anchor link must be removed in Slice D. "
             "Upload-slot buttons own the replace action now."
         )
+
+    def test_upload_labels_carry_aria_hidden_icons(self, draft_application, verified_client):
+        # Each "Augšupielādēt failu" / "Uzņemt attēlu" label has a decorative
+        # SVG icon. Icon must be aria-hidden so AT users don't hear it.
+        html = self._workspace_html(draft_application, verified_client)
+        import re
+        # Six labels total (3 doc kinds × 2 affordances each). Every label that
+        # contains one of these texts must have an aria-hidden SVG above the text.
+        for label_text in ("Augšupielādēt failu", "Uzņemt attēlu"):
+            matches = re.findall(
+                rf'<label[^>]*>\s*<svg[^>]*aria-hidden="true"[^>]*>.*?</svg>\s*{label_text}',
+                html,
+                re.DOTALL,
+            )
+            assert len(matches) == 3, (
+                f"Expected 3 {label_text!r} labels each preceded by an "
+                f"aria-hidden SVG icon; found {len(matches)}."
+            )
