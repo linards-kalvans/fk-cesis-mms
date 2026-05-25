@@ -39,6 +39,7 @@ from apps.registrations.presentation import (
     DOCUMENT_FIELD_ID_MAP,
     DOCUMENT_KIND_LABELS,
     FIELD_KIND_LABELS,
+    FIELD_NAME_BY_KIND,
     active_documents_by_kind,
     documents_by_field_name,
     source_label,
@@ -285,6 +286,11 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     pending_document_ids_csv = ",".join(str(i) for i in pending_by_kind.values())
     pending_by_kind_json = _json.dumps(pending_by_kind)
 
+    document_bound_fields = {
+        kind: form[field_name]
+        for kind, field_name in FIELD_NAME_BY_KIND.items()
+    }
+
     return render(
         request,
         "registrations/application_workspace.html",
@@ -297,6 +303,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             "field_kind_labels": FIELD_KIND_LABELS,
             "document_field_id_map": DOCUMENT_FIELD_ID_MAP,
             "document_kind_labels": DOCUMENT_KIND_LABELS,
+            "document_bound_fields": document_bound_fields,
             "field_source_labels": {
                 name: source_label(value)
                 for name, value in (application.field_sources or {}).items()
@@ -415,6 +422,10 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
             "field_kind_labels": FIELD_KIND_LABELS,
             "document_field_id_map": DOCUMENT_FIELD_ID_MAP,
             "document_kind_labels": DOCUMENT_KIND_LABELS,
+            "document_bound_fields": {
+                kind: form[field_name]
+                for kind, field_name in FIELD_NAME_BY_KIND.items()
+            },
             "field_source_labels": {
                 name: source_label(value)
                 for name, value in (application.field_sources or {}).items()

@@ -35,6 +35,12 @@ _FIELD_TO_KIND: dict[str, str] = {
     "member_portrait_document": "member_portrait",
 }
 
+# Canonical mapping: kind key → form field name (inverse of _FIELD_TO_KIND).
+# Used by the workspace view to build ``document_bound_fields`` so the
+# document_card partial can render the canonical file input via the
+# RegistrationApplicationForm BoundField.
+FIELD_NAME_BY_KIND: dict[str, str] = {kind: field for field, kind in _FIELD_TO_KIND.items()}
+
 FIELD_KIND_LABELS: dict[str, str] = {
     field: Document.Kind(kind).label for field, kind in _FIELD_TO_KIND.items()
 }
