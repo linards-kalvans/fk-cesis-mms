@@ -418,7 +418,11 @@ class TestTemplateIncludesPrimitives:
             # P4 Slice E Task 3 alongside the duplicate-include bug fix.
             ("registrations/start_registration.html", "error_summary.html"),
             ("registrations/verify_code.html", "hero_card.html"),
-            ("registrations/verify_code.html", "section_card.html"),
+            # verify_code owns its section card inline (single
+            # <section class="fk-section-card">) rather than re-including the
+            # partial, mirroring start_registration's pattern. The
+            # section_card include assertion was removed in P4 Slice E Task 4
+            # alongside the inline-style → .fk-page-intro migration.
             ("registrations/verify_code.html", "alert.html"),
             ("registrations/verify_code.html", "error_summary.html"),
             ("registrations/parent_portal.html", "hero_card.html"),

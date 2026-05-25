@@ -63,3 +63,50 @@ class TestParentThemeCssEntrySurfaces:
         assert re.search(r"\.fk-page-intro\s*\{", css), (
             ".fk-page-intro helper class must be defined in parent_theme.css"
         )
+
+
+@pytest.mark.django_db
+class TestVerifyCodePolish:
+    def _get(self, client):
+        session = client.session
+        session["pending_verification_email"] = "parent@example.com"
+        session.save()
+        return client.get(reverse("accounts:verify-one-time-code"))
+
+    def test_code_input_uses_mobile_one_time_code_attrs(self, client):
+        response = self._get(client)
+        html = response.content.decode("utf-8")
+        m = re.search(r'<input[^>]*\bname="code"[^>]*>', html)
+        assert m is not None
+        tag = m.group(0)
+        assert 'inputmode="numeric"' in tag
+        assert 'autocomplete="one-time-code"' in tag
+        assert "autofocus" in tag
+        # Existing constraints preserved.
+        assert 'maxlength="6"' in tag
+        assert 'pattern="[0-9]{6}"' in tag
+
+    def test_pending_email_notice_uses_page_intro_helper(self, client):
+        response = self._get(client)
+        html = response.content.decode("utf-8")
+        # The pending-email paragraph uses .fk-page-intro instead of
+        # inline style="..." attributes.
+        m = re.search(
+            r'<p[^>]*\bclass="[^"]*\bfk-page-intro\b[^"]*"[^>]*>',
+            html,
+        )
+        assert m is not None, "pending-email notice must use fk-page-intro"
+        # Inline-style migration: no style="color: var(--fk-muted)" remains.
+        assert "style=\"margin: 0 0 16px; color: var(--fk-muted);\"" not in html
+
+    def test_submit_button_is_full_width(self, client):
+        response = self._get(client)
+        html = response.content.decode("utf-8")
+        m = re.search(
+            r'<button[^>]*type="submit"[^>]*class="([^"]+)"',
+            html,
+        )
+        assert m is not None
+        classes = m.group(1)
+        assert "fk-button--primary" in classes
+        assert "fk-button--full" in classes
