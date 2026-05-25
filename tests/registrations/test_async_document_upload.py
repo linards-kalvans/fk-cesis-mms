@@ -355,6 +355,12 @@ class TestAsyncUploadJsContract:
     sniffs are the simplest stable assertion for "this hook exists".
     """
 
+    @staticmethod
+    def _read_js() -> str:
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[2] / "static" / "js" / "async_upload.js"
+        return path.read_text(encoding="utf-8")
+
     def test_polling_checks_document_hidden(self):
         source = _read_async_upload_js()
         assert "document.hidden" in source, (
@@ -427,6 +433,42 @@ class TestAsyncUploadJsContract:
         # dokumenta" replaces it (reads "from the OCR document").
         assert "'No OCR'" not in source
         assert "No OCR dokumenta" in source
+
+    def test_camera_affordance_listener_present(self):
+        js = self._read_js()
+        assert "data-camera-affordance" in js, (
+            "async_upload.js must wire up label[data-camera-affordance]."
+        )
+
+    def test_camera_shim_sets_capture_environment(self):
+        js = self._read_js()
+        assert "'capture'" in js or '"capture"' in js, (
+            "Camera shim must setAttribute('capture', ...)"
+        )
+        assert "'environment'" in js or '"environment"' in js, (
+            "Camera shim must set capture value to 'environment'."
+        )
+
+    def test_camera_shim_sets_image_accept(self):
+        js = self._read_js()
+        assert "'image/*'" in js or '"image/*"' in js, (
+            "Camera shim must defensively set accept='image/*' on the canonical input."
+        )
+
+    def test_camera_shim_calls_preventDefault_and_clicks_input(self):
+        js = self._read_js()
+        assert "preventDefault" in js, "Camera shim must call event.preventDefault()."
+        assert ".click()" in js, "Camera shim must trigger input.click()."
+
+    def test_pointerdown_clears_stale_capture(self):
+        js = self._read_js()
+        assert "pointerdown" in js, (
+            "Slice D needs a pointerdown listener on the non-camera file labels "
+            "that clears any stale `capture` attribute left over from a cancelled camera flow."
+        )
+        assert "removeAttribute('capture')" in js or 'removeAttribute("capture")' in js, (
+            "pointerdown listener must call input.removeAttribute('capture')."
+        )
 
 
 class TestParentThemeCssContract:
