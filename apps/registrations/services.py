@@ -130,7 +130,11 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
 
 
 def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
-    """Extract OCR person fields from prior app documents and return prefill values."""
+    """Extract OCR person fields from prior app documents and return prefill values.
+
+    OCR wins unconditionally — values are assigned directly without appending to
+    any model value, so the same name is never repeated.
+    """
     result: dict[str, str] = {}
 
     prior_apps = list(account.applications.order_by("-created_at"))
@@ -155,9 +159,7 @@ def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
                         pid = str(person_fields.get("personal_id", "")).strip()
                         full_name = " ".join(part for part in [fn, ln] if part).strip()
                         if full_name:
-                            latest = _latest_application(account)
-                            existing = result.get("guardian_full_name") or str(latest.guardian_full_name if latest is not None else "")
-                            result["guardian_full_name"] = f"{existing} {full_name}".strip() if existing else full_name
+                            result["guardian_full_name"] = full_name
                         if pid:
                             result["guardian_personal_id"] = pid
                         guardian_merged = True
@@ -178,12 +180,10 @@ def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
                         ln = normalize_latvian_name(person_fields.get("last_name", ""))
                         pid = str(person_fields.get("personal_id", "")).strip()
                         full_name = " ".join(part for part in [fn, ln] if part).strip()
-                        latest = _latest_application(account)
-                        existing = result.get("member_full_name") or str(latest.member_full_name if latest is not None else "")
                         if full_name:
-                            result["member_full_name"] = f"{existing} {full_name}".strip() if existing else full_name
+                            result["member_full_name"] = full_name
                         elif fn:
-                            result["member_full_name"] = f"{existing} {fn}".strip() if existing else fn
+                            result["member_full_name"] = fn
                         if pid:
                             result["member_personal_id"] = pid
                         member_merged = True
