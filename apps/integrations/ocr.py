@@ -93,6 +93,7 @@ def _stub_extraction(kind: str, file_name: str) -> OCRExtractionResult:
     """Build a deterministic stub extraction result."""
     first_name, last_name = _stub_person(kind)
     doc_number = _stub_doc_number(kind, file_name)
+    dob = "2015-06-15" if kind == OCR_KIND_MEMBER_IDENTITY else "1985-03-10"
 
     return OCRExtractionResult(
         subject=kind.split("_")[0],
@@ -100,6 +101,7 @@ def _stub_extraction(kind: str, file_name: str) -> OCRExtractionResult:
             "first_name": first_name,
             "last_name": last_name,
             "personal_id": _stub_personal_id(kind),
+            "date_of_birth": dob,
         },
         document_metadata={
             "document_number": doc_number,
