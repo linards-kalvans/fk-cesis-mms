@@ -2,10 +2,18 @@
 Shared empty-state primitive for "no items yet" surfaces.
 
 Parameters:
-  title — Latvian heading copy.
-  body  — Latvian explanatory copy (optional).
+  title      — Latvian heading copy (recommended).
+  body       — Latvian explanatory copy (optional).
+  cta_url    — URL for the optional action button (optional).
+  cta_label  — Latvian label for the optional action button (optional).
+
+Both cta_url and cta_label must be provided for the CTA anchor to render;
+either alone is ignored.
 {% endcomment %}
 <div class="fk-empty-state" data-empty-state>
   {% if title %}<p class="fk-empty-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-empty-state__body">{{ body }}</p>{% endif %}
+  {% if cta_url and cta_label %}
+    <a href="{{ cta_url }}" class="fk-button fk-button--primary fk-button--full fk-empty-state__cta">{{ cta_label }}</a>
+  {% endif %}
 </div>
