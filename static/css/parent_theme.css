@@ -487,14 +487,14 @@ h1, h2, h3 {
   height: 2px;
   left: -50%;
   right: 50%;
-  top: 18px;
+  top: 22px;
   background: var(--fk-border);
   z-index: -1;
 }
 
 .fk-step-number {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   margin: 0 auto 10px;
   display: grid;
   place-items: center;
@@ -512,6 +512,13 @@ h1, h2, h3 {
   background: var(--fk-red);
   border-color: var(--fk-red);
   box-shadow: 0 10px 18px rgba(215, 25, 32, .24);
+}
+
+.fk-step--visited:not(.fk-step--active) { color: var(--fk-text); cursor: pointer; }
+.fk-step--visited:not(.fk-step--active) .fk-step-number {
+  background: #d0d4e8;
+  border-color: #b0b6cc;
+  color: var(--fk-text);
 }
 
 .fk-step-label {
