@@ -837,6 +837,35 @@ h1, h2, h3 {
   .fk-section-body { padding: 14px 16px 20px; }
 }
 
+/* ── Portal + helper card mobile polish (P4 Slice E) ── */
+
+.fk-app-meta--review {
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .fk-applications {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .fk-application-card {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+  .fk-app-actions .fk-button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .fk-helper-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .fk-helper-card .fk-button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 /* ── OCR async UX (P4 Slice B) ── */
 
 .fk-spinner {
