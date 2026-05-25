@@ -176,7 +176,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - No regression of P3 secure-storage posture: encrypted payload + summary still persisted; non-blocking failure path preserved.
 
 ### P4 — Parent-flow UX polish + mobile-first workspace
-**Status:** Slices A–D delivered; Slice E (entry/chooser/portal polish + Latvian copy audit) outstanding.
+**Status:** complete (2026-05-25) — Slices A–E delivered.
 
 **Why fourth**
 - P3.5 deferred its visual polish (spinners, chip styling, source badges, visibility-aware polling, failure-message Latvianization); consolidating leftovers now closes that loop before any new workflow build
@@ -436,6 +436,8 @@ P3.5 is complete when all of the following are true:
    - `README.md` includes worker startup in the local-dev quickstart
 
 ### P4 acceptance — Parent-flow UX polish + mobile-first workspace
+**Status:** complete (2026-05-25).
+
 P4 is complete when all of the following are true:
 
 1. **P3.5 polish leftovers landed**:
