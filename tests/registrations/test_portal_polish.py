@@ -1,6 +1,7 @@
 """Tests for P4 Slice E — parent portal + shared empty-state primitive polish."""
 
 import re
+from pathlib import Path
 
 import pytest
 from django.template.loader import render_to_string
@@ -122,3 +123,34 @@ class TestPortalNoInlineStyles:
                 "inline style attribute (other than dynamic width) found "
                 "inside fk-application-card region"
             )
+
+
+class TestParentThemeCssPortalMobile:
+    def _css(self) -> str:
+        css_path = (
+            Path(__file__).resolve().parents[2]
+            / "static"
+            / "css"
+            / "parent_theme.css"
+        )
+        return css_path.read_text(encoding="utf-8")
+
+    def test_applications_grid_stacks_under_720(self):
+        css = self._css()
+        # Multiple 720px blocks may exist in the file; the rules can land in
+        # any of them, so we concatenate all block bodies before asserting.
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        assert ".fk-applications" in joined
+        assert "grid-template-columns: 1fr" in joined
+        assert ".fk-application-card" in joined
+        assert ".fk-app-actions" in joined
+        assert ".fk-helper-card" in joined
+
+    def test_review_meta_modifier_has_spacing_rule(self):
+        css = self._css()
+        assert re.search(r"\.fk-app-meta--review\s*\{", css)
