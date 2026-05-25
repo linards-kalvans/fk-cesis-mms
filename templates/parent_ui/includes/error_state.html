@@ -1,12 +1,12 @@
-{# templates/parent_ui/includes/error_state.html
-   Shared page-level error-state primitive for "something went wrong"
-   surfaces. For per-field validation errors keep using form_field.html;
-   for form-summary errors keep using error_summary.html.
+{% comment %}
+Shared page-level error-state primitive for "something went wrong" surfaces.
+For per-field validation errors keep using form_field.html; for form-summary
+errors keep using error_summary.html.
 
-   Parameters:
-     title — Latvian heading copy.
-     body  — Latvian explanatory / next-step copy (optional).
-#}
+Parameters:
+  title — Latvian heading copy.
+  body  — Latvian explanatory / next-step copy (optional).
+{% endcomment %}
 <div class="fk-error-state" role="alert" data-error-state>
   {% if title %}<p class="fk-error-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-error-state__body">{{ body }}</p>{% endif %}
