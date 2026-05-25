@@ -100,7 +100,9 @@ _FIELD_STEP_MAP = {
     "member_actual_address": "member",
     "member_kit_size_shirt": "member",
     "member_kit_size_shorts": "member",
-    "member_same_address_as_guardian": "member",
+    # Note: member_same_address_as_guardian is intentionally absent.
+    # Leaving the checkbox unchecked is a valid answer ("no, addresses
+    # differ"), so it must not be step-gated. See test_member_same_address_checkbox.py.
     # agreement step
     "preferred_agreement_signing": "agreement",
 }

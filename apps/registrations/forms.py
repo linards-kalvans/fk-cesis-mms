@@ -150,8 +150,11 @@ class RegistrationApplicationForm(forms.Form):
             "member_actual_address": "member",
             "member_kit_size_shirt": "member",
             "member_kit_size_shorts": "member",
-            "member_same_address_as_guardian": "member",
             "preferred_agreement_signing": "agreement",
+            # Note: member_same_address_as_guardian is intentionally absent from
+            # the step-gating map. Leaving the checkbox unchecked is a valid
+            # answer ("no, addresses differ"), so it must not gate the step's
+            # "Turpināt →" CTA via data-step-required.
         }
         _format_validated = {"guardian_personal_id", "member_personal_id"}
         for field_name, step_name in _field_step_map.items():
