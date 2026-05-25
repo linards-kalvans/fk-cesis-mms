@@ -827,6 +827,10 @@ h1, h2, h3 {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
+  .fk-wizard-nav .fk-button {
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 @media (max-width: 420px) {

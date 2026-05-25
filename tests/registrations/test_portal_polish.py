@@ -159,3 +159,23 @@ class TestParentThemeCssPortalMobile:
             r"\.fk-app-meta--review\s*\{[^}]*margin-top\s*:",
             css,
         ), ".fk-app-meta--review must declare margin-top"
+
+    def test_wizard_nav_buttons_stretch_to_grid_track_under_720(self):
+        css = self._css()
+        # Confirm the rule lives inside a max-width:720px block.
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        # The wizard-nav buttons must stretch to fill their grid track,
+        # otherwise horizontal padding clips the right edge on narrow viewports.
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*width\s*:\s*100%",
+            joined,
+        ), ".fk-wizard-nav .fk-button must declare width: 100% inside a 720px media query"
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*box-sizing\s*:\s*border-box",
+            joined,
+        ), ".fk-wizard-nav .fk-button must declare box-sizing: border-box"
