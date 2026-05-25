@@ -130,66 +130,39 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
 
 
 def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
-    """Extract OCR person fields from prior app documents and return prefill values.
+    """Extract OCR person fields from prior guardian documents and return prefill values.
 
-    OCR wins unconditionally — values are assigned directly without appending to
-    any model value, so the same name is never repeated.
+    Member fields are intentionally excluded — each new registration is for a
+    different child so member values must not carry over (see get_application_prefill).
     """
     result: dict[str, str] = {}
 
     prior_apps = list(account.applications.order_by("-created_at"))
-    guardian_merged = False
-    member_merged = False
 
     for prior_app in prior_apps:
-        if not guardian_merged:
-            guardian_identity_doc = prior_app.documents.filter(
-                kind=Document.Kind.GUARDIAN_IDENTITY,
-                deleted_at__isnull=True,
-                ocr_status=Document.OcrStatus.COMPLETED,
-            ).select_related("extraction").first()
-            if guardian_identity_doc is not None:
-                extraction = getattr(guardian_identity_doc, "extraction", None)
-                payload = _decrypt_extraction_payload(extraction) if extraction is not None else None
-                if payload:
-                    person_fields = payload.get("person_fields", {})
-                    if isinstance(person_fields, dict):
-                        fn = normalize_latvian_name(person_fields.get("first_name", ""))
-                        ln = normalize_latvian_name(person_fields.get("last_name", ""))
-                        pid = str(person_fields.get("personal_id", "")).strip()
-                        full_name = " ".join(part for part in [fn, ln] if part).strip()
-                        if full_name:
-                            result["guardian_full_name"] = full_name
-                        if pid:
-                            result["guardian_personal_id"] = pid
-                        guardian_merged = True
-
-        if not member_merged:
-            member_identity_doc = prior_app.documents.filter(
-                kind=Document.Kind.MEMBER_IDENTITY,
-                deleted_at__isnull=True,
-                ocr_status=Document.OcrStatus.COMPLETED,
-            ).select_related("extraction").first()
-            if member_identity_doc is not None:
-                extraction = getattr(member_identity_doc, "extraction", None)
-                payload = _decrypt_extraction_payload(extraction) if extraction is not None else None
-                if payload:
-                    person_fields = payload.get("person_fields", {})
-                    if isinstance(person_fields, dict):
-                        fn = normalize_latvian_name(person_fields.get("first_name", ""))
-                        ln = normalize_latvian_name(person_fields.get("last_name", ""))
-                        pid = str(person_fields.get("personal_id", "")).strip()
-                        full_name = " ".join(part for part in [fn, ln] if part).strip()
-                        if full_name:
-                            result["member_full_name"] = full_name
-                        elif fn:
-                            result["member_full_name"] = fn
-                        if pid:
-                            result["member_personal_id"] = pid
-                        member_merged = True
-
-        if guardian_merged and member_merged:
-            break
+        guardian_identity_doc = prior_app.documents.filter(
+            kind=Document.Kind.GUARDIAN_IDENTITY,
+            deleted_at__isnull=True,
+            ocr_status=Document.OcrStatus.COMPLETED,
+        ).select_related("extraction").first()
+        if guardian_identity_doc is None:
+            continue
+        extraction = getattr(guardian_identity_doc, "extraction", None)
+        payload = _decrypt_extraction_payload(extraction) if extraction is not None else None
+        if not payload:
+            continue
+        person_fields = payload.get("person_fields", {})
+        if not isinstance(person_fields, dict):
+            continue
+        fn = normalize_latvian_name(person_fields.get("first_name", ""))
+        ln = normalize_latvian_name(person_fields.get("last_name", ""))
+        pid = str(person_fields.get("personal_id", "")).strip()
+        full_name = " ".join(part for part in [fn, ln] if part).strip()
+        if full_name:
+            result["guardian_full_name"] = full_name
+        if pid:
+            result["guardian_personal_id"] = pid
+        break  # Found usable guardian OCR — stop scanning older apps
 
     return result
 
