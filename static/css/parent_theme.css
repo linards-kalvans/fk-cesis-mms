@@ -450,6 +450,17 @@ h1, h2, h3 {
   border-radius: 8px;
 }
 
+.fk-button--full {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.fk-button__icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
 /* ── Stepper ── */
 
 .fk-stepper {
