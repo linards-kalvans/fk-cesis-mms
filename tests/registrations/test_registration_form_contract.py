@@ -961,3 +961,30 @@ class TestRegistrationApplicationFormConsentField:
             "personal_data_consent absence must not surface as a form-layer "
             "error; the consent gate lives in the service layer."
         )
+
+
+class TestSliceDFileWidgetAttrs:
+    """P4 Slice D — canonical file inputs render visually hidden so the
+    document_card partial's visible labels are the only tap surface."""
+
+    def test_guardian_identity_file_input_is_visually_hidden(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        form = RegistrationApplicationForm()
+        attrs = form.fields["guardian_identity_document"].widget.attrs
+        css_class = attrs.get("class", "")
+        assert "fk-visually-hidden" in css_class, (
+            f"guardian_identity_document widget must include 'fk-visually-hidden' "
+            f"in its class attr; got: {css_class!r}"
+        )
+
+    def test_member_identity_file_input_is_visually_hidden(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        form = RegistrationApplicationForm()
+        attrs = form.fields["member_identity_document"].widget.attrs
+        assert "fk-visually-hidden" in attrs.get("class", "")
+
+    def test_member_portrait_file_input_is_visually_hidden(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        form = RegistrationApplicationForm()
+        attrs = form.fields["member_portrait_document"].widget.attrs
+        assert "fk-visually-hidden" in attrs.get("class", "")

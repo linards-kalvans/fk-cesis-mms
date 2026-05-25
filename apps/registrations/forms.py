@@ -125,6 +125,13 @@ class RegistrationApplicationForm(forms.Form):
         self.fields["member_portrait_document"].widget.attrs["data-async-upload"] = "member_portrait"
         self.fields["member_portrait_document"].widget.attrs["data-progress-slot"] = "id_member_portrait_document_progress"
 
+        # P4 Slice D: canonical file inputs are visually hidden — the visible
+        # tap surface is the <label for=...> rendered by document_card.html.
+        for _file_field in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+            existing = self.fields[_file_field].widget.attrs.get("class", "")
+            classes = (existing + " fk-visually-hidden").strip()
+            self.fields[_file_field].widget.attrs["class"] = classes
+
         # P4 Slice C — step-gating hooks. The wizard JS controller reads
         # `data-step-required` to know which inputs gate "next" on each step,
         # and the two `data-step-error-*` attrs supply the Latvian error copy
