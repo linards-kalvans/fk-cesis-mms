@@ -136,7 +136,7 @@ Target Django monolith with domain apps:
 
 - **M6 containerization + staging deploy pipeline landed (2026-05-26)**
   - Multi-stage `Dockerfile` (uv builder → slim runtime; non-root UID 10001; `collectstatic` baked in; gunicorn + whitenoise; healthcheck `curl /healthz`).
-  - `compose.yaml` with three services: `postgres` (named `pgdata` volume), `web` (binds `127.0.0.1:8000`, runs `migrate` then gunicorn, bind-mounts `./data/{uploads,private-uploads}`), `qcluster` (same image, `qcluster` command, waits for `web: service_healthy`, healthcheck disabled because it has no HTTP server).
+  - `compose.yaml` with three services: `postgres` (Postgres 18 alpine, named `pgdata` volume), `web` (binds `127.0.0.1:${WEB_HOST_PORT:-8000}` on the host → 8000 in container, runs `migrate` then gunicorn, bind-mounts `./data/{uploads,private-uploads}`), `qcluster` (same image, `qcluster` command, waits for `web: service_healthy`, healthcheck disabled because it has no HTTP server). Container port is fixed at 8000; only the host-side port is configurable via `.env` to avoid collisions on the host.
   - `apps/core/views.py::healthz` + URL `/healthz` — returns 200 `{"status":"ok"}` after a `SELECT 1` against the DB; 503 on DB error. Covered by `tests/core/test_healthz.py`.
   - `fk_cesis_mms/settings.py` made env-driven for prod: `DJANGO_DEBUG` env, `DATABASE_URL` via `dj-database-url` (SQLite default for dev/tests), `DJANGO_ALLOWED_HOSTS` comma-merge, whitenoise middleware + `STATIC_ROOT = BASE_DIR / "staticfiles"`. Manifest storage activates only when `staticfiles.json` exists (i.e. container builds), so tests keep using Django's default storage.
   - New deps: `gunicorn`, `whitenoise`, `dj-database-url`, `psycopg[binary]`.

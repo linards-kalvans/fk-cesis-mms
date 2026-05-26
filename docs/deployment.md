@@ -99,6 +99,10 @@ DEFAULT_FROM_EMAIL=noreply@<domain>
 
 # Which image tag this server tracks (staging now, prod later)
 IMAGE_TAG=staging
+
+# Host port the web container binds to on 127.0.0.1. Override if 8000
+# is already in use on this host (Caddy upstream must match — see §3).
+WEB_HOST_PORT=8000
 ```
 
 ### 1.4 Pull the staging image and start the stack
@@ -256,6 +260,9 @@ Append to `/etc/caddy/Caddyfile`:
         reverse_proxy 127.0.0.1:9000
     }
 
+    # Upstream port must match WEB_HOST_PORT in /opt/fk-cesis-mms/.env
+    # (defaults to 8000). If you change WEB_HOST_PORT, update this line and
+    # `systemctl reload caddy`.
     reverse_proxy 127.0.0.1:8000 {
         health_uri /healthz
         health_interval 30s
