@@ -189,10 +189,24 @@ import hmac
 import hashlib
 import os
 import subprocess
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 SECRET = os.environ["DEPLOY_WEBHOOK_SECRET"].encode()
 DEPLOY_CMD = ["/usr/local/bin/deploy-fk-cesis.sh"]
+
+
+def _pipe_to_journald(proc: subprocess.Popen) -> None:
+    """Forward the deploy script's combined stdout/stderr into journald.
+
+    Without this the Popen would drop output, hiding any failure that
+    happens after the listener has already sent 202 back to CI.
+    """
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        print(f"[deploy] {line.rstrip()}", flush=True)
+    proc.wait()
+    print(f"[deploy] script exited rc={proc.returncode}", flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -214,8 +228,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(202)
         self.end_headers()
         self.wfile.write(b"accepted\n")
-        # Fire and forget. Log via journald.
-        subprocess.Popen(DEPLOY_CMD, stdout=None, stderr=None, start_new_session=True)
+        # Run the deploy script in the background, capture both streams,
+        # and pipe each line back to our own stdout so it lands in journald
+        # (alongside the listener's access log). Without this, any failure
+        # inside the script is invisible because Popen would otherwise drop
+        # the streams.
+        proc = subprocess.Popen(
+            DEPLOY_CMD,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            text=True,
+            bufsize=1,
+        )
+        threading.Thread(
+            target=_pipe_to_journald,
+            args=(proc,),
+            daemon=True,
+        ).start()
 
     def _reject(self, reason: str) -> None:
         self.send_response(401)
