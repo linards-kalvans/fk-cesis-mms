@@ -107,7 +107,10 @@ steps:
       - event: [push, manual]
         branch: [dev, main]
     settings:
-      repo: codeberg.org/linards-kalvans/fk-cesis-mms
+      # repo is the path *within* the registry -- no codeberg.org prefix.
+      # plugin-kaniko concatenates ${registry}/${repo}, so duplicating the
+      # host here would produce codeberg.org/codeberg.org/... and 401.
+      repo: linards-kalvans/fk-cesis-mms
       registry: codeberg.org
       username:
         from_secret: CODEBERG_USER
