@@ -66,9 +66,6 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# uv
-uv.lock
-
 # Local-only tiny-IDP validation inputs and evidence (real PII, never commit)
 /tmp/
 
