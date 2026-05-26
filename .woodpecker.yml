@@ -13,6 +13,10 @@
 #
 # PRs only run lint + test. No image is built for PR events.
 #
+# Image builds use woodpeckerci/plugin-docker-buildx (BuildKit, rootless).
+# This avoids mounting /var/run/docker.sock and therefore works on
+# Codeberg-CI's default "untrusted" repos.
+#
 # Required Codeberg secrets (Repo Settings -> Secrets):
 #   CODEBERG_USER             registry user (deploy bot or your handle)
 #   CODEBERG_TOKEN            Codeberg Application Token w/ packages:write
@@ -57,50 +61,49 @@ steps:
       - uv sync --frozen
       - uv run pytest -q
 
-  build-and-push-dev:
-    image: docker:27
+  # Compute the image tag(s) into a .tags file that plugin-docker-buildx will
+  # read. We write tags comma-separated on a single line (the plugin's
+  # newline-separated parser has known issues with trailing newlines; comma
+  # is the documented workaround).
+  prepare-tags-dev:
+    image: alpine:3.20
     when:
       - event: push
         branch: dev
-    environment:
-      CODEBERG_USER:
-        from_secret: CODEBERG_USER
-      CODEBERG_TOKEN:
-        from_secret: CODEBERG_TOKEN
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      - export IMAGE=codeberg.org/linards-kalvans/fk-cesis-mms
-      - echo "$CODEBERG_TOKEN" | docker login codeberg.org -u "$CODEBERG_USER" --password-stdin
-      - docker build -t "$IMAGE:dev" .
-      - docker push "$IMAGE:dev"
+      - echo -n "dev" > .tags
+      - cat .tags
 
-  build-and-push-main:
-    image: docker:27
+  prepare-tags-main:
+    image: alpine/git:latest
     when:
       - event: push
         branch: main
-    environment:
-      CODEBERG_USER:
-        from_secret: CODEBERG_USER
-      CODEBERG_TOKEN:
-        from_secret: CODEBERG_TOKEN
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     commands:
-      # Install git so we can read VERSION and count commits.
-      - apk add --no-cache git
-      - export MAJOR=$(tr -d '[:space:]' < VERSION)
-      - export LAST_VERSION_SHA=$(git log -1 --format=%H -- VERSION)
-      - export MINOR_OFFSET=$(git rev-list --count "$LAST_VERSION_SHA..HEAD")
-      - export MINOR=$((MINOR_OFFSET + 1))
-      - export VERSION_TAG="$MAJOR.$MINOR"
-      - export IMAGE=codeberg.org/linards-kalvans/fk-cesis-mms
-      - echo "Tagging $IMAGE:main and $IMAGE:$VERSION_TAG"
-      - echo "$CODEBERG_TOKEN" | docker login codeberg.org -u "$CODEBERG_USER" --password-stdin
-      - docker build -t "$IMAGE:main" -t "$IMAGE:$VERSION_TAG" .
-      - docker push "$IMAGE:main"
-      - docker push "$IMAGE:$VERSION_TAG"
+      - MAJOR=$(tr -d '[:space:]' < VERSION)
+      - LAST_VERSION_SHA=$(git log -1 --format=%H -- VERSION)
+      - MINOR_OFFSET=$(git rev-list --count "$LAST_VERSION_SHA..HEAD")
+      - MINOR=$((MINOR_OFFSET + 1))
+      - VERSION_TAG="$MAJOR.$MINOR"
+      - echo "Computed version tag $VERSION_TAG"
+      - echo -n "main,$VERSION_TAG" > .tags
+      - cat .tags
+
+  build-and-push:
+    image: woodpeckerci/plugin-docker-buildx
+    when:
+      - event: push
+        branch: [dev, main]
+    settings:
+      repo: codeberg.org/linards-kalvans/fk-cesis-mms
+      registry: codeberg.org
+      username:
+        from_secret: CODEBERG_USER
+      password:
+        from_secret: CODEBERG_TOKEN
+      dockerfile: Dockerfile
+      platforms: linux/amd64
+      tags_file: .tags
 
   notify-dev:
     image: alpine:3.20
