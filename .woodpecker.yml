@@ -133,6 +133,12 @@ steps:
         from_secret: DEV_DEPLOY_WEBHOOK_SECRET
     commands:
       - apk add --no-cache curl openssl
+      # Diagnostic: confirm the secret env vars are non-empty and report
+      # the secret's length + sha256(value || "ok") so we can cross-check
+      # both sides byte-for-byte without leaking the secret itself.
+      - test -n "$DEV_DEPLOY_WEBHOOK_URL"    && echo "url length=${#DEV_DEPLOY_WEBHOOK_URL}"    || { echo "URL EMPTY"; exit 1; }
+      - test -n "$DEV_DEPLOY_WEBHOOK_SECRET" && echo "secret length=${#DEV_DEPLOY_WEBHOOK_SECRET}" || { echo "SECRET EMPTY"; exit 1; }
+      - 'printf "%s" "$DEV_DEPLOY_WEBHOOK_SECRET" | sha256sum | awk ''{print "secret sha256=" $1}'''
       - >
         BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"dev\"}";
         SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$DEV_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
@@ -154,6 +160,9 @@ steps:
         from_secret: PROD_DEPLOY_WEBHOOK_SECRET
     commands:
       - apk add --no-cache curl openssl
+      - test -n "$PROD_DEPLOY_WEBHOOK_URL"    && echo "url length=${#PROD_DEPLOY_WEBHOOK_URL}"    || { echo "URL EMPTY"; exit 1; }
+      - test -n "$PROD_DEPLOY_WEBHOOK_SECRET" && echo "secret length=${#PROD_DEPLOY_WEBHOOK_SECRET}" || { echo "SECRET EMPTY"; exit 1; }
+      - 'printf "%s" "$PROD_DEPLOY_WEBHOOK_SECRET" | sha256sum | awk ''{print "secret sha256=" $1}'''
       - >
         BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"main\"}";
         SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$PROD_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
