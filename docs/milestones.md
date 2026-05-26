@@ -709,7 +709,7 @@ Remaining focus:
 ### M6 — Production readiness
 
 Delivered:
-- staging deployment pipeline (2026-05-26): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres`, non-root UID 10001, whitenoise static, `/healthz` probe); Codeberg Woodpecker CI builds + pushes to Codeberg Container Registry (`:main-<sha>` + floating `:staging`); HMAC-signed webhook triggers a hardened unprivileged systemd listener on the server that runs `docker compose pull && up -d`. Caddy on host terminates TLS, proxies to `127.0.0.1:8000`. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
+- two-channel deployment pipeline (2026-05-26): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres` 18, non-root UID 10001, whitenoise static, `/healthz` probe, configurable host port). Branch strategy: `dev` → floating `:dev` (dev server auto-pulls); `main` → floating `:main` plus immutable `:<major>.<minor>` from the `VERSION` file (prod server auto-pulls `:main`, can pin to a `:<X.Y>` for rollback). Codeberg Woodpecker CI orchestrates lint → test → branch-specific build → HMAC-signed POST to per-channel server listener. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
 - deployment runbook: `docs/deployment.md`.
 
 Remaining focus:

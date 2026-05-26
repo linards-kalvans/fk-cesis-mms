@@ -1,31 +1,69 @@
 # Deployment — fk-cesis-mms
 
-One-page runbook for the staging deployment. Same artifact and pipeline will
-later promote to production by adding a second host that pulls a `:prod` tag
-instead of `:staging`.
+Runbook for the two-channel deploy (dev + prod).
 
-## Architecture (recap)
+## Branching + tagging model
+
+| Branch / event                 | Image tags pushed by CI                                                 | Server that auto-pulls         |
+|--------------------------------|-------------------------------------------------------------------------|---------------------------------|
+| `dev` push                     | `:dev` (floating)                                                       | dev server (`IMAGE_TAG=dev`)    |
+| `main` push (merge from `dev`) | `:main` (floating) **and** `:<major>.<minor>` (immutable)               | prod server (`IMAGE_TAG=main`)  |
+| pull request                   | none — lint + test only                                                 | none                            |
+
+- `<major>` comes from the top-level `VERSION` file in the repo.
+- `<minor>` resets to 1 the instant `VERSION` is bumped (commit that touches
+  `VERSION` is `<new-major>.1`), then auto-increments on every subsequent
+  commit/merge to `main`.
+- Version tags are **immutable** in the registry — every successful main
+  build pins a recoverable point.
+
+## Architecture
 
 ```
 codeberg.org (git + container registry)
-        |  push to main
-        v
-Woodpecker CI  ─►  build & push  codeberg.org/linards-kalvans/fk-cesis-mms:main-<sha>
-                    re-tag       codeberg.org/linards-kalvans/fk-cesis-mms:staging
-                    curl         https://<subdomain>/hooks/codeberg
-                                            │
-                                            v
-host:  Caddy (TLS, 443) ──► 127.0.0.1:9000  fk-deploy-listener (systemd, user fkmms)
-                                            │
-                                            v
-                                  /usr/local/bin/deploy-fk-cesis.sh
-                                  docker compose pull && up -d
-       Caddy 443 ──► 127.0.0.1:8000  web (gunicorn + whitenoise)
+   │
+   │  push to dev                            push to main
+   ▼                                          ▼
+Woodpecker CI                              Woodpecker CI
+   │  build & push :dev                        │  read VERSION, count commits
+   │                                           │  build & push :main + :<major>.<minor>
+   │                                           │
+   ▼                                          ▼
+DEV_DEPLOY_WEBHOOK_URL                     PROD_DEPLOY_WEBHOOK_URL
+   │                                           │
+   ▼                                          ▼
+ DEV host                                  PROD host
+ Caddy (TLS, 443)                          Caddy (TLS, 443)
+   ├─ /hooks/codeberg → 127.0.0.1:9000     ├─ /hooks/codeberg → 127.0.0.1:9000
+   │     fk-deploy-listener (systemd)      │     fk-deploy-listener (systemd)
+   │     IMAGE_TAG=dev                     │     IMAGE_TAG=main (or pinned X.Y)
+   │           │                           │           │
+   │           ▼                           │           ▼
+   │     docker compose pull & up -d       │     docker compose pull & up -d
+   │                                       │
+   └─ / → 127.0.0.1:${WEB_HOST_PORT}       └─ / → 127.0.0.1:${WEB_HOST_PORT}
+         web (gunicorn + whitenoise)             web (gunicorn + whitenoise)
 ```
 
-- All containers + the listener run **as the unprivileged user `fkmms`**.
-- Root is used **only** during one-time provisioning and for Caddy's
-  packaged unit (which binds 80/443 via `CAP_NET_BIND_SERVICE`).
+- Each server is a separate host (or at minimum a separate compose stack
+  with its own subdomain + listener port + secret).
+- All containers + the listener on each host run **as the unprivileged
+  user `fkmms`**. Root is used **only** during one-time provisioning and
+  for Caddy's packaged unit (which binds 80/443 via `CAP_NET_BIND_SERVICE`).
+
+## 0. Which channel does this host serve?
+
+You provision **both servers the same way** — only two values in `.env`
+differ between them. Decide before you start:
+
+| .env line          | Dev server | Prod server          |
+|--------------------|------------|----------------------|
+| `IMAGE_TAG`        | `dev`      | `main` (or `X.Y`)    |
+| `SITE_URL`         | dev subdomain | prod subdomain    |
+| `DJANGO_ALLOWED_HOSTS` | dev subdomain | prod subdomain |
+
+Everything else (Docker, listener systemd unit, Caddy config) is identical
+across hosts.
 
 ## 1. One-time server provisioning (as root)
 
@@ -287,12 +325,18 @@ server's public IP; Caddy auto-issues a Let's Encrypt cert on first hit.
 
 In repo settings on codeberg.org → Secrets:
 
-| Secret                 | Value                                                |
-|------------------------|------------------------------------------------------|
-| `CODEBERG_USER`        | bot account or your handle                           |
-| `CODEBERG_TOKEN`       | Codeberg Application Token with `packages:write`     |
-| `DEPLOY_WEBHOOK_URL`   | `https://<subdomain>.example.lv/hooks/codeberg`      |
-| `DEPLOY_WEBHOOK_SECRET`| same long-random string used in step 2.2             |
+| Secret                       | Value                                                                |
+|------------------------------|----------------------------------------------------------------------|
+| `CODEBERG_USER`              | bot account or your handle                                           |
+| `CODEBERG_TOKEN`             | Codeberg Application Token with `packages:write`                     |
+| `DEV_DEPLOY_WEBHOOK_URL`     | `https://<dev-subdomain>.example.lv/hooks/codeberg`                  |
+| `DEV_DEPLOY_WEBHOOK_SECRET`  | long random; same value as the dev host's listener                   |
+| `PROD_DEPLOY_WEBHOOK_URL`    | `https://<prod-subdomain>.example.lv/hooks/codeberg`  *(later)*      |
+| `PROD_DEPLOY_WEBHOOK_SECRET` | long random; same value as the prod host's listener   *(later)*      |
+
+The `PROD_*` secrets can be added later when the prod host exists. The
+`notify-prod` CI step is marked `failure: ignore`, so a missing secret
+won't fail the pipeline — the `:main` and `:<X.Y>` tags still publish.
 
 ## 5. Day-2 operations
 
@@ -304,16 +348,41 @@ journalctl -u fk-deploy-listener -f
 journalctl -u caddy -f
 ```
 
-### Roll back to a previous image
+### Roll back to a previous image (prod only)
+
+Every successful `main` build leaves an immutable `:<major>.<minor>` tag in
+the registry. To pin prod to a previous known-good version:
 
 ```bash
-# Edit /opt/fk-cesis-mms/.env: set IMAGE_TAG=main-<previous-sha>
+# Edit /opt/fk-cesis-mms/.env: change IMAGE_TAG=main to e.g. IMAGE_TAG=0.42
 su -s /bin/bash fkmms -c '
   cd /opt/fk-cesis-mms
   docker compose pull web qcluster
   docker compose up -d web qcluster
 '
 ```
+
+While `IMAGE_TAG` is pinned to a specific version, future webhook deploys
+become no-ops (`docker compose pull` finds nothing new for that tag). To
+resume auto-pulling latest, set `IMAGE_TAG=main` and run the pull again.
+
+The dev server has no rollback need — it follows the floating `:dev` tag.
+If you need to inspect a specific dev image, do it locally with
+`docker pull codeberg.org/.../fk-cesis-mms:dev@sha256:<digest>`.
+
+### Bump the major version
+
+`<major>` is hand-controlled. To cut e.g. `1.x` from current `0.x`:
+
+```bash
+# On the dev branch, after the feature work that justifies the bump:
+echo "1" > VERSION
+git add VERSION && git commit -m "release: bump major to 1"
+# Open PR dev -> main as usual. The merge commit on main becomes 1.1.
+```
+
+The minor counter resets implicitly because `<minor>` counts commits since
+the SHA where `VERSION` was last touched. No state file to maintain.
 
 ### Database backup
 
