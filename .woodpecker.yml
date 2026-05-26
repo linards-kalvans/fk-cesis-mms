@@ -110,7 +110,8 @@ steps:
         from_secret: CODEBERG_TOKEN
       dockerfile: Dockerfile
       cache: true
-      tags_file: .tags
+      # `tags` deliberately omitted -- plugin-kaniko auto-detects the
+      # .tags file written by prepare-tags-{dev,main} above.
 
   notify-dev:
     image: alpine:3.20
