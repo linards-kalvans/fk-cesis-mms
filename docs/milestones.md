@@ -707,11 +707,16 @@ Remaining focus:
 - document/admin operations polish
 
 ### M6 — Production readiness
+
+Delivered:
+- staging deployment pipeline (2026-05-26): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres`, non-root UID 10001, whitenoise static, `/healthz` probe); Codeberg Woodpecker CI builds + pushes to Codeberg Container Registry (`:main-<sha>` + floating `:staging`); HMAC-signed webhook triggers a hardened unprivileged systemd listener on the server that runs `docker compose pull && up -d`. Caddy on host terminates TLS, proxies to `127.0.0.1:8000`. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
+- deployment runbook: `docs/deployment.md`.
+
 Remaining focus:
-- deployment docs
-- recovery/backup notes
-- integration configuration docs
-- final security checklist
+- prod environment / second host (same image, `:prod` floating tag, separate `.env`)
+- recovery/backup notes (today: ad-hoc `pg_dump`; need scheduled job + off-host shipping)
+- integration configuration docs (Invoice Ninja, SMTP provider choice)
+- final security checklist (CSP, rate-limit, fail2ban, audit-log review)
 
 ### Future / post-MVP
 - calendar integration

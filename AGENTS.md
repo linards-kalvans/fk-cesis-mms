@@ -134,6 +134,17 @@ Target Django monolith with domain apps:
     - **Review step showed redundant "Saglabāt melnrakstu" button (commits `6732f4b`, `fb16bb1`):** removed save_draft button and `.fk-wizard-actions` wrapper from review step in both `application_workspace.html` and `new_registration.html`; "Iesniegt pieteikumu" now uses `fk-button--primary fk-button--full` matching the Turpināt style. New test file `tests/registrations/test_review_step_submit.py` (5 tests).
   - Test suite: 847 passed (up from 798 baseline); ruff and mypy clean.
 
+- **M6 containerization + staging deploy pipeline landed (2026-05-26)**
+  - Multi-stage `Dockerfile` (uv builder → slim runtime; non-root UID 10001; `collectstatic` baked in; gunicorn + whitenoise; healthcheck `curl /healthz`).
+  - `compose.yaml` with three services: `postgres` (named `pgdata` volume), `web` (binds `127.0.0.1:8000`, runs `migrate` then gunicorn, bind-mounts `./data/{uploads,private-uploads}`), `qcluster` (same image, `qcluster` command, waits for `web: service_healthy`, healthcheck disabled because it has no HTTP server).
+  - `apps/core/views.py::healthz` + URL `/healthz` — returns 200 `{"status":"ok"}` after a `SELECT 1` against the DB; 503 on DB error. Covered by `tests/core/test_healthz.py`.
+  - `fk_cesis_mms/settings.py` made env-driven for prod: `DJANGO_DEBUG` env, `DATABASE_URL` via `dj-database-url` (SQLite default for dev/tests), `DJANGO_ALLOWED_HOSTS` comma-merge, whitenoise middleware + `STATIC_ROOT = BASE_DIR / "staticfiles"`. Manifest storage activates only when `staticfiles.json` exists (i.e. container builds), so tests keep using Django's default storage.
+  - New deps: `gunicorn`, `whitenoise`, `dj-database-url`, `psycopg[binary]`.
+  - `.woodpecker.yml` pipeline: lint → test (against ephemeral Postgres service) → on `main`: docker build/push to `codeberg.org/linards-kalvans/fk-cesis-mms:main-<sha7>` + retag `:staging` → HMAC-signed POST to server's deploy listener.
+  - `docs/deployment.md` runbook: `fkmms` unprivileged user (UID 10001, in `docker` group) owns `/opt/fk-cesis-mms`; `.env` template; systemd unit for the Python deploy listener (hardened with `NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, `ReadWritePaths=/opt/fk-cesis-mms`); deploy script; Caddyfile patch (reverse-proxies `/healthz` health-checked app + `/hooks/codeberg` to listener); Codeberg secrets list; rollback + backup.
+  - Local docker compose smoke verified: `postgres` healthy → `web` healthy (migrations + gunicorn) → `qcluster` healthy with clean log, `/healthz` 200, `/register/` renders Latvian title with 18 `fk-*` classes and whitenoise serves CSS 200.
+  - Full repo verification after the landing: `uv run pytest -q` → `858 passed`, `uv run ruff check .` → passed, `uv run mypy .` → passed.
+
 - **P4.5 delivered — parent-flow quality-debt sweep (2026-05-25)**
   - Guardian full-name no longer doubled in new-app prefill: `_merge_ocr_extractions` removed model-value fallback; OCR wins unconditionally (`commit 58115e1` + `0a80b4e`).
   - Member OCR fields no longer bleed into new-app prefill: member block removed from `_merge_ocr_extractions`; each new registration starts with a fresh child record. Two stale tests updated (`commit 15bcf86`).
@@ -204,6 +215,12 @@ uv run python manage.py qcluster       # start background-job worker (P3.5+)
 uv run pytest                          # run test suite
 uv run ruff check .                    # lint
 uv run mypy .                          # type check
+
+# Container / deploy (see docs/deployment.md for the full runbook)
+docker build -t fk-cesis-mms:dev .     # build the production image locally
+docker compose up -d                   # local smoke test (web + qcluster + postgres on 127.0.0.1:8000)
+docker compose logs -f web qcluster    # tail app + worker logs
+docker compose down -v                 # tear down stack and named volumes
 ```
 
 Rules:

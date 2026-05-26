@@ -1,0 +1,69 @@
+# fk-cesis-mms — production compose stack
+#
+# Used both for local docker smoke testing and on the server at /opt/fk-cesis-mms.
+# On the server, the same .env supplies POSTGRES_*, DATABASE_URL, OCR_*, EMAIL_*,
+# SITE_URL, DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS, and IMAGE_TAG.
+#
+# All public ingress goes through Caddy on the host -> 127.0.0.1:8000.
+# Postgres and qcluster have no published ports.
+
+name: fk-cesis-mms
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    image: ${FK_CESIS_MMS_IMAGE:-codeberg.org/linards-kalvans/fk-cesis-mms}:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/private-uploads:/app/private-uploads
+    command:
+      - sh
+      - -c
+      - >
+        python manage.py migrate --noinput &&
+        exec gunicorn fk_cesis_mms.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 3
+        --access-logfile -
+        --error-logfile -
+
+  qcluster:
+    image: ${FK_CESIS_MMS_IMAGE:-codeberg.org/linards-kalvans/fk-cesis-mms}:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/private-uploads:/app/private-uploads
+    command: ["python", "manage.py", "qcluster"]
+    # qcluster has no HTTP server; disable the image's curl-based healthcheck.
+    healthcheck:
+      disable: true
+
+volumes:
+  pgdata:

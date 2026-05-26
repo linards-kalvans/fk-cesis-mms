@@ -1,0 +1,42 @@
+# Version control + IDE
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Python build / venv artifacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local dev state — never bake into the image
+db.sqlite3
+db.sqlite3-journal
+uploads/
+private-uploads/
+staticfiles/
+tmp/
+
+# Secrets — never bake into the image
+.env
+.env.*
+
+# Tests + docs + tooling not needed at runtime
+tests/
+docs/archive/
+docs/superpowers/
+opencode.json
+design-template.html
+
+# Claude / agent artifacts
+.claude
+AGENTS.md
+CLAUDE.md
+README.md
