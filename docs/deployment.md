@@ -296,7 +296,9 @@ Append to `/etc/caddy/Caddyfile`:
 <subdomain>.example.lv {
     encode zstd gzip
 
-    handle_path /hooks/codeberg {
+    # Use `handle` (NOT `handle_path`) so the /hooks/codeberg prefix is
+    # preserved when proxying -- the listener matches on the full path.
+    handle /hooks/codeberg {
         reverse_proxy 127.0.0.1:9000
     }
 
