@@ -280,7 +280,7 @@ RestartSec=5
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only  # NOT `true` -- docker reads ~/.docker/config.json
 PrivateTmp=true
 ReadWritePaths=/opt/fk-cesis-mms
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
