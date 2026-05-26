@@ -63,18 +63,20 @@ steps:
       - uv sync --frozen
       - uv run pytest -q
 
-  # Compute the image tag(s) into a .tags file that plugin-docker-buildx will
-  # read. We write tags comma-separated on a single line (the plugin's
-  # newline-separated parser has known issues with trailing newlines; comma
-  # is the documented workaround).
+  # Compute the image tag(s) into a .tags file that plugin-kaniko reads
+  # automatically. Format: one tag per line, with trailing newline (kaniko
+  # plugin convention).
   prepare-tags-dev:
     image: alpine:3.20
     when:
       - event: [push, manual]
         branch: dev
     commands:
-      - echo -n "dev" > .tags
+      - echo "dev" > .tags
+      - echo "--- .tags contents ---"
       - cat .tags
+      - echo "--- hex dump ---"
+      - od -c .tags
 
   prepare-tags-main:
     image: alpine/git:latest
@@ -88,8 +90,11 @@ steps:
       - MINOR=$((MINOR_OFFSET + 1))
       - VERSION_TAG="$MAJOR.$MINOR"
       - echo "Computed version tag $VERSION_TAG"
-      - echo -n "main,$VERSION_TAG" > .tags
+      - printf 'main\n%s\n' "$VERSION_TAG" > .tags
+      - echo "--- .tags contents ---"
       - cat .tags
+      - echo "--- hex dump ---"
+      - od -c .tags
 
   build-and-push:
     # plugin-kaniko (not plugin-docker-buildx) because Codeberg-CI's container
