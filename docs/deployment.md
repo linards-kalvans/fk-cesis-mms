@@ -135,15 +135,17 @@ EMAIL_HOST_USER=<smtp user>
 EMAIL_HOST_PASSWORD=<smtp password>
 DEFAULT_FROM_EMAIL=noreply@<domain>
 
-# Which image tag this server tracks (staging now, prod later)
-IMAGE_TAG=staging
+# Which image tag this server tracks.
+#   dev server  -> IMAGE_TAG=dev
+#   prod server -> IMAGE_TAG=main   (or pin to e.g. 0.42 to roll back)
+IMAGE_TAG=dev
 
 # Host port the web container binds to on 127.0.0.1. Override if 8000
 # is already in use on this host (Caddy upstream must match — see §3).
 WEB_HOST_PORT=8000
 ```
 
-### 1.4 Pull the staging image and start the stack
+### 1.4 Pull the image and start the stack
 
 ```bash
 su -s /bin/bash fkmms -c '
