@@ -1,0 +1,84 @@
+# Woodpecker CI for fk-cesis-mms
+#
+# Stages:
+#   1. lint      — ruff + mypy
+#   2. test      — pytest against an ephemeral Postgres service
+#   3. publish   — build container image, push :main-<sha7> + :staging  (main only)
+#   4. notify    — POST to the server's deploy listener                  (main only)
+#
+# Required Codeberg secrets (Settings -> Secrets):
+#   - CODEBERG_USER         registry user (deploy bot account or your handle)
+#   - CODEBERG_TOKEN        registry token (Codeberg "Application Token" w/ packages:write)
+#   - DEPLOY_WEBHOOK_URL    e.g. https://<staging-subdomain>/hooks/codeberg
+#   - DEPLOY_WEBHOOK_SECRET shared secret matching the listener on the server
+
+when:
+  - event: [push, pull_request]
+    branch: main
+  - event: tag
+
+steps:
+  lint:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    commands:
+      - uv sync --frozen
+      - uv run ruff check .
+      - uv run mypy .
+
+  test:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    environment:
+      DJANGO_SECRET_KEY: ci-not-secret
+      DJANGO_DEBUG: "false"
+      DATABASE_URL: postgres://fkmms:fkmms@postgres:5432/fkmms
+    commands:
+      - uv sync --frozen
+      - uv run pytest -q
+
+  build-and-push:
+    image: docker:27
+    when:
+      - event: push
+        branch: main
+    environment:
+      CODEBERG_USER:
+        from_secret: CODEBERG_USER
+      CODEBERG_TOKEN:
+        from_secret: CODEBERG_TOKEN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      - export SHORT_SHA=${CI_COMMIT_SHA:0:7}
+      - export IMAGE=codeberg.org/linards-kalvans/fk-cesis-mms
+      - echo "$CODEBERG_TOKEN" | docker login codeberg.org -u "$CODEBERG_USER" --password-stdin
+      - docker build -t "$IMAGE:main-$SHORT_SHA" -t "$IMAGE:staging" .
+      - docker push "$IMAGE:main-$SHORT_SHA"
+      - docker push "$IMAGE:staging"
+
+  notify-deploy:
+    image: alpine:3.20
+    when:
+      - event: push
+        branch: main
+    environment:
+      DEPLOY_WEBHOOK_URL:
+        from_secret: DEPLOY_WEBHOOK_URL
+      DEPLOY_WEBHOOK_SECRET:
+        from_secret: DEPLOY_WEBHOOK_SECRET
+    commands:
+      - apk add --no-cache curl
+      - >
+        BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\"}";
+        SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
+        curl -fsS -X POST "$DEPLOY_WEBHOOK_URL" \
+             -H "Content-Type: application/json" \
+             -H "X-FK-Signature: sha256=$SIG" \
+             --data "$BODY"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fkmms
+      POSTGRES_USER: fkmms
+      POSTGRES_PASSWORD: fkmms

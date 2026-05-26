@@ -7,6 +7,7 @@ Task 1: minimal scaffold. Full settings will be fleshed out in later tasks.
 import os
 from urllib.parse import urlparse
 
+import dj_database_url
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -23,13 +24,18 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
 
-# Derive ALLOWED_HOSTS from SITE_URL.
+# Derive ALLOWED_HOSTS from SITE_URL and a comma-separated env override.
 SITE_URL = os.environ.get("SITE_URL", "http://localhost")
 _parsed = urlparse(SITE_URL)
 ALLOWED_HOSTS: list[str] = [_parsed.hostname] if _parsed.hostname else []
 ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "testserver", "192.168.3.245"])
+_extra_allowed = os.environ.get("DJANGO_ALLOWED_HOSTS", "")
+if _extra_allowed:
+    ALLOWED_HOSTS.extend(
+        host.strip() for host in _extra_allowed.split(",") if host.strip()
+    )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -53,6 +59,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "apps.core.middleware.LocalInsecureCookieMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -81,21 +88,35 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "fk_cesis_mms.wsgi.application"
 
-# Database — PostgreSQL (psycopg) in production, SQLite for dev
+# Database — DATABASE_URL drives Postgres in production; SQLite is the local default.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    },
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+    ),
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
     ("style-guide", BASE_DIR / "style-guide"),
 ]
+# Manifest storage requires `collectstatic` to have populated STATIC_ROOT.
+# Enable it only when the manifest is present (i.e. in container builds).
+# Local dev and the test suite fall back to Django's default storage.
+_staticfiles_backend = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    if (STATIC_ROOT / "staticfiles.json").exists()
+    else "django.contrib.staticfiles.storage.StaticFilesStorage"
+)
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": _staticfiles_backend},
+}
 
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",
