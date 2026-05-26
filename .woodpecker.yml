@@ -13,9 +13,10 @@
 #
 # PRs only run lint + test. No image is built for PR events.
 #
-# Image builds use woodpeckerci/plugin-docker-buildx (BuildKit, rootless).
-# This avoids mounting /var/run/docker.sock and therefore works on
-# Codeberg-CI's default "untrusted" repos.
+# Image builds use woodpeckerci/plugin-kaniko (rootless, no BuildKit,
+# no nested daemon, no sysctl writes). plugin-docker-buildx fails on
+# Codeberg-CI because the runtime denies the sysctl writes BuildKit makes
+# while booting its container.
 #
 # Required Codeberg secrets (Repo Settings -> Secrets):
 #   CODEBERG_USER             registry user (deploy bot or your handle)
@@ -91,7 +92,12 @@ steps:
       - cat .tags
 
   build-and-push:
-    image: woodpeckerci/plugin-docker-buildx
+    # plugin-kaniko (not plugin-docker-buildx) because Codeberg-CI's container
+    # runtime denies the sysctl writes BuildKit makes during its boot:
+    #   "open sysctl net.ipv4.ip_unprivileged_port_start file: permission denied"
+    # Kaniko builds rootless without BuildKit / a nested docker daemon, so it
+    # has no such requirement and works fine on untrusted Codeberg-CI runs.
+    image: woodpeckerci/plugin-kaniko
     when:
       - event: [push, manual]
         branch: [dev, main]
@@ -103,7 +109,7 @@ steps:
       password:
         from_secret: CODEBERG_TOKEN
       dockerfile: Dockerfile
-      platforms: linux/amd64
+      cache: true
       tags_file: .tags
 
   notify-dev:
