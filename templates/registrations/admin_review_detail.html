@@ -12,8 +12,8 @@
     <section class="fk-status-card">
       <h2>Bērna informācija</h2>
       <p><strong>Vārds, uzvārds:</strong> {{ application.member_full_name }}</p>
-       <p><strong>Personas kods:</strong> {{ application.member_personal_id }}</p>
-       <p><strong>Dzimšanas datums:</strong> {{ application.member_birth_date|date:"d.m.Y" }}</p>
+      <p><strong>Personas kods:</strong> {{ application.member_personal_id }}</p>
+      <p><strong>Dzimšanas datums:</strong> {{ application.member_birth_date|date:"d.m.Y" }}</p>
     </section>
 
     <section class="fk-status-card">
@@ -25,39 +25,9 @@
       <p><strong>Adrese:</strong> {{ application.guardian_declared_address }}</p>
     </section>
 
-    {% if active_guardian_doc %}
-    <section class="fk-status-card">
-      <h2>Vecāka dokuments</h2>
-      <p><a href="{% url 'documents:admin-document-preview' active_guardian_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
-      <p><a href="{% url 'documents:admin-document-download' active_guardian_doc.id %}">Lejupielādēt dokumentu</a></p>
-      {% if ocr_decrypted.guardian_identity_summary %}
-        <pre style="white-space:pre-wrap;">{{ ocr_decrypted.guardian_identity_summary }}</pre>
-      {% endif %}
-      {% if ocr_confidence.guardian_identity %}
-        <p><strong>Pārliecība:</strong></p>
-        {% for key, value in ocr_confidence.guardian_identity.items %}
-          <p>{{ key }}: {{ value }}</p>
-        {% endfor %}
-      {% endif %}
-    </section>
-    {% endif %}
-
-    {% if active_member_doc %}
-    <section class="fk-status-card">
-      <h2>Bērna dokuments</h2>
-      <p><a href="{% url 'documents:admin-document-preview' active_member_doc.id %}">Apskatīt dokumentu (priekšskatījums)</a></p>
-      <p><a href="{% url 'documents:admin-document-download' active_member_doc.id %}">Lejupielādēt dokumentu</a></p>
-      {% if ocr_decrypted.member_identity_summary %}
-        <pre style="white-space:pre-wrap;">{{ ocr_decrypted.member_identity_summary }}</pre>
-      {% endif %}
-      {% if ocr_confidence.member_identity %}
-        <p><strong>Pārliecība:</strong></p>
-        {% for key, value in ocr_confidence.member_identity.items %}
-          <p>{{ key }}: {{ value }}</p>
-        {% endfor %}
-      {% endif %}
-    </section>
-    {% endif %}
+    {% include "registrations/admin/_doc_panel.html" with panel=guardian_panel %}
+    {% include "registrations/admin/_doc_panel.html" with panel=member_panel %}
+    {% include "registrations/admin/_doc_panel.html" with panel=portrait_panel %}
 
     {% if application.review_message %}
     <section class="fk-status-card">
@@ -71,28 +41,30 @@
     <section class="fk-review-actions">
       <h2>Revīzijas darbības</h2>
 
-      <form method="post" style="display:inline;">
+      <form method="post" class="fk-review-actions__approve">
         {% csrf_token %}
-        <button type="submit" name="action" value="approve">Apstiprināt</button>
+        <button type="submit" name="action" value="approve" class="fk-button fk-button--primary">Apstiprināt</button>
       </form>
 
-      <button type="button" onclick="document.getElementById('fix-form').style.display='block'; document.getElementById('reject-form').style.display='block';">Pieprasīt labojumu / Noraidīt</button>
+      <details class="fk-review-actions__disclosure">
+        <summary>Pieprasīt labojumu</summary>
+        <form method="post" class="fk-review-actions__form">
+          {% csrf_token %}
+          <label for="fix_message">Ziņojums:</label>
+          <textarea name="review_message" id="fix_message" rows="3"></textarea>
+          <button type="submit" name="action" value="request_fix" class="fk-button">Pieprasīt labojumu</button>
+        </form>
+      </details>
 
-      <form id="fix-form" method="post" style="display:none; margin-top: 1em;">
-        {% csrf_token %}
-        <h3>Pieprasīt labojumu</h3>
-        <label for="fix_message">Ziņojums:</label>
-        <textarea name="review_message" id="fix_message" rows="3" style="width:100%;"></textarea>
-        <button type="submit" name="action" value="request_fix">Pieprasīt labojumu</button>
-      </form>
-
-      <form id="reject-form" method="post" style="display:none; margin-top: 1em;">
-        {% csrf_token %}
-        <h3>Noraidīt pieteikumu</h3>
-        <label for="reject_message">Ziņojums:</label>
-        <textarea name="review_message" id="reject_message" rows="3" style="width:100%;"></textarea>
-        <button type="submit" name="action" value="reject">Noraidīt</button>
-      </form>
+      <details class="fk-review-actions__disclosure">
+        <summary>Noraidīt pieteikumu</summary>
+        <form method="post" class="fk-review-actions__form">
+          {% csrf_token %}
+          <label for="reject_message">Ziņojums:</label>
+          <textarea name="review_message" id="reject_message" rows="3"></textarea>
+          <button type="submit" name="action" value="reject" class="fk-button">Noraidīt</button>
+        </form>
+      </details>
     </section>
     {% endif %}
   </div>

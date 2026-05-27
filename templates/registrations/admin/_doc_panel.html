@@ -1,0 +1,72 @@
+{% comment %}
+P5 Slice A — per-kind admin doc panel.
+
+Expects a ``panel`` dict with keys: kind, panel_title, active (Document or None),
+replaced (list of Documents), ocr_summary (list of (label, value) tuples,
+empty for portrait), ocr_confidence (dict, empty for portrait), preview_kind
+("image" | "pdf" | "other" | "").
+{% endcomment %}
+<section class="fk-doc-panel" data-kind="{{ panel.kind }}">
+  <h2>{{ panel.panel_title }}</h2>
+  {% if panel.active %}
+    <p><span class="fk-doc-badge fk-doc-badge--active">Aktīvs</span></p>
+    {% if panel.preview_kind == "image" %}
+      <img class="fk-doc-preview fk-doc-preview--image"
+           src="{% url 'documents:admin-document-preview' panel.active.id %}"
+           alt="{{ panel.panel_title }}">
+    {% elif panel.preview_kind == "pdf" %}
+      <iframe class="fk-doc-preview fk-doc-preview--pdf"
+              src="{% url 'documents:admin-document-preview' panel.active.id %}"
+              loading="lazy"
+              height="600"
+              title="{{ panel.panel_title }}"></iframe>
+    {% else %}
+      <p class="fk-doc-preview-fallback">Šis faila tips netiek priekšskatīts.
+        <a href="{% url 'documents:admin-document-download' panel.active.id %}">Lejupielādēt dokumentu</a>.
+      </p>
+    {% endif %}
+    <p class="fk-doc-caption">
+      <strong>{{ panel.active.original_filename }}</strong>
+      <span class="fk-doc-caption__meta">— augšupielādēts {{ panel.active.created_at|date:"d.m.Y H:i" }}</span>
+    </p>
+    <p>
+      <a href="{% url 'documents:admin-document-download' panel.active.id %}">Lejupielādēt dokumentu</a>
+    </p>
+    {% if panel.ocr_summary %}
+      <dl class="fk-ocr-readout">
+        {% for label, value in panel.ocr_summary %}
+          <dt>{{ label }}</dt>
+          <dd>{{ value }}</dd>
+        {% endfor %}
+      </dl>
+      {% if panel.ocr_confidence %}
+        <ul class="fk-ocr-confidence">
+          {% for key, value in panel.ocr_confidence.items %}
+            <li class="fk-ocr-confidence__chip"><strong>{{ key }}</strong>: {{ value }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="fk-doc-empty">Dokuments nav iesniegts.</p>
+  {% endif %}
+
+  {% if panel.replaced %}
+    <details class="fk-doc-history">
+      <summary>Iepriekšējās versijas ({{ panel.replaced|length }})</summary>
+      <ul class="fk-doc-history__list">
+        {% for old in panel.replaced %}
+          <li class="fk-doc-history__item">
+            <span class="fk-doc-badge fk-doc-badge--replaced">Aizvietots</span>
+            <span class="fk-doc-history__name">{{ old.original_filename }}</span>
+            <span class="fk-doc-history__meta">— augšupielādēts {{ old.created_at|date:"d.m.Y H:i" }}</span>
+            <span class="fk-doc-history__actions">
+              <a href="{% url 'documents:admin-document-preview' old.id %}">Priekšskatīt</a>
+              <a href="{% url 'documents:admin-document-download' old.id %}">Lejupielādēt</a>
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</section>
