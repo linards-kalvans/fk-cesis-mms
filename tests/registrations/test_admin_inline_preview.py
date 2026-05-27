@@ -50,7 +50,7 @@ def _make_doc(
     filename: str,
     content_type: str = "image/png",
     deleted: bool = False,
-) -> Document:
+):
     from django.utils import timezone
 
     doc = Document.objects.create(
@@ -244,11 +244,17 @@ class TestAdminInlinePreview:
         """
         settings.OCR_ENCRYPTION_KEY = _OCR_KEY
 
+        # Rename active docs so their names cannot collide as substrings of
+        # replaced-doc names below.
+        for active in submitted_application.documents.filter(deleted_at__isnull=True):
+            active.original_filename = f"active_{active.kind}.png"
+            active.save(update_fields=["original_filename"])
+
         # Add replaced (soft-deleted) docs for each kind.
         for kind, filename in (
-            (Document.Kind.GUARDIAN_IDENTITY, "old_guardian.png"),
-            (Document.Kind.MEMBER_IDENTITY, "old_member.png"),
-            (Document.Kind.MEMBER_PORTRAIT, "old_portrait.png"),
+            (Document.Kind.GUARDIAN_IDENTITY, "replaced_guardian.png"),
+            (Document.Kind.MEMBER_IDENTITY, "replaced_member.png"),
+            (Document.Kind.MEMBER_PORTRAIT, "replaced_portrait.png"),
         ):
             _make_doc(
                 application=submitted_application,
@@ -270,7 +276,11 @@ class TestAdminInlinePreview:
         )
 
         # Each replaced filename must appear within a <details> block.
-        for filename in ("old_guardian.png", "old_member.png", "old_portrait.png"):
+        for filename in (
+            "replaced_guardian.png",
+            "replaced_member.png",
+            "replaced_portrait.png",
+        ):
             assert filename in content, f"{filename} must render somewhere."
 
         # The active docs must NOT appear inside any <details> block.

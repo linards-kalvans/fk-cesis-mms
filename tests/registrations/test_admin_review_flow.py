@@ -303,7 +303,10 @@ class TestStaffReviewDetailPage:
             'value="approve"',
             'value="request_fix"',
             'value="reject"',
-            "priekšskatījums",  # Latvian word in the document preview link text
+            # P5 Slice A: inline embed replaces the old "Apskatīt dokumentu
+            # (priekšskatījums)" link text. The admin-document-preview URL
+            # path remains the contract surface.
+            "/admin/documents/",
         ],
     )
     def test_detail_page_renders_marker(

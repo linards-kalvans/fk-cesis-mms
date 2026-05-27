@@ -105,9 +105,17 @@ class TestAdminDetailOcrDecryption:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Decrypted guardian summary contains "issuer: MLP" from stub provider
-        assert "issuer: MLP" in content, (
-            "Admin detail must decrypt and render guardian extraction summary content."
+        # P5 Slice A: OCR summary now renders as a labeled <dl class="fk-ocr-readout">
+        # rather than a raw <pre> block. "MLP" (stub issuer) must still appear,
+        # paired with its Latvian label "Izsniedzējs".
+        assert '<dl class="fk-ocr-readout"' in content, (
+            "Admin detail must render OCR readout as a labeled <dl> block."
+        )
+        assert "Izsniedzējs" in content, (
+            "Admin detail must render the Latvian label for the issuer field."
+        )
+        assert "MLP" in content, (
+            "Admin detail must render the decrypted issuer value (stub: 'MLP')."
         )
 
     def test_admin_detail_shows_decrypted_member_summary(self, settings):
@@ -261,8 +269,21 @@ class TestAdminDetailOcrDecryption:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert content.count("Apskatīt dokumentu (priekšskatījums)") >= 2, (
-            "Admin detail must show separate preview entries for guardian and member identity documents."
+        # P5 Slice A: inline embeds (<img> for images) replace the textual
+        # "Apskatīt dokumentu (priekšskatījums)" links. The admin-document-preview
+        # URL appears once per active doc embed. With three uploaded docs
+        # (guardian + member identity + portrait), expect at least three.
+        guardian_doc = app.documents.get(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        )
+        member_doc = app.documents.get(
+            kind=Document.Kind.MEMBER_IDENTITY, deleted_at__isnull=True
+        )
+        assert f"/admin/documents/{guardian_doc.id}/preview/" in content, (
+            "Admin detail must embed the active guardian doc preview URL."
+        )
+        assert f"/admin/documents/{member_doc.id}/preview/" in content, (
+            "Admin detail must embed the active member doc preview URL."
         )
 
     def test_admin_detail_shows_confidence_when_provider_returns_it(self, settings):
