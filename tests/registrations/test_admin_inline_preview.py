@@ -489,6 +489,61 @@ class TestAdminInlinePreview:
             "mms-review-history disclosure must be hidden when no replaced docs exist."
         )
 
+    def test_replaced_image_doc_carries_image_preview_kind(
+        self, settings, staff_client, submitted_application
+    ):
+        """Replaced image docs must expose data-doc-kind="image", not "other".
+
+        Otherwise the lightbox JS treats them as iframe targets and downloads
+        the file inside an iframe instead of rendering it as a clean <img>.
+        """
+        settings.OCR_ENCRYPTION_KEY = _OCR_KEY
+
+        # Replace the active guardian-identity image twice → two replaced image
+        # docs in history.
+        for filename in ("replaced_guardian_1.png", "replaced_guardian_2.jpg"):
+            _make_doc(
+                application=submitted_application,
+                kind=Document.Kind.GUARDIAN_IDENTITY,
+                filename=filename,
+                deleted=True,
+            )
+
+        resp = staff_client.get(_DETAIL_URL.format(pk=submitted_application.pk))
+        assert resp.status_code == 200
+        content = resp.content.decode()
+
+        # Isolate the guardian-identity panel + its history disclosure.
+        panel_re = re.compile(
+            r'<section[^>]+class="[^"]*mms-review-panel[^"]*"[^>]+'
+            r'data-kind="guardian_identity"[^>]*>(.*?)</section>',
+            re.DOTALL,
+        )
+        panel_match = panel_re.search(content)
+        assert panel_match, "Guardian-identity panel must be present."
+        panel_html = panel_match.group(1)
+
+        history_match = re.search(
+            r'<details[^>]+class="[^"]*mms-review-history.*?</details>',
+            panel_html,
+            re.DOTALL,
+        )
+        assert history_match, "Replaced-history disclosure must be present."
+        history_html = history_match.group(0)
+
+        # Both replaced thumbnail anchors carry data-doc-kind="image".
+        image_kind_anchors = re.findall(
+            r'<a[^>]+data-mms-lightbox[^>]+data-doc-kind="image"',
+            history_html,
+        )
+        assert len(image_kind_anchors) == 2, (
+            f"Both replaced image docs must carry data-doc-kind=\"image\"; "
+            f"found {len(image_kind_anchors)}."
+        )
+        assert 'data-doc-kind="other"' not in history_html, (
+            "Replaced image docs must not fall back to data-doc-kind=\"other\"."
+        )
+
     def test_anonymous_get_detail_still_redirects(self, submitted_application):
         """Regression guard: anonymous still gated."""
         client = Client()

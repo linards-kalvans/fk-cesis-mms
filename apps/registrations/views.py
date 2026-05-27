@@ -573,6 +573,8 @@ def _build_doc_panel(
     replaced = list(
         documents.filter(deleted_at__isnull=False).order_by("-created_at")
     )
+    for replaced_doc in replaced:
+        replaced_doc.preview_kind = _doc_preview_kind(replaced_doc)
 
     ocr_summary: list[tuple[str, str]] = []
     ocr_confidence_items: list[tuple[str, object]] = []
