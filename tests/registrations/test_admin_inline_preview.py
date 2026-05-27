@@ -300,21 +300,23 @@ class TestAdminInlinePreview:
     ):
         """OCR summary renders as <dl class="fk-ocr-readout"> with LV labels."""
         settings.OCR_ENCRYPTION_KEY = _OCR_KEY
-        # The stub OCR provider populates extractions during submit; the existing
-        # encrypted_summary should already contain key:value lines like
-        # "first_name: Jānis". Make sure a guardian extraction exists.
+        # The stub OCR provider populates an extraction during submit using the
+        # auto-generated _fernet_key_cache key (the fixture runs with
+        # OCR_ENCRYPTION_KEY=""), so the existing extraction cannot be decrypted
+        # with _OCR_KEY. Replace it deterministically here so we exercise the
+        # rendering contract and not the silent-decrypt-failure path.
         guardian = submitted_application.documents.filter(
             kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
         ).first()
-        if not hasattr(guardian, "extraction") or guardian.extraction is None:
-            _attach_extraction(
-                guardian,
-                summary_text=(
-                    "first_name: Jānis\n"
-                    "last_name: Bērziņš\n"
-                    "personal_id: 010101-12345\n"
-                ),
-            )
+        DocumentExtraction.objects.filter(document=guardian).delete()
+        _attach_extraction(
+            guardian,
+            summary_text=(
+                "first_name: Jānis\n"
+                "last_name: Bērziņš\n"
+                "personal_id: 010101-12345\n"
+            ),
+        )
 
         resp = staff_client.get(_DETAIL_URL.format(pk=submitted_application.pk))
         assert resp.status_code == 200
