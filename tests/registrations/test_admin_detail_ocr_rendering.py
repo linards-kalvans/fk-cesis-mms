@@ -107,10 +107,10 @@ class TestAdminDetailOcrDecryption:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # P5 Slice A: OCR summary now renders as a labeled <dl class="fk-ocr-readout">
-        # rather than a raw <pre> block. "MLP" (stub issuer) must still appear,
-        # paired with its Latvian label "Izsniedzējs".
-        assert '<dl class="fk-ocr-readout"' in content, (
+        # P5 Slice A (Revision A): OCR summary renders as a labeled
+        # <dl class="mms-review-ocr-readout">. "MLP" (stub issuer) must still
+        # appear, paired with its Latvian label "Izsniedzējs".
+        assert '<dl class="mms-review-ocr-readout"' in content, (
             "Admin detail must render OCR readout as a labeled <dl> block."
         )
         assert "Izsniedzējs" in content, (
@@ -339,7 +339,7 @@ class TestAdminDetailOcrDecryption:
         # P5 Slice A code-review fix: chip labels must be translated through
         # OCR_FIELD_LABELS so staff see Latvian labels, not raw English keys.
         chip_match = re.search(
-            r'<ul class="fk-ocr-confidence">.*?</ul>', content, re.DOTALL
+            r'<ul class="mms-review-ocr-confidence">.*?</ul>', content, re.DOTALL
         )
         assert chip_match, "Admin detail must render the confidence chip list."
         chip_section = chip_match.group(0)
