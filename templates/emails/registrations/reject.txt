@@ -1,0 +1,12 @@
+Sveiki, {{ guardian_full_name }}!
+
+Jūsu pieteikums dalībai FK Cēsis ir noraidīts.
+
+Bērns: {{ member_full_name }}
+
+Iemesls:
+{{ review_message }}
+
+Ja vēlaties uzdot jautājumus vai apspriest noraidījumu, atbildiet uz šo e-pastu.
+
+FK Cēsis

@@ -1,0 +1,12 @@
+Sveiki, {{ guardian_full_name }}!
+
+Jūsu pieteikums dalībai FK Cēsis ir apstiprināts.
+
+Bērns {{ member_full_name }} ir pievienots kluba dalībnieku reģistram.
+
+Pieteikuma kopsavilkums:
+{{ application_url }}
+
+Tālāk sazināsimies par līgumu un iemaksu kārtību.
+
+FK Cēsis

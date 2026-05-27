@@ -5,6 +5,8 @@ from typing import Any
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
@@ -655,10 +657,10 @@ def request_application_fix(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    _render_and_send_notification(
         application,
+        template_name="request_fix",
         subject="Jūsu pieteikums ir jālabo",
-        message=f"Pieteikuma labojuma pieprasījums:\n\n{message.strip()}\n\nLūdzu, labojiet pieteikumu un iesniedziet to vēlreiz.",
     )
     return application
 
@@ -681,10 +683,10 @@ def reject_application(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    _render_and_send_notification(
         application,
+        template_name="reject",
         subject="Jūsu pieteikums ir noraidīts",
-        message=f"Pieteikuma noraidīšanas iemesls:\n\n{message.strip()}",
     )
     return application
 
@@ -725,19 +727,44 @@ def approve_application(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "approved_member_id", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    _render_and_send_notification(
         application,
+        template_name="approve",
         subject="Jūsu pieteikums ir apstiprināts",
-        message=f"Bija veiksmīgi apstiprināts. Jūsu bērns '{application.member_full_name}' ir pievienots kluba dalībnieku reģistram.",
     )
     return application
 
 
-def _send_notification(application: RegistrationApplication, subject: str, message: str) -> None:
-    """Send an email notification to the parent's email address."""
+def _render_and_send_notification(
+    application: RegistrationApplication,
+    template_name: str,
+    subject: str,
+    extra_context: dict | None = None,
+) -> None:
+    """Render a plain-text email template and send it to the guardian.
+
+    Templates live under ``templates/emails/registrations/<template_name>.txt``.
+    Absolute URLs are built from ``settings.SITE_URL`` so links work outside
+    the request cycle (admin review actions run without a live request).
+    """
+    application_path = reverse(
+        "registrations:application-workspace", args=[application.id]
+    )
+    portal_path = reverse("registrations:parent-portal")
+    context: dict[str, Any] = {
+        "application": application,
+        "member_full_name": application.member_full_name,
+        "guardian_full_name": application.guardian_full_name,
+        "review_message": application.review_message or "",
+        "application_url": f"{settings.SITE_URL}{application_path}",
+        "portal_url": f"{settings.SITE_URL}{portal_path}",
+    }
+    if extra_context:
+        context.update(extra_context)
+    body = render_to_string(f"emails/registrations/{template_name}.txt", context)
     send_mail(
         subject=subject,
-        message=message,
+        message=body,
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[application.guardian_email],
         fail_silently=False,
