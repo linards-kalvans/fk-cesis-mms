@@ -3,8 +3,8 @@ P5 Slice A — per-kind admin doc panel.
 
 Expects a ``panel`` dict with keys: kind, panel_title, active (Document or None),
 replaced (list of Documents), ocr_summary (list of (label, value) tuples,
-empty for portrait), ocr_confidence (dict, empty for portrait), preview_kind
-("image" | "pdf" | "other" | "").
+empty for portrait), ocr_confidence_items (list of (label, value) tuples,
+empty for portrait), preview_kind ("image" | "pdf" | "other" | "").
 {% endcomment %}
 <section class="fk-doc-panel" data-kind="{{ panel.kind }}">
   <h2>{{ panel.panel_title }}</h2>
@@ -39,10 +39,10 @@ empty for portrait), ocr_confidence (dict, empty for portrait), preview_kind
           <dd>{{ value }}</dd>
         {% endfor %}
       </dl>
-      {% if panel.ocr_confidence %}
+      {% if panel.ocr_confidence_items %}
         <ul class="fk-ocr-confidence">
-          {% for key, value in panel.ocr_confidence.items %}
-            <li class="fk-ocr-confidence__chip"><strong>{{ key }}</strong>: {{ value }}</li>
+          {% for label, value in panel.ocr_confidence_items %}
+            <li class="fk-ocr-confidence__chip"><strong>{{ label }}</strong>: {{ value }}</li>
           {% endfor %}
         </ul>
       {% endif %}

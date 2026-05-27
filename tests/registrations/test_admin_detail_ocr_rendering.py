@@ -7,6 +7,8 @@ Approved plan:
 - Auth regression: non-staff gets 404 (covered by existing test suite).
 """
 
+import re
+
 import pytest
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -333,6 +335,20 @@ class TestAdminDetailOcrDecryption:
         # 0.98 is the stub confidence for first_name
         assert "0.98" in content, (
             "Admin detail must render confidence values when provider returns them."
+        )
+        # P5 Slice A code-review fix: chip labels must be translated through
+        # OCR_FIELD_LABELS so staff see Latvian labels, not raw English keys.
+        chip_match = re.search(
+            r'<ul class="fk-ocr-confidence">.*?</ul>', content, re.DOTALL
+        )
+        assert chip_match, "Admin detail must render the confidence chip list."
+        chip_section = chip_match.group(0)
+        assert "Vārds" in chip_section, (
+            "Confidence chip for first_name must render the Latvian label "
+            f"'Vārds', not the raw English key. Got: {chip_section!r}"
+        )
+        assert "first_name" not in chip_section, (
+            "Confidence chip must not leak the raw English key 'first_name'."
         )
 
     def test_admin_detail_no_crash_without_any_ocr(self, settings):

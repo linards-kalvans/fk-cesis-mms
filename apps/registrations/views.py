@@ -40,6 +40,7 @@ from apps.registrations.presentation import (
     DOCUMENT_KIND_LABELS,
     FIELD_KIND_LABELS,
     FIELD_NAME_BY_KIND,
+    OCR_FIELD_LABELS,
     active_documents_by_kind,
     documents_by_field_name,
     parse_ocr_summary,
@@ -574,7 +575,7 @@ def _build_doc_panel(
     )
 
     ocr_summary: list[tuple[str, str]] = []
-    ocr_confidence: dict[str, object] = {}
+    ocr_confidence_items: list[tuple[str, object]] = []
     if active is not None and kind != Document.Kind.MEMBER_PORTRAIT:
         extraction = getattr(active, "extraction", None)
         if extraction is not None:
@@ -586,10 +587,18 @@ def _build_doc_panel(
                 if isinstance(payload_value, dict):
                     confidence = payload_value.get("confidence")
                     if isinstance(confidence, dict):
-                        ocr_confidence = confidence
+                        ocr_confidence_items = [
+                            (
+                                OCR_FIELD_LABELS.get(
+                                    str(key), str(key).replace("_", " ").title()
+                                ),
+                                value,
+                            )
+                            for key, value in confidence.items()
+                        ]
             except Exception:
                 ocr_summary = []
-                ocr_confidence = {}
+                ocr_confidence_items = []
 
     return {
         "kind": kind,
@@ -597,7 +606,7 @@ def _build_doc_panel(
         "active": active,
         "replaced": replaced,
         "ocr_summary": ocr_summary,
-        "ocr_confidence": ocr_confidence,
+        "ocr_confidence_items": ocr_confidence_items,
         "preview_kind": _doc_preview_kind(active) if active is not None else "",
     }
 
