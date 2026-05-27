@@ -216,6 +216,12 @@ Do **not** use archived implementation plans for current planning unless user ex
 - New OCR providers.
 
 ### P5 — Approval-to-agreement flow
+**Status:** in progress
+- Slice A delivered 2026-05-27 — admin review now shows inline doc preview (image / PDF / fallback), member portrait surfaced, active vs replaced docs distinguished via `<details>` history; OCR readout uses Latvian-labeled `<dl>` + translated confidence chips; approval-ready inspection grouped on one screen. Manual LAN verification pending. Covers acceptance items 1 + 2 (and item 4 was already implemented pre-Slice A via `approved_member_id` early-return).
+- Slice B (queued) — training-group assignment workflow (item 3).
+- Slice C (queued) — Agreement model + generation after approval + parent/admin visibility (items 5, 7, 11).
+- Slice D (queued) — DocuSeal self-hosted adapter + signed-state sync + manual signing tracking (items 6, 8, 9, 10). DocuSeal instance is provisioned; template config pending.
+
 **Why fifth**
 - agreement is business basis for billing
 - admin review quality should improve before agreement decisions
