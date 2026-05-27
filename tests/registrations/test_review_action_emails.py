@@ -13,6 +13,7 @@ Covers the three admin review actions (approve / request_fix / reject):
 from __future__ import annotations
 
 import pytest
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test import override_settings
@@ -96,6 +97,10 @@ def test_reject_email_contains_review_message(submitted_application, staff_user)
     msg = mail.outbox[0]
     assert reason in msg.body
     assert msg.subject == "Jūsu pieteikums ir noraidīts"
+    # Rejected parents still get a self-service link to the parent portal so
+    # they can review their applications without hunting for the URL.
+    portal_url = f"{settings.SITE_URL}{reverse('registrations:parent-portal')}"
+    assert portal_url in msg.body
 
 
 # ---------------------------------------------------------------------------

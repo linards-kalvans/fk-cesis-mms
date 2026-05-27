@@ -9,4 +9,7 @@ Iemesls:
 
 Ja vēlaties uzdot jautājumus vai apspriest noraidījumu, atbildiet uz šo e-pastu.
 
+Sava kontā varat apskatīt visus iesniegumus:
+{{ portal_url }}
+
 FK Cēsis
