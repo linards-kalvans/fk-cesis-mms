@@ -352,6 +352,70 @@ class TestAdminInlinePreview:
             "fk-doc-history disclosure must be hidden when no replaced docs exist."
         )
 
+    def test_other_file_type_renders_fallback_with_download_link(
+        self, settings, staff_client, submitted_application
+    ):
+        """Non-image, non-pdf docs render the fallback note + download link.
+
+        Parametrised _doc_preview_kind already classifies .docx as "other".
+        This guards the partial actually emits the fallback markup (and
+        suppresses <img>/<iframe>) for the matching panel.
+        """
+        settings.OCR_ENCRYPTION_KEY = _OCR_KEY
+
+        # Promote the guardian-identity active doc to a non-image, non-pdf type.
+        guardian = submitted_application.documents.filter(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        ).first()
+        guardian.original_filename = "guardian_id.docx"
+        guardian.content_type = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        guardian.save(update_fields=["original_filename", "content_type"])
+
+        resp = staff_client.get(_DETAIL_URL.format(pk=submitted_application.pk))
+        assert resp.status_code == 200
+        content = resp.content.decode()
+
+        preview_url = reverse(
+            "documents:admin-document-preview", args=[guardian.id]
+        )
+        download_url = reverse(
+            "documents:admin-document-download", args=[guardian.id]
+        )
+
+        # No inline embed for the .docx preview URL.
+        assert not re.search(
+            r'<img[^>]+class="[^"]*fk-doc-preview[^"]*"[^>]+src="'
+            + re.escape(preview_url)
+            + r'"',
+            content,
+        ), ".docx must NOT render as <img>."
+        assert not re.search(
+            r'<iframe[^>]+class="[^"]*fk-doc-preview[^"]*"[^>]+src="'
+            + re.escape(preview_url)
+            + r'"',
+            content,
+        ), ".docx must NOT render as <iframe>."
+
+        # Isolate the guardian_identity panel so we don't accept fallback /
+        # download markup that belongs to a different kind.
+        panel_re = re.compile(
+            r'<section[^>]+class="[^"]*fk-doc-panel[^"]*"[^>]+'
+            r'data-kind="guardian_identity"[^>]*>(.*?)</section>',
+            re.DOTALL,
+        )
+        panel_match = panel_re.search(content)
+        assert panel_match, "Guardian-identity panel section must be present."
+        panel_html = panel_match.group(1)
+
+        assert "fk-doc-preview-fallback" in panel_html, (
+            "Guardian panel must render the fk-doc-preview-fallback marker for .docx."
+        )
+        assert download_url in panel_html, (
+            "Fallback markup must include the admin-document-download link."
+        )
+
     def test_anonymous_get_detail_still_redirects(self, submitted_application):
         """Regression guard: anonymous still gated."""
         client = Client()
