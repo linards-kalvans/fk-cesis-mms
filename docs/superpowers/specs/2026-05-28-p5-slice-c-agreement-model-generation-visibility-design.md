@@ -18,7 +18,7 @@ The project already has `RegistrationApplication.preferred_agreement_signing` (a
 4. **Default signing path on creation** — `electronic` when `application.preferred_agreement_signing` is empty. Honour the parent's pick when set.
 5. **Signing-path override** — staff may flip `electronic ⇄ paper` at any state via the admin module (no lock).
 6. **Email notifications** — Django sends plain-text Latvian emails on `sent` and `signed`, today, for both paths. Slice D will add the suppression logic for the electronic path once DocuSeal handles its own notifications. Nothing on `generated` or `void`.
-7. **Void is terminal** — no regenerate-after-void path in Slice C. If a voided agreement needs replacing, the team handles it via DB intervention or a follow-up slice with an FK + `active` flag.
+7. **Void → regenerate is supported.** The model uses `ForeignKey(Member)` + an `is_current` boolean, with a partial unique constraint enforcing at most one current Agreement per Member. `void_agreement` keeps the voided row as the current one until a new one is created; `create_agreement_for_member` then archives the void (flips its `is_current` to `False`) and creates a fresh row. This preserves agreement history naturally — voided rows stay queryable for audit and DocuSeal reconciliation in Slice D.
 
 ## Architecture
 
@@ -36,11 +36,12 @@ class Agreement(TimeStampedModel):
         ELECTRONIC = "electronic", "Elektroniski"
         PAPER      = "paper",      "Ar roku, papīra dokuments"
 
-    member = models.OneToOneField(
+    member = models.ForeignKey(
         "members.Member",
         on_delete=models.CASCADE,
-        related_name="agreement",
+        related_name="agreements",
     )
+    is_current = models.BooleanField(default=True)
     state = models.CharField(max_length=16, choices=State.choices, default=State.GENERATED)
     signing_path = models.CharField(
         max_length=16,
@@ -60,16 +61,33 @@ class Agreement(TimeStampedModel):
     external_id       = models.CharField(max_length=128, blank=True, default="")
     external_state    = models.CharField(max_length=64, blank=True, default="")
     external_url      = models.URLField(blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member"],
+                condition=models.Q(is_current=True),
+                name="one_current_agreement_per_member",
+            ),
+        ]
 ```
 
 `TimeStampedModel` (from `apps/core/models.py`) provides `created_at` / `updated_at`. One migration (`0001_initial.py`).
 
+`Member` reaches its current agreement via the reverse FK plus a filter: `member.agreements.filter(is_current=True).first()`. A small helper `get_current_agreement(member) -> Agreement | None` in `apps/agreements/services.py` wraps the filter so callers don't repeat it. (We deliberately do NOT add a property to `apps/members/models.py` — keeps `members` decoupled from `agreements`.)
+
 ### Services — `apps/agreements/services.py`
 
 ```python
+def get_current_agreement(member) -> Agreement | None:
+    """Return member.agreements.filter(is_current=True).first()."""
+
 def create_agreement_for_member(member, signing_path) -> Agreement:
-    """Idempotent: return existing Agreement if one already exists for this
-    Member; otherwise create with state=generated, generated_at=now()."""
+    """Return the member's current agreement if it exists and is not void.
+    If the current agreement IS void, archive it (set is_current=False) and
+    create a fresh one with state=generated, generated_at=now(). If there is
+    no current agreement at all, create the first one. Idempotent on the
+    happy path."""
 
 def mark_agreement_sent(agreement, actor) -> Agreement:
     """generated → sent. Sets sent_at, sends Latvian email to guardian."""
@@ -80,8 +98,16 @@ def mark_agreement_signed(agreement, actor) -> Agreement:
     the signed paper in hand' staff flow."""
 
 def void_agreement(agreement, actor, reason) -> Agreement:
-    """Any non-void state → void. Sets voided_at and void_reason. No email.
+    """Any non-void state → void. Sets voided_at and void_reason. Keeps
+    is_current=True so the void state stays visible until replaced. No email.
     Idempotent on void → void (no-op)."""
+
+def regenerate_agreement(member, signing_path, actor) -> Agreement:
+    """Convenience for the admin 'Sagatavot jaunu līgumu' action: asserts
+    the current agreement is void, then calls create_agreement_for_member.
+    Raises ValueError if the current agreement is not void (the admin
+    pattern is void → regenerate; refusing to regenerate while the current
+    is still active prevents accidental clobbering of a live agreement)."""
 
 def set_signing_path(agreement, path, actor) -> Agreement:
     """Change signing_path at any state. No email. Idempotent on same-value."""
@@ -107,13 +133,14 @@ Idempotency rule unchanged: `approve_application` returns early when `approved_m
 
 ### View extensions — `apps/registrations/views.py::admin_review_detail`
 
-- Context entries (post-approval only): `agreement` (the Member's agreement instance, or `None`).
-- Four new POST `action` branches:
+- Context entries (post-approval only): `agreement` (= `get_current_agreement(approved_member)`, or `None`).
+- Five new POST `action` branches:
   - `action == "mark_agreement_sent"` → call service; redirect back. ValueError → 400 + Latvian copy.
   - `action == "mark_agreement_signed"` → same shape.
   - `action == "set_signing_path"` → reads `signing_path` POST value; validates against `Agreement.SigningPath.values`; calls service; redirect.
   - `action == "void_agreement"` → reads `void_reason` POST value; calls service; redirect.
-- All four guarded by `agreement is not None` (return 400 + "Līgums nav sagatavots." for the safety case).
+  - `action == "regenerate_agreement"` → calls `regenerate_agreement(approved_member, signing_path=current_void.signing_path, actor=request.user)`; redirect. Only valid when the current agreement is void.
+- All five guarded by `agreement is not None` for the four state-mutation branches; the regenerate branch additionally requires `agreement.state == "void"` and renders a 400 + "Aktīvo līgumu nedrīkst aizvietot." otherwise.
 
 ### Template — `templates/registrations/admin_review_detail.html`
 
@@ -157,6 +184,12 @@ A new module rendered after the Treniņu grupa module, only when `application.ap
       <button name="action" value="void_agreement">Atcelt</button>
     </form>
   </details>
+  {% endif %}
+
+  {% if agreement.state == "void" %}
+  <form method="post">
+    <button name="action" value="regenerate_agreement">Sagatavot jaunu līgumu</button>
+  </form>
   {% endif %}
 </div>
 {% endif %}
@@ -220,18 +253,22 @@ Context built by a new helper in `apps/agreements/services.py` that mirrors `_re
 Three new test files in `tests/agreements/`, two in `tests/registrations/`:
 
 ### `tests/agreements/test_agreement_model.py`
-- Defaults: new Agreement has `state=generated`, `signing_path=electronic`, `generated_at` non-null.
-- OneToOne constraint: creating a second Agreement for the same Member raises `IntegrityError`.
+- Defaults: new Agreement has `state=generated`, `signing_path=electronic`, `is_current=True`, `generated_at` non-null.
+- Unique-current constraint: creating a second Agreement for the same Member with `is_current=True` raises `IntegrityError`. A second Agreement with `is_current=False` succeeds (regenerate path).
 - State + SigningPath choice lists match the spec.
-- `member` cascade delete: deleting the Member deletes the Agreement.
+- `member` cascade delete: deleting the Member deletes all agreements (current + archived).
 
 ### `tests/agreements/test_agreement_services.py`
-- `create_agreement_for_member`: creates on first call; second call returns the same instance (no second row).
+- `get_current_agreement`: returns `None` when no agreement; returns the current agreement; ignores archived ones.
+- `create_agreement_for_member`: creates on first call; second call when current is non-void returns the same instance (no second row).
+- `create_agreement_for_member` after void: archives the void (flips `is_current=False`), creates a fresh row with `is_current=True`, returns the new one. The void row is still queryable via `member.agreements.all()`.
+- `regenerate_agreement` on a void current → succeeds, mirrors the create-after-void behavior.
+- `regenerate_agreement` on a non-void current → `ValueError("active agreement cannot be replaced")`.
 - `mark_agreement_sent` from `generated` → succeeds, sets `sent_at`, sends one email to the guardian.
 - `mark_agreement_sent` from `sent` / `signed` / `void` → `ValueError`.
 - `mark_agreement_signed` from `generated` and from `sent` → both succeed, set `signed_at`, send email.
 - `mark_agreement_signed` from `signed` / `void` → `ValueError`.
-- `void_agreement` from any non-void state → succeeds, sets `voided_at` + `void_reason`, no email.
+- `void_agreement` from any non-void state → succeeds, sets `voided_at` + `void_reason`, keeps `is_current=True`, no email.
 - `void_agreement` from `void` → idempotent no-op (no UPDATE — `CaptureQueriesContext` proof).
 - `set_signing_path`: changes path, no email, idempotent on same value.
 - Each email-sending transition: subject is Latvian, body contains the portal URL, recipient is `agreement.member.guardian.email`.
@@ -241,7 +278,9 @@ Three new test files in `tests/agreements/`, two in `tests/registrations/`:
 - `mark_agreement_sent` POST advances state, refreshes the page, no longer offers the "Atzīmēt kā nosūtītu" button.
 - `mark_agreement_signed` POST works from both `generated` and `sent`.
 - `set_signing_path` POST flips `electronic ⇄ paper` regardless of state.
-- `void_agreement` POST with a reason transitions to void.
+- `void_agreement` POST with a reason transitions to void; the "Sagatavot jaunu līgumu" button now appears; the other transition buttons are gone.
+- `regenerate_agreement` POST on a void → page refreshes with a fresh `generated` agreement, archive of the void is still in `member.agreements.all()`.
+- `regenerate_agreement` POST on a non-void → 400 + Latvian error "Aktīvo līgumu nedrīkst aizvietot.".
 - POST without an agreement (e.g. submitted-status application) → 400 + Latvian error.
 - ValueError from a service (illegal transition forced via direct DB edit + POST) → 400 + Latvian error.
 - Anonymous POST → blocked (302/404 like the rest).
@@ -302,7 +341,6 @@ Expected new test count: ~25–30. Suite target ≈ 940 from the 913 baseline.
 - DocuSeal self-hosted adapter / external API call / submission creation / signed-state webhook — Slice D.
 - Email suppression for the electronic signing path — Slice D.
 - PDF storage or in-app preview of the signed agreement document.
-- Regenerating an Agreement after `void` (terminal in Slice C).
 - Audit-log entries for state transitions (P7 target).
 - Email notifications on `generated` and `void`.
 - Bulk admin actions across many agreements at once.
@@ -318,7 +356,8 @@ Expected new test count: ~25–30. Suite target ≈ 940 from the 913 baseline.
    - Mark sent → state updates, parent receives `sent.txt`, the "Atzīmēt kā nosūtītu" button disappears.
    - Mark signed → state updates, parent receives `signed.txt`, the "Atzīmēt kā parakstītu" button disappears.
    - Flip `signing_path` while signed → succeeds, no email, state copy reflects the new path.
-   - Void with a reason → state updates, no email, all transition buttons gone, reason rendered with the timestamp.
+   - Void with a reason → state updates, no email, transition buttons gone, "Sagatavot jaunu līgumu" button appears with the reason rendered with the timestamp.
+   - Click "Sagatavot jaunu līgumu" → fresh `Sagatavots` agreement appears; navigating to Django admin's Agreements list shows the prior void row archived (`is_current=False`).
    - Open `/portal/` as the parent — agreement-status line appears under the application card and matches the table copy for each `(state, signing_path)` pair walked through.
    - Confirm idempotent re-approval (manual: mark status back to `submitted` via Django admin, re-POST `approve`) doesn't create a second agreement.
 4. Update `AGENTS.md` (Current Status + new "P5 Slice C delivered" entry) and `docs/milestones.md` (mark Slice C delivered under the P5 status block).
