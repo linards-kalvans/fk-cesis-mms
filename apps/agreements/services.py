@@ -113,32 +113,36 @@ def set_signing_path(
     signing_path: str,
     actor,  # noqa: ARG001
 ) -> Agreement:
-    """Change signing_path at any state. No email. Idempotent on same value."""
+    """Change signing_path at any state. Bidirectional sync: also writes back
+    to the source application's ``preferred_agreement_signing`` so the two
+    fields never drift. No email. Idempotent on same value (no writes when
+    the agreement is already at the desired path)."""
     if agreement.signing_path == signing_path:
         return agreement
     agreement.signing_path = signing_path
     agreement.save(update_fields=["signing_path"])
+    application = getattr(agreement.member, "source_application", None)
+    if application is not None and application.preferred_agreement_signing != signing_path:
+        application.preferred_agreement_signing = signing_path
+        application.save(update_fields=["preferred_agreement_signing"])
     return agreement
 
 
 def sync_application_signing_path_to_agreement(application) -> None:
     """Sync a staff-edited application's preferred_agreement_signing into the
-    member's current agreement IFF the agreement is still in ``generated``
-    state. No-op otherwise: post-generated agreements (sent / signed / void)
-    are managed only via the admin review-detail Līgums module, and an empty
-    preference never clears an agreement's concrete signing path.
+    member's current agreement. Updates regardless of agreement state — the
+    two fields are always equal post-approval (bidirectional sync invariant).
+    An empty preference never clears a concrete agreement signing path.
 
     Called from RegistrationApplicationAdmin.save_model so staff edits to the
-    application's preference propagate naturally while the agreement window
-    is still open.
+    application's preference propagate to the agreement; the reverse direction
+    (picker → application) lives inside ``set_signing_path``.
     """
     member = getattr(application, "approved_member", None)
     if member is None:
         return
     agreement = get_current_agreement(member)
     if agreement is None:
-        return
-    if agreement.state != Agreement.State.GENERATED:
         return
     desired = application.preferred_agreement_signing
     if not desired:

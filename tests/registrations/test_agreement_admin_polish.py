@@ -79,12 +79,13 @@ def test_sync_updates_signing_path_when_agreement_is_generated(
     assert agreement.signing_path == Agreement.SigningPath.PAPER
 
 
-def test_sync_is_noop_when_agreement_is_past_generated(
+def test_sync_updates_signing_path_when_agreement_is_sent(
     submitted_application, reviewer
 ):
-    """Once the agreement has been sent (or signed, or voided), staff edits to
-    the application's signing preference do NOT propagate. The Līgums module
-    is the canonical control for advanced states."""
+    """Bidirectional sync (Slice C polish): application-form change of
+    preferred_agreement_signing propagates to the active agreement at any
+    state, not just `generated`. The two fields are always equal
+    post-approval."""
     submitted_application.preferred_agreement_signing = "electronic"
     submitted_application.save(update_fields=["preferred_agreement_signing"])
     approve_application(submitted_application, reviewer)
@@ -96,15 +97,16 @@ def test_sync_is_noop_when_agreement_is_past_generated(
     sync_application_signing_path_to_agreement(submitted_application)
 
     agreement.refresh_from_db()
-    assert agreement.signing_path == Agreement.SigningPath.ELECTRONIC  # unchanged
+    assert agreement.signing_path == Agreement.SigningPath.PAPER
 
 
-def test_sync_is_noop_when_agreement_is_signed(submitted_application, reviewer):
+def test_sync_updates_signing_path_when_agreement_is_signed(
+    submitted_application, reviewer
+):
     submitted_application.preferred_agreement_signing = "electronic"
     submitted_application.save(update_fields=["preferred_agreement_signing"])
     approve_application(submitted_application, reviewer)
     agreement = get_current_agreement(submitted_application.approved_member)
-    set_signing_path(agreement, Agreement.SigningPath.ELECTRONIC, reviewer)
     mark_agreement_sent(agreement, reviewer)
     from apps.agreements.services import mark_agreement_signed
 
@@ -115,10 +117,14 @@ def test_sync_is_noop_when_agreement_is_signed(submitted_application, reviewer):
     sync_application_signing_path_to_agreement(submitted_application)
 
     agreement.refresh_from_db()
-    assert agreement.signing_path == Agreement.SigningPath.ELECTRONIC  # unchanged
+    assert agreement.signing_path == Agreement.SigningPath.PAPER
 
 
-def test_sync_is_noop_when_agreement_is_void(submitted_application, reviewer):
+def test_sync_updates_signing_path_when_agreement_is_void(
+    submitted_application, reviewer
+):
+    submitted_application.preferred_agreement_signing = "electronic"
+    submitted_application.save(update_fields=["preferred_agreement_signing"])
     approve_application(submitted_application, reviewer)
     agreement = get_current_agreement(submitted_application.approved_member)
     void_agreement(agreement, reviewer, "duplicate")
@@ -128,8 +134,37 @@ def test_sync_is_noop_when_agreement_is_void(submitted_application, reviewer):
     sync_application_signing_path_to_agreement(submitted_application)
 
     agreement.refresh_from_db()
-    # voided agreement keeps its signing_path unchanged
-    assert agreement.signing_path != "paper" or agreement.state == Agreement.State.VOID
+    assert agreement.signing_path == Agreement.SigningPath.PAPER
+
+
+def test_picker_change_propagates_to_application(submitted_application, reviewer):
+    """Reverse direction: set_signing_path via the Līgums picker writes back
+    to the source application's preferred_agreement_signing too."""
+    submitted_application.preferred_agreement_signing = "electronic"
+    submitted_application.save(update_fields=["preferred_agreement_signing"])
+    approve_application(submitted_application, reviewer)
+    agreement = get_current_agreement(submitted_application.approved_member)
+
+    set_signing_path(agreement, Agreement.SigningPath.PAPER, reviewer)
+
+    submitted_application.refresh_from_db()
+    assert submitted_application.preferred_agreement_signing == "paper"
+
+
+def test_picker_idempotent_no_application_write(submitted_application, reviewer):
+    """Setting the same value via the picker is a no-op on both rows."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    submitted_application.preferred_agreement_signing = "electronic"
+    submitted_application.save(update_fields=["preferred_agreement_signing"])
+    approve_application(submitted_application, reviewer)
+    agreement = get_current_agreement(submitted_application.approved_member)
+
+    with CaptureQueriesContext(connection) as ctx:
+        set_signing_path(agreement, Agreement.SigningPath.ELECTRONIC, reviewer)
+    update_queries = [q for q in ctx.captured_queries if "UPDATE" in q["sql"].upper()]
+    assert update_queries == []
 
 
 def test_sync_is_noop_when_application_has_no_approved_member(submitted_application):
