@@ -276,3 +276,8 @@ dialog.mms-lightbox::backdrop {
 .mms-review-group-module .mms-review-actions__form select,
 .mms-review-actions .mms-review-group-pick select { min-width: 200px; }
 .mms-review-group-module em { color: #999; font-style: italic; margin-left: 4px; }
+
+/* P5 Slice C — agreement module */
+.mms-review-agreement-module .form-row { margin: 8px 0; }
+.mms-review-agreement-module .mms-review-actions__form { margin: 8px 0; }
+.mms-review-agreement-module select { min-width: 200px; }

@@ -1,0 +1,60 @@
+{% comment %}P5 Slice C — admin review-detail Līgums module. Rendered only
+when `agreement` is non-null (i.e. post-approval).{% endcomment %}
+
+<div class="module mms-review-agreement-module">
+  <h2>Līgums</h2>
+
+  <p>Stāvoklis: <strong>{{ agreement.get_state_display }}</strong></p>
+
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="signing_path">Parakstīšanas veids:</label>
+      <select name="signing_path" id="signing_path">
+        <option value="electronic"{% if agreement.signing_path == "electronic" %} selected{% endif %}>Elektroniski</option>
+        <option value="paper"{% if agreement.signing_path == "paper" %} selected{% endif %}>Ar roku, papīra dokuments</option>
+      </select>
+    </div>
+    <button type="submit" name="action" value="set_signing_path" class="default">Saglabāt</button>
+  </form>
+
+  <p>Sagatavots: {{ agreement.generated_at|date:"d.m.Y H:i" }}</p>
+  {% if agreement.sent_at %}<p>Nosūtīts: {{ agreement.sent_at|date:"d.m.Y H:i" }}</p>{% endif %}
+  {% if agreement.signed_at %}<p>Parakstīts: {{ agreement.signed_at|date:"d.m.Y H:i" }}</p>{% endif %}
+  {% if agreement.voided_at %}<p>Atcelts: {{ agreement.voided_at|date:"d.m.Y H:i" }}{% if agreement.void_reason %} — {{ agreement.void_reason }}{% endif %}</p>{% endif %}
+
+  {% if agreement.state == "generated" %}
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="mark_agreement_sent" class="default">Atzīmēt kā nosūtītu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.state == "generated" or agreement.state == "sent" %}
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="mark_agreement_signed" class="default">Atzīmēt kā parakstītu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.state != "void" %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Atcelt līgumu</summary>
+    <form method="post" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="void_reason">Iemesls:</label>
+        <textarea name="void_reason" id="void_reason" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="void_agreement">Atcelt</button>
+    </form>
+  </details>
+  {% endif %}
+
+  {% if agreement.state == "void" %}
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="regenerate_agreement" class="default">Sagatavot jaunu līgumu</button>
+  </form>
+  {% endif %}
+</div>

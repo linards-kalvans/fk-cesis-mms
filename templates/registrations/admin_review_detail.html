@@ -116,5 +116,9 @@
   </div>
   {% endif %}
 
+  {% if agreement %}
+    {% include "registrations/admin/_agreement_module.html" %}
+  {% endif %}
+
   <script src="{% static 'admin/js/doc_lightbox.js' %}" defer></script>
 {% endblock %}

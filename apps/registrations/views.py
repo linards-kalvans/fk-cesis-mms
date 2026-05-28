@@ -17,6 +17,15 @@ from django.views.decorators.http import require_POST
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
+from apps.agreements.models import Agreement
+from apps.agreements.services import (
+    get_current_agreement,
+    mark_agreement_sent,
+    mark_agreement_signed,
+    regenerate_agreement,
+    set_signing_path,
+    void_agreement,
+)
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
@@ -636,6 +645,10 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
         if assigned is not None and not assigned.is_active:
             current_inactive_group = assigned
 
+    agreement = None
+    if application.approved_member_id is not None:
+        agreement = get_current_agreement(application.approved_member)
+
     context: dict[str, object] = {
         "application": application,
         "guardian_panel": guardian_panel,
@@ -643,6 +656,7 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
         "portrait_panel": portrait_panel,
         "active_training_groups": active_training_groups,
         "current_inactive_group": current_inactive_group,
+        "agreement": agreement,
     }
 
     if request.method == "POST":
@@ -733,6 +747,98 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
             return redirect(
                 "registrations:admin-review-detail", application_id=application.id
             )
+
+        elif action == "mark_agreement_sent":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            try:
+                mark_agreement_sent(agreement, request.user)
+            except ValueError as exc:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": str(exc)},
+                    status=400,
+                )
+            return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "mark_agreement_signed":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            try:
+                mark_agreement_signed(agreement, request.user)
+            except ValueError as exc:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": str(exc)},
+                    status=400,
+                )
+            return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "set_signing_path":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            new_path = request.POST.get("signing_path", "").strip()
+            if new_path not in {value for value, _label in Agreement.SigningPath.choices}:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Nezināms parakstīšanas veids."},
+                    status=400,
+                )
+            set_signing_path(agreement, new_path, request.user)
+            return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "void_agreement":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            reason = request.POST.get("void_reason", "").strip()
+            void_agreement(agreement, request.user, reason)
+            return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "regenerate_agreement":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            try:
+                regenerate_agreement(
+                    application.approved_member,
+                    signing_path=agreement.signing_path,
+                    actor=request.user,
+                )
+            except ValueError:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Aktīvo līgumu nedrīkst aizvietot."},
+                    status=400,
+                )
+            return redirect("registrations:admin-review-detail", application_id=application.id)
 
     return render(request, "registrations/admin_review_detail.html", context)
 
