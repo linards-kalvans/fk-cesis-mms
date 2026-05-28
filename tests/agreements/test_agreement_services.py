@@ -91,6 +91,11 @@ def test_regenerate_on_non_void_raises_value_error(agreement_member, actor):
         regenerate_agreement(agreement_member, Agreement.SigningPath.PAPER, actor)
 
 
+def test_regenerate_without_existing_agreement_raises_value_error(agreement_member, actor):
+    with pytest.raises(ValueError, match="no agreement exists to regenerate"):
+        regenerate_agreement(agreement_member, Agreement.SigningPath.PAPER, actor)
+
+
 # --- mark_agreement_sent ---
 
 
@@ -105,7 +110,15 @@ def test_mark_sent_from_generated_succeeds_and_sends_email(
     assert a.sent_at is not None
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == [agreement_guardian.email]
+    assert mail.outbox[0].subject == "Jūsu līgums ir nosūtīts parakstīšanai"
     assert "nosūtīts parakstīšanai" in mail.outbox[0].body
+
+
+def test_mark_signed_email_subject_is_latvian(agreement_member, actor):
+    mail.outbox.clear()
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    mark_agreement_signed(a, actor)
+    assert mail.outbox[0].subject == "Jūsu līgums ir parakstīts"
 
 
 @pytest.mark.parametrize(

@@ -98,7 +98,9 @@ def regenerate_agreement(
     """Archive a void current agreement and create a fresh one. Refuses to
     clobber a non-void current."""
     current = get_current_agreement(member)
-    if current is None or current.state != Agreement.State.VOID:
+    if current is None:
+        raise ValueError("no agreement exists to regenerate")
+    if current.state != Agreement.State.VOID:
         raise ValueError("active agreement cannot be replaced")
     return create_agreement_for_member(member, signing_path)
 
