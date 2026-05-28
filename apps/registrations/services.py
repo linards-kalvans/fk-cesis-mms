@@ -5,6 +5,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -693,16 +694,20 @@ def reject_application(
     return application
 
 
+@transaction.atomic
 def approve_application(
     application: RegistrationApplication,
     reviewer: settings.AUTH_USER_MODEL,
     training_group: TrainingGroup | None = None,
 ) -> RegistrationApplication:
-    """Approve an application, creating Guardian + Member. Idempotent.
+    """Approve an application, creating Guardian + Member + Agreement.
+    Idempotent and atomic.
 
     Optionally assigns the new Member to a TrainingGroup at create-time.
     Idempotent re-approval ignores the training_group argument — assignment
-    edits go through apps.members.services.assign_training_group.
+    edits go through apps.members.services.assign_training_group. The
+    @transaction.atomic decorator guards against partial-write inconsistency
+    across the three cross-table writes (Guardian, Member, Agreement).
     """
     # Idempotent: if already approved with linked member, return as-is
     if application.approved_member_id is not None:
