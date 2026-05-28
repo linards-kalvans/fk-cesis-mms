@@ -1,0 +1,10 @@
+Sveiki, {{ guardian_full_name }}!
+
+Jūsu bērna {{ member_full_name }} līgums ir nosūtīts parakstīšanai.
+
+{% if signing_path == "electronic" %}Lūdzu, parakstiet to elektroniski pēc instrukcijām, ko saņemsiet atsevišķā e-pastā.{% else %}Klubs sazināsies ar Jums par līguma fizisko parakstīšanu.{% endif %}
+
+Statuss redzams portālā:
+{{ portal_url }}
+
+FK Cēsis
