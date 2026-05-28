@@ -99,7 +99,7 @@ def test_portal_pre_approval_application_shows_no_agreement_line(
 ):
     resp = verified_client.get(_portal_url())
     html = resp.content.decode("utf-8")
-    assert "Līgums" not in html or "Līgums sagatavots" not in html
+    assert "fk-app-agreement-status" not in html
 
 
 # --- Workspace ---
