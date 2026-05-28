@@ -61,6 +61,31 @@ def test_approve_application_email_contains_application_url(submitted_applicatio
     assert msg.subject == "Jūsu pieteikums ir apstiprināts"
 
 
+def test_approve_email_includes_training_group_when_assigned(
+    submitted_application, staff_user
+):
+    from apps.members.models import TrainingGroup
+
+    mail.outbox.clear()
+    group = TrainingGroup.objects.create(name="U10 A", is_active=True)
+    approve_application(submitted_application, staff_user, training_group=group)
+
+    assert len(mail.outbox) == 1
+    body = mail.outbox[0].body
+    assert "Treniņu grupa: U10 A." in body
+
+
+def test_approve_email_omits_training_group_when_unassigned(
+    submitted_application, staff_user
+):
+    mail.outbox.clear()
+    approve_application(submitted_application, staff_user)
+
+    assert len(mail.outbox) == 1
+    body = mail.outbox[0].body
+    assert "Treniņu grupa" not in body
+
+
 # ---------------------------------------------------------------------------
 # request_application_fix
 # ---------------------------------------------------------------------------
