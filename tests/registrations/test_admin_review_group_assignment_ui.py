@@ -66,7 +66,7 @@ def test_approve_post_with_group_assigns_member(
         _detail_url(submitted_application.id),
         {"action": "approve", "training_group": str(group_a.id)},
     )
-    assert resp.status_code in (302, 200)  # redirect to queue
+    assert resp.status_code == 302  # redirect to queue
     submitted_application.refresh_from_db()
     assert submitted_application.approved_member is not None
     assert submitted_application.approved_member.training_group_id == group_a.id
@@ -79,7 +79,7 @@ def test_approve_post_with_empty_group_leaves_member_unassigned(
         _detail_url(submitted_application.id),
         {"action": "approve", "training_group": ""},
     )
-    assert resp.status_code in (302, 200)
+    assert resp.status_code == 302
     submitted_application.refresh_from_db()
     assert submitted_application.approved_member is not None
     assert submitted_application.approved_member.training_group is None
@@ -120,7 +120,7 @@ def test_assign_post_updates_member_group(
         _detail_url(submitted_application.id),
         {"action": "assign_training_group", "training_group": str(group_b.id)},
     )
-    assert resp.status_code in (302, 200)
+    assert resp.status_code == 302
     submitted_application.refresh_from_db()
     submitted_application.approved_member.refresh_from_db()
     assert submitted_application.approved_member.training_group_id == group_b.id
@@ -134,7 +134,7 @@ def test_assign_post_with_empty_clears_member_group(
         _detail_url(submitted_application.id),
         {"action": "assign_training_group", "training_group": ""},
     )
-    assert resp.status_code in (302, 200)
+    assert resp.status_code == 302
     submitted_application.approved_member.refresh_from_db()
     assert submitted_application.approved_member.training_group is None
 
@@ -157,6 +157,18 @@ def test_currently_inactive_group_appears_in_picker_with_marker(
         r'<option[^>]+value="' + str(group_a.id) + r'"[^>]+data-inactive="true"',
         html,
     )
+
+
+def test_approve_post_with_inactive_group_shows_latvian_error(
+    submitted_application, staff_client, inactive_group
+):
+    resp = staff_client.post(
+        _detail_url(submitted_application.id),
+        {"action": "approve", "training_group": str(inactive_group.id)},
+    )
+    assert resp.status_code == 400
+    html = resp.content.decode("utf-8")
+    assert "Nevar piešķirt neaktīvu treniņu grupu" in html
 
 
 def test_anonymous_assign_post_is_blocked(submitted_application, client, reviewer, group_a):

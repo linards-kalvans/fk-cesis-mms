@@ -692,10 +692,17 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                     application, request.user, training_group=selected_group
                 )
             except ValueError as exc:
+                message = str(exc)
+                if "inactive" in message:
+                    latvian = "Nevar piešķirt neaktīvu treniņu grupu apstiprināšanas brīdī."
+                elif "submitted" in message:
+                    latvian = "Var apstiprināt tikai iesniegtus pieteikumus."
+                else:
+                    latvian = "Pieteikumu nevarēja apstiprināt."
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {**context, "error": str(exc)},
+                    {**context, "error": latvian},
                     status=400,
                 )
             return redirect("registrations:admin-review-queue")
