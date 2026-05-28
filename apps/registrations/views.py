@@ -22,6 +22,8 @@ from apps.documents.ocr import decrypt_json
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
 from apps.integrations.tasks import enqueue_ocr_job
+from apps.members.models import TrainingGroup
+from apps.members.services import assign_training_group
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
     CONSENT_REQUIRED,
@@ -624,11 +626,23 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
     member_panel = _build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
     portrait_panel = _build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT))
 
+    active_training_groups = list(
+        TrainingGroup.objects.filter(is_active=True).order_by("name")
+    )
+
+    current_inactive_group = None
+    if application.approved_member_id is not None:
+        assigned = application.approved_member.training_group
+        if assigned is not None and not assigned.is_active:
+            current_inactive_group = assigned
+
     context: dict[str, object] = {
         "application": application,
         "guardian_panel": guardian_panel,
         "member_panel": member_panel,
         "portrait_panel": portrait_panel,
+        "active_training_groups": active_training_groups,
+        "current_inactive_group": current_inactive_group,
     }
 
     if request.method == "POST":
@@ -661,16 +675,57 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
             return redirect("registrations:admin-review-queue")
 
         elif action == "approve":
+            raw_group = request.POST.get("training_group", "").strip()
+            selected_group = None
+            if raw_group:
+                try:
+                    selected_group = TrainingGroup.objects.get(pk=int(raw_group))
+                except (TrainingGroup.DoesNotExist, ValueError):
+                    return render(
+                        request,
+                        "registrations/admin_review_detail.html",
+                        {**context, "error": "Nezināma treniņu grupa."},
+                        status=400,
+                    )
             try:
-                approve_application(application, request.user)
-            except ValueError:
+                approve_application(
+                    application, request.user, training_group=selected_group
+                )
+            except ValueError as exc:
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {**context, "error": "Var apstiprināt tikai iesniegtus pieteikumus."},
+                    {**context, "error": str(exc)},
                     status=400,
                 )
             return redirect("registrations:admin-review-queue")
+
+        elif action == "assign_training_group":
+            if application.approved_member_id is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Var piešķirt grupu tikai apstiprinātam pieteikumam."},
+                    status=400,
+                )
+            raw_group = request.POST.get("training_group", "").strip()
+            selected_group = None
+            if raw_group:
+                try:
+                    selected_group = TrainingGroup.objects.get(pk=int(raw_group))
+                except (TrainingGroup.DoesNotExist, ValueError):
+                    return render(
+                        request,
+                        "registrations/admin_review_detail.html",
+                        {**context, "error": "Nezināma treniņu grupa."},
+                        status=400,
+                    )
+            assign_training_group(
+                application.approved_member, selected_group, request.user
+            )
+            return redirect(
+                "registrations:admin-review-detail", application_id=application.id
+            )
 
     return render(request, "registrations/admin_review_detail.html", context)
 

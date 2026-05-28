@@ -270,3 +270,9 @@ dialog.mms-lightbox::backdrop {
 .mms-lightbox-close:focus {
   background: #417690;
 }
+
+/* P5 Slice B — training-group assignment */
+.mms-review-group-module .form-row { margin: 8px 0; }
+.mms-review-group-module .mms-review-actions__form select,
+.mms-review-actions .mms-review-group-pick select { min-width: 200px; }
+.mms-review-group-module em { color: #999; font-style: italic; margin-left: 4px; }

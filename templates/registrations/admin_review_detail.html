@@ -54,6 +54,15 @@
 
     <form method="post" class="mms-review-actions__form">
       {% csrf_token %}
+      <div class="form-row mms-review-group-pick">
+        <label for="approve_training_group">Treniņu grupa (neobligāti):</label>
+        <select name="training_group" id="approve_training_group">
+          <option value="">— Piešķirsim vēlāk —</option>
+          {% for grp in active_training_groups %}
+            <option value="{{ grp.id }}">{{ grp.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <button type="submit" name="action" value="approve" class="default">Apstiprināt</button>
     </form>
 
@@ -76,6 +85,34 @@
         <button type="submit" name="action" value="reject">Noraidīt</button>
       </form>
     </details>
+  </div>
+  {% endif %}
+
+  {% if application.approved_member %}
+  <div class="module mms-review-group-module">
+    <h2>Treniņu grupa</h2>
+    {% if application.approved_member.training_group %}
+      <p>Pašreizējā grupa: <strong>{{ application.approved_member.training_group.name }}</strong>{% if current_inactive_group %} <em>(neaktīva)</em>{% endif %}</p>
+    {% else %}
+      <p>Vēl nav piešķirta.</p>
+    {% endif %}
+
+    <form method="post" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="reassign_training_group">Mainīt grupu:</label>
+        <select name="training_group" id="reassign_training_group">
+          <option value="">— Notīrīt piešķīrumu —</option>
+          {% for grp in active_training_groups %}
+            <option value="{{ grp.id }}"{% if application.approved_member.training_group_id == grp.id %} selected{% endif %}>{{ grp.name }}</option>
+          {% endfor %}
+          {% if current_inactive_group %}
+            <option value="{{ current_inactive_group.id }}" selected data-inactive="true">{{ current_inactive_group.name }} (neaktīva)</option>
+          {% endif %}
+        </select>
+      </div>
+      <button type="submit" name="action" value="assign_training_group" class="default">Saglabāt</button>
+    </form>
   </div>
   {% endif %}
 
