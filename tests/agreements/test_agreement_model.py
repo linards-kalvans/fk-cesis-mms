@@ -26,12 +26,12 @@ def test_agreement_defaults_are_generated_electronic_current(agreement_member):
     assert a.voided_at is None
 
 
-def test_state_choices_match_spec(agreement_member):
+def test_state_choices_match_spec():
     values = {value for value, _label in Agreement.State.choices}
     assert values == {"generated", "sent", "signed", "void"}
 
 
-def test_signing_path_choices_match_spec(agreement_member):
+def test_signing_path_choices_match_spec():
     values = {value for value, _label in Agreement.SigningPath.choices}
     assert values == {"electronic", "paper"}
 
