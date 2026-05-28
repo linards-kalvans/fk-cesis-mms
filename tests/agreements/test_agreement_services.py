@@ -172,7 +172,9 @@ def test_mark_signed_from_illegal_states_raises(agreement_member, actor, from_st
 # --- void_agreement ---
 
 
-def test_void_from_generated_succeeds_no_email(agreement_member, actor):
+def test_void_from_generated_succeeds_and_sends_email(
+    agreement_member, agreement_guardian, actor
+):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
     void_agreement(a, actor, "test reason")
@@ -181,16 +183,32 @@ def test_void_from_generated_succeeds_no_email(agreement_member, actor):
     assert a.voided_at is not None
     assert a.void_reason == "test reason"
     assert a.is_current is True  # keeps is_current until regenerate
-    assert mail.outbox == []
+    assert len(mail.outbox) == 1
+    assert mail.outbox[0].to == [agreement_guardian.email]
+    assert mail.outbox[0].subject == "Jūsu līgums ir atcelts"
 
 
-def test_void_from_void_is_idempotent_no_update(agreement_member, actor):
+def test_void_email_body_includes_reason_and_portal_url(agreement_member, actor):
+    mail.outbox.clear()
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    void_agreement(a, actor, "duplicate application")
+    assert "duplicate application" in mail.outbox[0].body
+    assert "atcelts" in mail.outbox[0].body
+    # Portal URL token from settings.SITE_URL — default "http://localhost" in tests
+    assert "/portal" in mail.outbox[0].body
+
+
+def test_void_from_void_is_idempotent_no_update_no_second_email(
+    agreement_member, actor
+):
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
     void_agreement(a, actor, "reason")
+    mail.outbox.clear()
     with CaptureQueriesContext(connection) as ctx:
         void_agreement(a, actor, "another reason")
     update_queries = [q for q in ctx.captured_queries if "UPDATE" in q["sql"].upper()]
     assert update_queries == []
+    assert mail.outbox == []  # no duplicate notification
     a.refresh_from_db()
     assert a.void_reason == "reason"  # unchanged
 

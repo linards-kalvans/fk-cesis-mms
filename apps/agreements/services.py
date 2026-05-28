@@ -79,14 +79,17 @@ def void_agreement(
     actor,  # noqa: ARG001
     reason: str,
 ) -> Agreement:
-    """Any non-void state → void. Keeps is_current=True. No email.
-    Idempotent on void → void (early return, no UPDATE)."""
+    """Any non-void state → void. Keeps is_current=True. Sends a Latvian
+    plain-text notification to the guardian (subject "Jūsu līgums ir
+    atcelts", body includes the staff-supplied reason when present).
+    Idempotent on void → void (early return, no UPDATE, no second email)."""
     if agreement.state == Agreement.State.VOID:
         return agreement
     agreement.state = Agreement.State.VOID
     agreement.voided_at = timezone.now()
     agreement.void_reason = reason
     agreement.save(update_fields=["state", "voided_at", "void_reason"])
+    _render_and_send_agreement_email(agreement, template_name="void")
     return agreement
 
 
@@ -158,12 +161,14 @@ def _render_and_send_agreement_email(
         "guardian_full_name": guardian.full_name,
         "member_full_name": member.full_name,
         "signing_path": agreement.signing_path,
+        "void_reason": agreement.void_reason,
         "portal_url": portal_url,
     }
     body = render_to_string(f"emails/agreements/{template_name}.txt", context)
     subject = {
         "sent": "Jūsu līgums ir nosūtīts parakstīšanai",
         "signed": "Jūsu līgums ir parakstīts",
+        "void": "Jūsu līgums ir atcelts",
     }[template_name]
     send_mail(
         subject=subject,

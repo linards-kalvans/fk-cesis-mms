@@ -1,0 +1,12 @@
+Sveiki, {{ guardian_full_name }}!
+
+Informējam, ka {{ member_full_name }} līgums ir atcelts.
+
+{% if void_reason %}Iemesls: {{ void_reason }}
+
+{% endif %}Ja Jums ir jautājumi vai vēlaties saņemt jaunu līgumu, lūdzu, sazinieties ar klubu.
+
+Statuss redzams portālā:
+{{ portal_url }}
+
+FK Cēsis
