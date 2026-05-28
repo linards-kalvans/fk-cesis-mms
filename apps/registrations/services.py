@@ -15,7 +15,7 @@ from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
-from apps.members.models import Guardian, KitSizeOption, Member
+from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
     RegistrationApplication,
@@ -694,14 +694,23 @@ def reject_application(
 def approve_application(
     application: RegistrationApplication,
     reviewer: settings.AUTH_USER_MODEL,
+    training_group: TrainingGroup | None = None,
 ) -> RegistrationApplication:
-    """Approve an application, creating Guardian + Member. Idempotent."""
+    """Approve an application, creating Guardian + Member. Idempotent.
+
+    Optionally assigns the new Member to a TrainingGroup at create-time.
+    Idempotent re-approval ignores the training_group argument — assignment
+    edits go through apps.members.services.assign_training_group.
+    """
     # Idempotent: if already approved with linked member, return as-is
     if application.approved_member_id is not None:
         return application
 
     if application.status != RegistrationApplication.Status.SUBMITTED:
         raise ValueError("can only approve submitted application")
+
+    if training_group is not None and not training_group.is_active:
+        raise ValueError("cannot assign inactive training group at approval time")
 
     # Create Guardian from application guardian data
     guardian = Guardian.objects.create(
@@ -712,13 +721,13 @@ def approve_application(
         address=application.guardian_declared_address,
     )
 
-    # Create Member linked to Guardian, no training_group
+    # Create Member linked to Guardian, optionally to a TrainingGroup
     member = Member.objects.create(
         full_name=application.member_full_name,
         personal_id=application.member_personal_id,
         birth_date=application.member_birth_date,
         guardian=guardian,
-        training_group=None,
+        training_group=training_group,
     )
 
     application.status = RegistrationApplication.Status.APPROVED
