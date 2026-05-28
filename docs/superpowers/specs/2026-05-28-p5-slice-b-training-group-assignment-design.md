@@ -11,7 +11,7 @@ The post-approval member record currently has no surface for assigning a trainin
 Slice B keeps assignment inside the admin review flow:
 
 - During approval (one click): the approval form gains an "optional" training-group dropdown; selecting one assigns the member at create-time.
-- After approval (any time): the same review-detail page exposes a Treneru grupa module showing the current group and a picker for change/clear.
+- After approval (any time): the same review-detail page exposes a Treniņu grupa module showing the current group and a picker for change/clear.
 
 No schema changes. No new endpoints. No new dependencies. Latvian copy throughout.
 
@@ -75,7 +75,7 @@ Behavior changes:
 1. **Inside the existing `if application.status == "submitted"` block**, before the `<button name="action" value="approve">`:
 
 ```html
-<label for="approve_training_group">Treneru grupa (neobligāti):</label>
+<label for="approve_training_group">Treniņu grupa (neobligāti):</label>
 <select name="training_group" id="approve_training_group">
   <option value="">— Piešķirsim vēlāk —</option>
   {% for grp in active_training_groups %}
@@ -88,7 +88,7 @@ Behavior changes:
 
 ```html
 <div class="module mms-review-group-module">
-  <h2>Treneru grupa</h2>
+  <h2>Treniņu grupa</h2>
   {% if application.approved_member.training_group %}
     <p>Pašreizējā grupa: <strong>{{ application.approved_member.training_group.name }}</strong>
        {% if current_inactive_group %} <em>(neaktīva)</em>{% endif %}</p>
@@ -211,7 +211,7 @@ Expect ~12 new tests across the three new files + 2 extensions, target suite ≈
    - Seed 2 active TrainingGroups + 1 inactive via Django admin.
    - Submit a fresh application as a parent.
    - On the staff review page: dropdown shows the 2 active groups + "— Piešķirsim vēlāk —". Inactive group hidden.
-   - Approve with a group selected → page reloads, post-approval Treneru grupa module shows "Pašreizējā grupa: <name>". Approve email arrives with the new "Treniņu grupa: <name>." line.
+   - Approve with a group selected → page reloads, post-approval Treniņu grupa module shows "Pašreizējā grupa: <name>". Approve email arrives with the new "Treniņu grupa: <name>." line.
    - Reassign via the module → "Pašreizējā grupa" updates. No email sent.
    - Clear assignment → "Vēl nav piešķirta" + picker. No email sent.
    - Mark the assigned group inactive via Django admin → review page picker shows the current group with `(neaktīva)` suffix, plus the other active groups for reassignment.
