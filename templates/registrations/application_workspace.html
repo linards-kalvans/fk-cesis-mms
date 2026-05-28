@@ -22,6 +22,9 @@
     {% include "parent_ui/includes/save_indicator.html" %}
     {% else %}
     {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
+    {% if agreement_status %}
+    <p class="fk-app-agreement-status">{{ agreement_status }}</p>
+    {% endif %}
     {% endif %}
   </div>
 

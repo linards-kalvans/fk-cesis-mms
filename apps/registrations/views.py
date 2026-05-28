@@ -18,6 +18,7 @@ from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
 from apps.agreements.models import Agreement
+from apps.agreements.presentation import agreement_status_copy
 from apps.agreements.services import (
     get_current_agreement,
     mark_agreement_sent,
@@ -304,6 +305,12 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         for kind, field_name in FIELD_NAME_BY_KIND.items()
     }
 
+    agreement_status = None
+    if application.approved_member_id is not None:
+        agreement_status = agreement_status_copy(
+            get_current_agreement(application.approved_member)
+        )
+
     return render(
         request,
         "registrations/application_workspace.html",
@@ -311,6 +318,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             "application": application,
             "form": form,
             "workspace_mode": workspace_mode(application, account),
+            "agreement_status": agreement_status,
             "document_state": active_documents_by_kind(application),
             "document_by_field": documents_by_field_name(application),
             "field_kind_labels": FIELD_KIND_LABELS,
@@ -484,6 +492,10 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
     # Annotate each application with an is_editable flag for the template.
     for app in applications:
         app.can_edit = app.is_editable_by(account)
+        agreement = None
+        if app.approved_member_id is not None:
+            agreement = get_current_agreement(app.approved_member)
+        app.agreement_status = agreement_status_copy(agreement)
     return render(
         request,
         "registrations/parent_portal.html",

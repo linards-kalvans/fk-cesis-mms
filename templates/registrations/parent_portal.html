@@ -37,6 +37,9 @@
         <div>{{ app.review_message }}</div>
       </div>
       {% endif %}
+      {% if app.agreement_status %}
+      <p class="fk-app-agreement-status">{{ app.agreement_status }}</p>
+      {% endif %}
     </div>
 
     <div class="fk-app-block fk-progress-wrap">
