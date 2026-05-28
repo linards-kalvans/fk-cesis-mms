@@ -10,6 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
+from apps.agreements.models import Agreement
+from apps.agreements.services import create_agreement_for_member
 from apps.documents.models import Document, DocumentExtraction
 from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
@@ -728,6 +730,14 @@ def approve_application(
         birth_date=application.member_birth_date,
         guardian=guardian,
         training_group=training_group,
+    )
+
+    create_agreement_for_member(
+        member,
+        signing_path=(
+            application.preferred_agreement_signing
+            or str(Agreement.SigningPath.ELECTRONIC)
+        ),
     )
 
     application.status = RegistrationApplication.Status.APPROVED

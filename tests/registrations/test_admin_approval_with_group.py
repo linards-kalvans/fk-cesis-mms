@@ -63,3 +63,51 @@ def test_idempotent_reapprove_ignores_different_group(submitted_application, rev
     assert second.approved_member_id == assigned_member_id
     second.approved_member.refresh_from_db()
     assert second.approved_member.training_group_id == assigned_group_id
+
+
+# --- Agreement creation on approval (P5 Slice C) ---
+
+
+def test_approve_creates_agreement_with_default_electronic_when_no_preference(
+    submitted_application, reviewer
+):
+    from apps.agreements.models import Agreement
+    from apps.agreements.services import get_current_agreement
+
+    submitted_application.preferred_agreement_signing = ""
+    submitted_application.save(update_fields=["preferred_agreement_signing"])
+    approve_application(submitted_application, reviewer)
+    submitted_application.refresh_from_db()
+    agreement = get_current_agreement(submitted_application.approved_member)
+    assert agreement is not None
+    assert agreement.state == Agreement.State.GENERATED
+    assert agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+
+
+def test_approve_creates_agreement_honouring_application_paper_preference(
+    submitted_application, reviewer
+):
+    from apps.agreements.models import Agreement
+    from apps.agreements.services import get_current_agreement
+
+    submitted_application.preferred_agreement_signing = "paper"
+    submitted_application.save(update_fields=["preferred_agreement_signing"])
+    approve_application(submitted_application, reviewer)
+    submitted_application.refresh_from_db()
+    agreement = get_current_agreement(submitted_application.approved_member)
+    assert agreement is not None
+    assert agreement.signing_path == Agreement.SigningPath.PAPER
+
+
+def test_idempotent_reapprove_does_not_create_second_agreement(
+    submitted_application, reviewer
+):
+    from apps.agreements.models import Agreement
+
+    approve_application(submitted_application, reviewer)
+    # Second call hits the idempotency early-return; agreement count stays at 1.
+    approve_application(submitted_application, reviewer)
+    submitted_application.refresh_from_db()
+    assert Agreement.objects.filter(
+        member=submitted_application.approved_member
+    ).count() == 1
