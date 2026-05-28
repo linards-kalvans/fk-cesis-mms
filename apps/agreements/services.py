@@ -118,6 +118,34 @@ def set_signing_path(
     return agreement
 
 
+def sync_application_signing_path_to_agreement(application) -> None:
+    """Sync a staff-edited application's preferred_agreement_signing into the
+    member's current agreement IFF the agreement is still in ``generated``
+    state. No-op otherwise: post-generated agreements (sent / signed / void)
+    are managed only via the admin review-detail Līgums module, and an empty
+    preference never clears an agreement's concrete signing path.
+
+    Called from RegistrationApplicationAdmin.save_model so staff edits to the
+    application's preference propagate naturally while the agreement window
+    is still open.
+    """
+    member = getattr(application, "approved_member", None)
+    if member is None:
+        return
+    agreement = get_current_agreement(member)
+    if agreement is None:
+        return
+    if agreement.state != Agreement.State.GENERATED:
+        return
+    desired = application.preferred_agreement_signing
+    if not desired:
+        return
+    if agreement.signing_path == desired:
+        return
+    agreement.signing_path = desired
+    agreement.save(update_fields=["signing_path"])
+
+
 def _render_and_send_agreement_email(
     agreement: Agreement,
     template_name: str,

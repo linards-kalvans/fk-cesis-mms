@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
+from apps.agreements.services import sync_application_signing_path_to_agreement
 from apps.registrations.models import RegistrationApplication
 
 
@@ -41,3 +42,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
     review_link.short_description = "Review"  # type: ignore[assignment,attr-defined]
     review_link.admin_order_field = "pk"  # type: ignore[assignment,attr-defined]
+
+    def save_model(self, request, obj, form, change):
+        """Persist the application, then sync preferred_agreement_signing to
+        the active agreement when it is still in `generated` state."""
+        super().save_model(request, obj, form, change)
+        sync_application_signing_path_to_agreement(obj)

@@ -68,3 +68,20 @@ class Agreement(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Agreement(member={self.member_id}, state={self.state})"
+
+    def get_absolute_url(self) -> str:
+        """Return the admin review-detail URL for the application that
+        approved this agreement's member, or an empty string when the
+        member has no source application (defensive). Django admin uses
+        this for the VIEW ON SITE button — staff transitions happen on
+        the review detail page, not in Django admin's read-only view.
+        """
+        from django.urls import reverse
+
+        application = getattr(self.member, "source_application", None)
+        if application is None:
+            return ""
+        url: str = reverse(
+            "registrations:admin-review-detail", args=[application.id]
+        )
+        return url
