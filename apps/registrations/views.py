@@ -831,11 +831,19 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                     signing_path=agreement.signing_path,
                     actor=request.user,
                 )
-            except ValueError:
+            except ValueError as exc:
+                # Map only the expected "non-void current" case to Latvian copy.
+                # Other ValueError shapes are unexpected and should surface
+                # via str(exc) rather than be misattributed.
+                msg = str(exc)
+                if "active agreement cannot be replaced" in msg:
+                    latvian = "Aktīvo līgumu nedrīkst aizvietot."
+                else:
+                    latvian = msg
                 return render(
                     request,
                     "registrations/admin_review_detail.html",
-                    {**context, "error": "Aktīvo līgumu nedrīkst aizvietot."},
+                    {**context, "error": latvian},
                     status=400,
                 )
             return redirect("registrations:admin-review-detail", application_id=application.id)

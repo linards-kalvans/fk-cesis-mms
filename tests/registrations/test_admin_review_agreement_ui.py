@@ -165,7 +165,6 @@ def test_regenerate_on_non_void_returns_400(
 def test_post_on_submitted_application_returns_400(
     submitted_application, staff_client
 ):
-    resp = submitted_application
     response = staff_client.post(
         _detail_url(submitted_application.id),
         {"action": "mark_agreement_sent"},
