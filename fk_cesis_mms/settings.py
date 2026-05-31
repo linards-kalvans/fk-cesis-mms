@@ -179,6 +179,42 @@ DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
     "application/pdf",
 )
 
+# Surface uncaught view exceptions to stderr so production deployments
+# (DEBUG=False) don't silently swallow tracebacks. Without this, Django's
+# default logging routes `django.request` errors to `mail_admins` only —
+# meaning every 500 response renders an empty 145-byte page and the
+# Python traceback never reaches docker logs / journalctl. We hit this
+# during the 2026-05-31 LAN UAT and lost ~30 minutes to "no traceback
+# anywhere" before realising production logging wasn't configured.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {process:d} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 # Background-job runner (django-q2) — uses the Django DB as broker so we
 # don't need Redis for this single-instance app. Worker starts with
 # `uv run python manage.py qcluster`.
