@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import time
 
 import requests
 from django.conf import settings
@@ -139,9 +140,28 @@ def archive_submission(external_id: str) -> None:
     _request("DELETE", f"{api_url}/submissions/{external_id}", api_key)
 
 
+_WEBHOOK_TOLERANCE_SECONDS = 300
+
+
 def verify_webhook_signature(raw_body: bytes, signature_header: str) -> bool:
+    """Verify a DocuSeal ``X-Docuseal-Signature`` header.
+
+    DocuSeal sends ``[timestamp].[signature]`` where the signature is the
+    hex HMAC-SHA256 of ``[timestamp].[raw_body]``. Requests older than the
+    tolerance window are rejected to blunt replay attacks.
+    """
     secret = getattr(settings, "DOCUSEAL_WEBHOOK_SECRET", "")
     if not secret or not signature_header:
         return False
-    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature_header)
+    timestamp, _, signature = signature_header.partition(".")
+    if not timestamp or not signature:
+        return False
+    try:
+        ts = float(timestamp)
+    except ValueError:
+        return False
+    if abs(time.time() - ts) > _WEBHOOK_TOLERANCE_SECONDS:
+        return False
+    signed = timestamp.encode() + b"." + raw_body
+    expected = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)

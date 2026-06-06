@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 
 import pytest
 from django.urls import reverse
@@ -34,8 +35,14 @@ def sent_electronic(agreement_member):
     )
 
 
-def _sign(body: bytes, secret: str = "whsecret") -> str:
-    return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+def _sign(body: bytes, secret: str = "whsecret", ts: int | None = None) -> str:
+    """Build an ``X-Docuseal-Signature`` header: ``timestamp.hexdigest`` where
+    the digest is HMAC-SHA256 over ``timestamp.raw_body`` (DocuSeal's scheme)."""
+    if ts is None:
+        ts = int(time.time())
+    signed = f"{ts}".encode() + b"." + body
+    digest = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    return f"{ts}.{digest}"
 
 
 def _post(client, payload: dict, signature: str | None):
@@ -63,6 +70,16 @@ def test_valid_completed_drives_signed(client, webhook_settings, sent_electronic
 def test_bad_signature_rejected(client, webhook_settings, sent_electronic):
     payload = {"event_type": "submission.completed", "data": {"id": "ds-100"}}
     resp = _post(client, payload, "deadbeef")
+    assert resp.status_code == 403
+    sent_electronic.refresh_from_db()
+    assert sent_electronic.state == Agreement.State.SENT
+
+
+def test_stale_timestamp_rejected(client, webhook_settings, sent_electronic):
+    payload = {"event_type": "submission.completed", "data": {"id": "ds-100"}}
+    body = json.dumps(payload).encode()
+    stale = int(time.time()) - 400  # outside the 5-minute tolerance
+    resp = _post(client, payload, _sign(body, ts=stale))
     assert resp.status_code == 403
     sent_electronic.refresh_from_db()
     assert sent_electronic.state == Agreement.State.SENT

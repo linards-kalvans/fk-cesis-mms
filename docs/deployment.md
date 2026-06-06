@@ -155,12 +155,12 @@ WEB_HOST_PORT=8000
 #### Agreement platform (DocuSeal) — required when `AGREEMENT_PROVIDER_MODE=docuseal`
 
 - `AGREEMENT_PROVIDER_MODE` — `stub` (default) or `docuseal`.
-- `DOCUSEAL_API_URL` — base API URL of the self-hosted DocuSeal instance.
+- `DOCUSEAL_API_URL` — base API URL of the self-hosted DocuSeal instance; must include the API path segment (e.g. `https://docuseal.example.lv/api`), since the provider calls `{API_URL}/submissions`.
 - `DOCUSEAL_API_KEY` — DocuSeal API token (sent as `X-Auth-Token`).
 - `DOCUSEAL_TEMPLATE_ID` — integer id of the agreement template configured in DocuSeal.
-- `DOCUSEAL_WEBHOOK_SECRET` — shared secret for HMAC-SHA256 verification of the `submission.completed` webhook.
+- `DOCUSEAL_WEBHOOK_SECRET` — DocuSeal's HMAC signing secret (the `whsec_…` value under Console → Webhooks → Security → HMAC tab). Used to verify the `X-Docuseal-Signature` header.
 
-Webhook endpoint to register in DocuSeal: `POST https://<host>/integrations/docuseal/webhook/`, event `submission.completed`.
+Webhook endpoint to register in DocuSeal: `POST https://<host>/integrations/docuseal/webhook/`, event `submission.completed`. The endpoint verifies the `X-Docuseal-Signature` header, which DocuSeal sends as `<timestamp>.<hex-hmac>` where the HMAC-SHA256 is computed over `<timestamp>.<raw-body>`; requests older than 5 minutes are rejected. The host must be publicly reachable by the DocuSeal server (a DocuSeal instance that cannot route back to the app can only be synced via the manual "Pārbaudīt DocuSeal statusu" pull action).
 
 ### 1.4 Pull the image and start the stack
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -156,13 +157,21 @@ def test_sync_submission_normalizes_completed(docuseal_settings, monkeypatch):
 
 def test_verify_webhook_signature_accepts_valid(docuseal_settings):
     body = b'{"event_type":"submission.completed"}'
-    sig = hmac.new(b"whsecret", body, hashlib.sha256).hexdigest()
-    assert docuseal.verify_webhook_signature(body, sig) is True
+    ts = str(int(time.time()))
+    sig = hmac.new(b"whsecret", ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    assert docuseal.verify_webhook_signature(body, f"{ts}.{sig}") is True
 
 
 def test_verify_webhook_signature_rejects_tampered(docuseal_settings):
     body = b'{"event_type":"submission.completed"}'
     assert docuseal.verify_webhook_signature(body, "deadbeef") is False
+
+
+def test_verify_webhook_signature_rejects_stale_timestamp(docuseal_settings):
+    body = b'{"event_type":"submission.completed"}'
+    ts = str(int(time.time()) - 400)
+    sig = hmac.new(b"whsecret", ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    assert docuseal.verify_webhook_signature(body, f"{ts}.{sig}") is False
 
 
 def test_verify_webhook_signature_rejects_empty_header(docuseal_settings):
