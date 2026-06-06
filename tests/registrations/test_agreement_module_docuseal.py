@@ -94,6 +94,28 @@ def test_retry_action_re_enqueues_create(
     spy.assert_called_once_with(agreement.id)
 
 
+def test_retry_action_rejected_when_not_failed(
+    client, submitted_application, reviewer
+):
+    _approved_agreement(
+        submitted_application, reviewer, external_state="pending"
+    )
+    client.force_login(reviewer)
+    with patch(
+        "apps.registrations.views.enqueue_create_agreement_submission"
+    ) as spy:
+        resp = client.post(
+            reverse(
+                "registrations:admin-review-detail",
+                args=[submitted_application.id],
+            ),
+            {"action": "retry_docuseal"},
+        )
+    assert resp.status_code == 400
+    assert "Atkārtot var tikai neizdevušos sūtījumu." in resp.content.decode()
+    spy.assert_not_called()
+
+
 def test_sync_action_enqueues_sync(client, submitted_application, reviewer):
     agreement = _approved_agreement(
         submitted_application, reviewer, external_id="ds-1"

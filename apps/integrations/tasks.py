@@ -273,6 +273,7 @@ def sync_agreement_submission(agreement_id: int) -> None:
     agreement.save(
         update_fields=["external_state", "external_error_code", "updated_at"]
     )
+    agreement.refresh_from_db(fields=["state"])
     if result.external_state == "completed" and agreement.state in (
         Agreement.State.GENERATED,
         Agreement.State.SENT,

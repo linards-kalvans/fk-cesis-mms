@@ -77,6 +77,36 @@ def test_sync_job_completed_drives_signed(settings, electronic_agreement):
     assert electronic_agreement.state == Agreement.State.SIGNED
 
 
+def test_sync_job_skips_signing_when_already_signed_in_db(
+    settings, electronic_agreement
+):
+    """A racing webhook can sign the row while sync holds a stale in-memory
+    state. Refreshing state from the DB before the signed-check prevents a
+    double-sign that would clobber signed_at."""
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    electronic_agreement.external_id = f"stub-{electronic_agreement.id}"
+    electronic_agreement.save(update_fields=["external_id"])
+    signed_at = timezone.now()
+
+    def _sign_in_db(external_id):
+        Agreement.objects.filter(pk=electronic_agreement.id).update(
+            state=Agreement.State.SIGNED, signed_at=signed_at
+        )
+        return ap.SubmissionResult(
+            external_id=external_id,
+            external_url="",
+            external_state="completed",
+        )
+
+    with patch(
+        "apps.integrations.tasks.agreement_platform.sync_submission",
+        side_effect=_sign_in_db,
+    ):
+        with patch("apps.integrations.tasks.mark_agreement_signed") as spy:
+            tasks.sync_agreement_submission(electronic_agreement.id)
+    spy.assert_not_called()
+
+
 def test_archive_job_calls_provider(settings):
     settings.AGREEMENT_PROVIDER_MODE = "stub"
     with patch(

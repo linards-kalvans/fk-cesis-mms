@@ -880,6 +880,13 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                     {**context, "error": "Līgums nav sagatavots."},
                     status=400,
                 )
+            if agreement.external_state != "failed":
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Atkārtot var tikai neizdevušos sūtījumu."},
+                    status=400,
+                )
             enqueue_create_agreement_submission(agreement.id)
             return redirect(
                 "registrations:admin-review-detail", application_id=application.id
