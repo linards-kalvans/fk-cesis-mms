@@ -12,14 +12,21 @@ separate makes spying in tests trivial.
 
 from __future__ import annotations
 
+import logging
+
 from django.utils import timezone
 from django_q.tasks import async_task
 
+from apps.agreements.models import Agreement
+from apps.agreements.services import mark_agreement_signed
 from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
+from apps.integrations import agreement_platform
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS, safe_extract_document_data
 from apps.registrations.models import RegistrationApplication
+
+logger = logging.getLogger(__name__)
 
 
 class RetryableOCRError(Exception):
@@ -156,3 +163,125 @@ def _apply_field_sources(application: RegistrationApplication, kind: str) -> Non
     sources.update(field_map)
     application.field_sources = sources
     application.save(update_fields=["field_sources", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# Agreement-platform (DocuSeal) pipeline — P5 Slice D
+# ---------------------------------------------------------------------------
+
+
+class RetryableAgreementError(Exception):
+    """Raised for transient agreement-platform failures so django-q2 retries."""
+
+
+_AGREEMENT_ERROR_CODES: dict[type[Exception], tuple[str, bool]] = {
+    agreement_platform.AgreementPlatformTransientError: ("unavailable", True),
+    agreement_platform.AgreementPlatformAuthError: ("auth_failed", False),
+    agreement_platform.AgreementPlatformConfigError: ("misconfigured", False),
+    agreement_platform.AgreementPlatformNotFoundError: ("not_found", False),
+}
+
+
+def _classify_agreement_error(exc: Exception) -> tuple[str, bool]:
+    for exc_type, mapping in _AGREEMENT_ERROR_CODES.items():
+        if isinstance(exc, exc_type):
+            return mapping
+    return ("provider_error", False)
+
+
+def _mark_agreement_failed(agreement: Agreement, code: str) -> None:
+    agreement.external_state = "failed"
+    agreement.external_error_code = code
+    agreement.save(
+        update_fields=["external_state", "external_error_code", "updated_at"]
+    )
+
+
+def enqueue_create_agreement_submission(agreement_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.create_agreement_submission", agreement_id
+        )
+    except RetryableAgreementError:
+        return
+
+
+def enqueue_sync_agreement_submission(agreement_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.sync_agreement_submission", agreement_id
+        )
+    except RetryableAgreementError:
+        return
+
+
+def enqueue_archive_agreement_submission(external_id: str) -> None:
+    async_task(
+        "apps.integrations.tasks.archive_agreement_submission", external_id
+    )
+
+
+def create_agreement_submission(agreement_id: int) -> None:
+    try:
+        agreement = Agreement.objects.select_related("member__guardian").get(
+            pk=agreement_id
+        )
+    except Agreement.DoesNotExist:
+        return
+    try:
+        result = agreement_platform.create_submission(agreement)
+    except Exception as exc:
+        code, retry = _classify_agreement_error(exc)
+        _mark_agreement_failed(agreement, code)
+        if retry:
+            raise RetryableAgreementError(code) from exc
+        return
+    agreement.external_provider = "docuseal"
+    agreement.external_id = result.external_id
+    agreement.external_url = result.external_url
+    agreement.external_state = result.external_state
+    agreement.external_error_code = ""
+    agreement.save(
+        update_fields=[
+            "external_provider",
+            "external_id",
+            "external_url",
+            "external_state",
+            "external_error_code",
+            "updated_at",
+        ]
+    )
+
+
+def sync_agreement_submission(agreement_id: int) -> None:
+    try:
+        agreement = Agreement.objects.get(pk=agreement_id)
+    except Agreement.DoesNotExist:
+        return
+    if not agreement.external_id:
+        return
+    try:
+        result = agreement_platform.sync_submission(agreement.external_id)
+    except Exception as exc:
+        code, retry = _classify_agreement_error(exc)
+        _mark_agreement_failed(agreement, code)
+        if retry:
+            raise RetryableAgreementError(code) from exc
+        return
+    agreement.external_state = result.external_state
+    agreement.external_error_code = ""
+    agreement.save(
+        update_fields=["external_state", "external_error_code", "updated_at"]
+    )
+    if result.external_state == "completed" and agreement.state in (
+        Agreement.State.GENERATED,
+        Agreement.State.SENT,
+    ):
+        mark_agreement_signed(agreement, actor=None)
+
+
+def archive_agreement_submission(external_id: str) -> None:
+    try:
+        agreement_platform.archive_submission(external_id)
+    except Exception:
+        logger.warning("DocuSeal archive failed for %s", external_id, exc_info=True)
