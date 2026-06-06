@@ -220,7 +220,14 @@ Target Django monolith with domain apps:
   - New tests (~40): `tests/integrations/test_agreement_platform_adapter.py`, `test_docuseal_provider.py`, `tests/agreements/test_agreement_messages.py`, `test_agreement_tasks.py`, `test_electronic_email_suppression.py`, `test_electronic_flow_integration.py`, `test_docuseal_webhook.py`, `tests/registrations/test_agreement_module_docuseal.py`. Pre-existing service tests that assert sent/signed email delivery moved to the paper path.
   - One migration: `apps/agreements/migrations/0003_agreement_external_error_code.py`.
   - Plan: `docs/superpowers/plans/2026-05-29-p5-slice-d-docuseal-adapter.md`. Design: `docs/superpowers/specs/2026-05-29-p5-slice-d-docuseal-adapter-design.md`.
-  - Manual LAN smoke (stub mode) PENDING — user to confirm electronic mark-sent (no email, stub external link), webhook → signed, void email + archive enqueue, empty-email → paper fallback, paper path emails.
+  - **Live DocuSeal validation (2026-06-07)** against a real self-hosted instance surfaced bugs the stub fixtures hid (mirrors the P3 live-validation lesson). All fixed and re-verified live:
+    - Webhook signature was verified in the wrong format — DocuSeal sends `<timestamp>.<hex-hmac>` over `<timestamp>.<raw-body>`, not a bare HMAC of the body; every real webhook would have 403'd (`e1ff2dc`).
+    - `create_submission` parsed the response as an object, but DocuSeal returns a JSON **array** of submitter objects; the submission id is `submission_id` and the signing URL is `embed_src` (`30154be`).
+    - Prefill must omit the submitter `role` — once field data is present DocuSeal strictly validates the role against the template ("First Party") and 422s a mismatch (`70abb42`).
+    - Guardian `email` + `phone` template fields were missing from the payload, so they rendered blank (`d74d6cd`).
+    - `agreement_date` is no longer sent — the template auto-fills the current date (`75a41ae`).
+    - Prefill now goes through the submitter `fields` array as `readonly:true` entries (not a `values` map): readonly fields are non-interactive, so the signer skips field-by-field re-confirmation and lands straight on the signatures. Confirmed in the signing UI (`170f988`).
+  - Manual LAN smoke (stub mode) still PENDING for the non-DocuSeal transitions — user to confirm void email + archive enqueue, empty-email → paper fallback, and paper-path emails.
 
 ### Test suite consolidation (2026-05-24)
 - `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.
