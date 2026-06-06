@@ -117,10 +117,14 @@ def create_submission(agreement) -> SubmissionResult:
     }
     resp = _request("POST", f"{api_url}/submissions", api_key, json=body)
     payload = resp.json()
+    # DocuSeal returns an array of submitter objects, one per submitter. The
+    # submission id (used for sync + webhook matching) is `submission_id`, and
+    # the signing-page URL is `embed_src`.
+    submitter = payload[0] if isinstance(payload, list) and payload else {}
     return SubmissionResult(
-        external_id=str(payload["id"]),
-        external_url=_submission_url(api_url, payload),
-        external_state=_normalize_state(payload.get("status", "pending")),
+        external_id=str(submitter.get("submission_id", "")),
+        external_url=str(submitter.get("embed_src", "")),
+        external_state=_normalize_state(submitter.get("status", "pending")),
     )
 
 

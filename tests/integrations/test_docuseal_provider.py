@@ -87,7 +87,16 @@ def test_create_submission_request_shape_and_normalization(
         captured["headers"] = headers
         captured["json"] = kwargs.get("json")
         return _mock_response(
-            201, {"id": 1001, "submitters": [{"slug": "abc"}], "status": "pending"}
+            201,
+            [
+                {
+                    "id": 2001,
+                    "submission_id": 1001,
+                    "slug": "abc",
+                    "status": "sent",
+                    "embed_src": "https://sign.example/s/abc",
+                }
+            ],
         )
 
     monkeypatch.setattr(
@@ -96,9 +105,9 @@ def test_create_submission_request_shape_and_normalization(
 
     result = docuseal.create_submission(_FakeAgreement())
     assert isinstance(result, ap.SubmissionResult)
-    assert result.external_id == "1001"
-    assert result.external_state == "pending"
-    assert "abc" in result.external_url
+    assert result.external_id == "1001"  # submission_id, not the submitter id
+    assert result.external_state == "pending"  # "sent" normalizes to pending
+    assert result.external_url == "https://sign.example/s/abc"
 
     assert captured["method"] == "POST"
     assert captured["url"] == "https://sign.example/api/submissions"
