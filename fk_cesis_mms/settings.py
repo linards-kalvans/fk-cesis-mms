@@ -170,6 +170,10 @@ OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
 # Agreement-platform integration (P5 Slice D — DocuSeal self-hosted).
 AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
+DOCUSEAL_API_URL = os.environ.get("DOCUSEAL_API_URL", "")
+DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")
+DOCUSEAL_TEMPLATE_ID = os.environ.get("DOCUSEAL_TEMPLATE_ID", "")
+DOCUSEAL_WEBHOOK_SECRET = os.environ.get("DOCUSEAL_WEBHOOK_SECRET", "")
 
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
