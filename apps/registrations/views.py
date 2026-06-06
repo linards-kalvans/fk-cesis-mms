@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
+from apps.agreements.messages import get_agreement_error_message
 from apps.agreements.models import Agreement
 from apps.agreements.presentation import agreement_status_copy
 from apps.agreements.services import (
@@ -31,7 +32,11 @@ from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
-from apps.integrations.tasks import enqueue_ocr_job
+from apps.integrations.tasks import (
+    enqueue_create_agreement_submission,
+    enqueue_ocr_job,
+    enqueue_sync_agreement_submission,
+)
 from apps.members.models import TrainingGroup
 from apps.members.services import assign_training_group
 from apps.registrations.forms import RegistrationApplicationForm
@@ -671,6 +676,13 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
         "agreement": agreement,
     }
 
+    agreement_error_message = None
+    if agreement is not None and agreement.external_state == "failed":
+        agreement_error_message = get_agreement_error_message(
+            agreement.external_error_code
+        )
+    context["agreement_error_message"] = agreement_error_message
+
     if request.method == "POST":
         action = request.POST.get("action", "")
 
@@ -859,6 +871,32 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
                     status=400,
                 )
             return redirect("registrations:admin-review-detail", application_id=application.id)
+
+        elif action == "retry_docuseal":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            enqueue_create_agreement_submission(agreement.id)
+            return redirect(
+                "registrations:admin-review-detail", application_id=application.id
+            )
+
+        elif action == "sync_docuseal":
+            if agreement is None:
+                return render(
+                    request,
+                    "registrations/admin_review_detail.html",
+                    {**context, "error": "Līgums nav sagatavots."},
+                    status=400,
+                )
+            enqueue_sync_agreement_submission(agreement.id)
+            return redirect(
+                "registrations:admin-review-detail", application_id=application.id
+            )
 
     return render(request, "registrations/admin_review_detail.html", context)
 

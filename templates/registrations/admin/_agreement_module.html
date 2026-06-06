@@ -6,6 +6,25 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
 
   <p>Stāvoklis: <strong>{{ agreement.get_state_display }}</strong></p>
 
+  {% if agreement_error_message %}
+  <p class="errornote">{{ agreement_error_message }}</p>
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="retry_docuseal" class="default">Mēģināt vēlreiz</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.external_url %}
+  <p><a href="{{ agreement.external_url }}" target="_blank" rel="noopener">Atvērt DocuSeal ↗</a></p>
+  {% endif %}
+
+  {% if agreement.external_id %}
+  <form method="post" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="sync_docuseal">Pārbaudīt DocuSeal statusu</button>
+  </form>
+  {% endif %}
+
   <form method="post" class="mms-review-actions__form">
     {% csrf_token %}
     <div class="form-row">
