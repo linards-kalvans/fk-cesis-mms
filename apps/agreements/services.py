@@ -44,17 +44,31 @@ def create_agreement_for_member(
 
 def mark_agreement_sent(
     agreement: Agreement,
-    actor,  # AUTH_USER_MODEL — plumbed for P7 audit hook  # noqa: ARG001
+    actor,  # AUTH_USER_MODEL — plumbed for P7 audit hook
 ) -> Agreement:
-    """generated → sent. Sets sent_at, sends Latvian email to guardian."""
+    """generated → sent. Paper path: Latvian email to guardian. Electronic
+    path: optimistic sent, suppress email, enqueue DocuSeal create. When
+    electronic but guardian has no email, fall back to paper first."""
     if agreement.state != Agreement.State.GENERATED:
-        raise ValueError(
-            f"cannot mark sent from state {agreement.state}"
-        )
+        raise ValueError(f"cannot mark sent from state {agreement.state}")
+
+    # Electronic requires a guardian email to send the signing request.
+    # Without one, degrade to the paper (staff-managed) path before sending.
+    if (
+        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+        and not agreement.member.guardian.email
+    ):
+        set_signing_path(agreement, str(Agreement.SigningPath.PAPER), actor)
+
     agreement.state = Agreement.State.SENT
     agreement.sent_at = timezone.now()
     agreement.save(update_fields=["state", "sent_at"])
     _render_and_send_agreement_email(agreement, template_name="sent")
+
+    if agreement.signing_path == Agreement.SigningPath.ELECTRONIC:
+        from apps.integrations.tasks import enqueue_create_agreement_submission
+
+        enqueue_create_agreement_submission(agreement.id)
     return agreement
 
 
@@ -80,8 +94,8 @@ def void_agreement(
     reason: str,
 ) -> Agreement:
     """Any non-void state → void. Keeps is_current=True. Sends a Latvian
-    plain-text notification to the guardian (subject "Jūsu līgums ir
-    atcelts", body includes the staff-supplied reason when present).
+    plain-text notification to the guardian (both paths). For an electronic
+    agreement with a live DocuSeal submission, also enqueues an archive job.
     Idempotent on void → void (early return, no UPDATE, no second email)."""
     if agreement.state == Agreement.State.VOID:
         return agreement
@@ -90,6 +104,14 @@ def void_agreement(
     agreement.void_reason = reason
     agreement.save(update_fields=["state", "voided_at", "void_reason"])
     _render_and_send_agreement_email(agreement, template_name="void")
+
+    if (
+        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+        and agreement.external_id
+    ):
+        from apps.integrations.tasks import enqueue_archive_agreement_submission
+
+        enqueue_archive_agreement_submission(agreement.external_id)
     return agreement
 
 
