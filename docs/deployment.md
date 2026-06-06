@@ -126,6 +126,13 @@ TINY_IDP_API_URL=
 TINY_IDP_API_KEY=
 OCR_ENCRYPTION_KEY=<fernet-key>
 
+# Agreement platform (DocuSeal) — start with stub; flip to docuseal once configured
+AGREEMENT_PROVIDER_MODE=stub
+DOCUSEAL_API_URL=
+DOCUSEAL_API_KEY=
+DOCUSEAL_TEMPLATE_ID=
+DOCUSEAL_WEBHOOK_SECRET=
+
 # Email
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=<smtp host>
@@ -144,6 +151,16 @@ IMAGE_TAG=dev
 # is already in use on this host (Caddy upstream must match — see §3).
 WEB_HOST_PORT=8000
 ```
+
+#### Agreement platform (DocuSeal) — required when `AGREEMENT_PROVIDER_MODE=docuseal`
+
+- `AGREEMENT_PROVIDER_MODE` — `stub` (default) or `docuseal`.
+- `DOCUSEAL_API_URL` — base API URL of the self-hosted DocuSeal instance.
+- `DOCUSEAL_API_KEY` — DocuSeal API token (sent as `X-Auth-Token`).
+- `DOCUSEAL_TEMPLATE_ID` — integer id of the agreement template configured in DocuSeal.
+- `DOCUSEAL_WEBHOOK_SECRET` — shared secret for HMAC-SHA256 verification of the `submission.completed` webhook.
+
+Webhook endpoint to register in DocuSeal: `POST https://<host>/integrations/docuseal/webhook/`, event `submission.completed`.
 
 ### 1.4 Pull the image and start the stack
 
