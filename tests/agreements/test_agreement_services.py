@@ -103,7 +103,7 @@ def test_mark_sent_from_generated_succeeds_and_sends_email(
     agreement_member, agreement_guardian, actor
 ):
     mail.outbox.clear()
-    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_sent(a, actor)
     a.refresh_from_db()
     assert a.state == Agreement.State.SENT
@@ -116,7 +116,7 @@ def test_mark_sent_from_generated_succeeds_and_sends_email(
 
 def test_mark_signed_email_subject_is_latvian(agreement_member, actor):
     mail.outbox.clear()
-    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_signed(a, actor)
     assert mail.outbox[0].subject == "Jūsu līgums ir parakstīts"
 
@@ -138,7 +138,7 @@ def test_mark_sent_from_illegal_states_raises(agreement_member, actor, from_stat
 
 def test_mark_signed_from_generated_succeeds_and_sends_email(agreement_member, actor):
     mail.outbox.clear()
-    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_signed(a, actor)
     a.refresh_from_db()
     assert a.state == Agreement.State.SIGNED
@@ -148,7 +148,7 @@ def test_mark_signed_from_generated_succeeds_and_sends_email(agreement_member, a
 
 
 def test_mark_signed_from_sent_succeeds_and_sends_email(agreement_member, actor):
-    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_sent(a, actor)
     mail.outbox.clear()
     mark_agreement_signed(a, actor)
@@ -248,6 +248,6 @@ def test_set_signing_path_allowed_when_signed(agreement_member, actor):
 def test_sent_email_body_includes_portal_url_from_settings(agreement_member, actor):
     mail.outbox.clear()
     with override_settings(SITE_URL="https://test.example"):
-        a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+        a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
         mark_agreement_sent(a, actor)
     assert "https://test.example" in mail.outbox[0].body

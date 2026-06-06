@@ -153,11 +153,24 @@ def sync_application_signing_path_to_agreement(application) -> None:
     agreement.save(update_fields=["signing_path"])
 
 
+def _should_send_email(agreement: Agreement, template_name: str) -> bool:
+    """Electronic path suppresses `sent`/`signed` (DocuSeal notifies the
+    signer). `void` always sends; paper sends on all transitions."""
+    if (
+        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+        and template_name in {"sent", "signed"}
+    ):
+        return False
+    return True
+
+
 def _render_and_send_agreement_email(
     agreement: Agreement,
     template_name: str,
 ) -> None:
     """Render an agreement plain-text email and send to the guardian."""
+    if not _should_send_email(agreement, template_name):
+        return
     member = agreement.member
     guardian = member.guardian
     portal_url = f"{settings.SITE_URL}{reverse('registrations:parent-portal')}"
