@@ -123,17 +123,14 @@ def test_create_submission_request_shape_and_normalization(
     # Prefill values live on the submitter as a name->value map, not a
     # top-level `fields` array (DocuSeal otherwise ignores them).
     values = submitter["values"]
-    assert {
-        "child_name",
-        "guardian_name",
-        "agreement_date",
-        "email",
-        "phone",
-    } <= set(values)
+    assert {"child_name", "guardian_name", "email", "phone"} <= set(values)
     assert values["guardian_name"] == "Anna Bērziņa"
     assert values["email"] == "anna@example.test"
     assert values["phone"] == "+37120000000"
     assert "training_group" not in values
+    # agreement_date is auto-filled by the DocuSeal template (current date),
+    # so we no longer send it.
+    assert "agreement_date" not in values
     assert "fields" not in body
 
 

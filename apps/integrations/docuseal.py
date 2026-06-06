@@ -54,6 +54,8 @@ def _build_submitter(agreement) -> dict:
 
 
 def _build_field_payload(agreement) -> dict:
+    # agreement_date is intentionally omitted: the DocuSeal template
+    # auto-fills the current date on that field, so we must not send it.
     member = agreement.member
     guardian = member.guardian
     return {
@@ -67,7 +69,6 @@ def _build_field_payload(agreement) -> dict:
         "guardian_address": guardian.address,
         "email": guardian.email,
         "phone": guardian.phone,
-        "agreement_date": agreement.generated_at.date().isoformat(),
     }
 
 
