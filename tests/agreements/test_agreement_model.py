@@ -78,3 +78,18 @@ def test_member_cascade_delete_removes_all_agreements(agreement_member):
     )
     agreement_member.delete()
     assert Agreement.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_agreement_has_external_error_code_field(agreement_member):
+    from apps.agreements.models import Agreement
+    from django.utils import timezone
+
+    a = Agreement.objects.create(
+        member=agreement_member, generated_at=timezone.now()
+    )
+    assert a.external_error_code == ""
+    a.external_error_code = "auth_failed"
+    a.save(update_fields=["external_error_code"])
+    a.refresh_from_db()
+    assert a.external_error_code == "auth_failed"

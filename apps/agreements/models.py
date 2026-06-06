@@ -56,6 +56,7 @@ class Agreement(TimeStampedModel):
     external_id = models.CharField(max_length=128, blank=True, default="")
     external_state = models.CharField(max_length=64, blank=True, default="")
     external_url = models.URLField(blank=True, default="")
+    external_error_code = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         constraints = [
