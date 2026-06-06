@@ -114,10 +114,18 @@ def test_create_submission_request_shape_and_normalization(
     assert captured["headers"]["X-Auth-Token"] == "secret-key"
     body = captured["json"]
     assert body["template_id"] == 7
-    assert body["submitters"][0]["email"] == "anna@example.test"
-    field_names = {f["name"] for f in body["fields"]}
-    assert {"child_name", "guardian_name", "agreement_date"} <= field_names
-    assert "training_group" not in field_names
+    submitter = body["submitters"][0]
+    assert submitter["email"] == "anna@example.test"
+    # No role sent: the template owns the role name; DocuSeal rejects a
+    # mismatching role once values are present.
+    assert "role" not in submitter
+    # Prefill values live on the submitter as a name->value map, not a
+    # top-level `fields` array (DocuSeal otherwise ignores them).
+    values = submitter["values"]
+    assert {"child_name", "guardian_name", "agreement_date"} <= set(values)
+    assert values["guardian_name"] == "Anna Bērziņa"
+    assert "training_group" not in values
+    assert "fields" not in body
 
 
 def test_create_submission_auth_error(docuseal_settings, monkeypatch):

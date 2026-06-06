@@ -43,11 +43,13 @@ def _require_config() -> tuple[str, str, int]:
 
 
 def _build_submitter(agreement) -> dict:
+    # No `role` key: the template defines its own submitter role name, and
+    # DocuSeal rejects a mismatching role once `values` are supplied. Omitting
+    # it lets DocuSeal map our single submitter onto the template's role.
     guardian = agreement.member.guardian
     return {
         "email": guardian.email,
         "name": guardian.full_name,
-        "role": "Vecāks",
     }
 
 
@@ -107,13 +109,13 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
 
 def create_submission(agreement) -> SubmissionResult:
     api_url, api_key, template_int = _require_config()
+    submitter = {
+        **_build_submitter(agreement),
+        "values": _build_field_payload(agreement),
+    }
     body = {
         "template_id": template_int,
-        "submitters": [_build_submitter(agreement)],
-        "fields": [
-            {"name": k, "default_value": v}
-            for k, v in _build_field_payload(agreement).items()
-        ],
+        "submitters": [submitter],
     }
     resp = _request("POST", f"{api_url}/submissions", api_key, json=body)
     payload = resp.json()
