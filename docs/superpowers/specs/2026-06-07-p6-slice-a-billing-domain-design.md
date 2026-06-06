@@ -103,15 +103,25 @@ most one record per season; cross-season re-billing is future scope.)
 never silently mutate existing drafts. The admin "recompute" action
 (§5) re-derives them on demand for `draft` records only.
 
-### New registration fields (`apps/registrations`, one migration)
+### Registration fields
 
-Both parent-facing, both nullable/defaulted so existing in-flight drafts are
-unaffected:
+**Opt-out already exists — reuse, do not add.** `RegistrationApplication`
+already has `support_club_instead_of_multi_child_discount` (BooleanField,
+`null=True`, default `None`), surfaced as a form field with the Latvian label
+"Nepiemērot Līgumā noteiktās atlaides - Vēlos atbalstīt klubu", rendered in the
+agreement section of both `new_registration.html` and
+`application_workspace.html`, and persisted by `services.py`. `True` means the
+parent declines the sibling discount to support the club → bill full price.
+Slice A only *consumes* this field; no new opt-out field, no opt-out
+form/template work.
 
-- `full_price_opt_out` — BooleanField, default `False`.
-- `preferred_payment_mode` — CharField(choices `upfront`|`installments`),
-  default `installments` (matches the existing `preferred_agreement_signing`
-  capture pattern).
+**One genuinely new field** (`apps/registrations`, one migration), nullable so
+existing in-flight drafts are unaffected:
+
+- `preferred_payment_mode` — CharField(choices `upfront`|`installments`,
+  blank=True), matching the existing `preferred_agreement_signing` capture
+  pattern (model field + form `ChoiceField` + render in the agreement section +
+  persist in `services.py`).
 
 ## 3. Sibling-discount engine
 
@@ -125,13 +135,15 @@ compute_billing_amounts(member, plan) -> BillingAmounts
 `discount_percent_applied`, `discount_amount`, `final_amount` (all Decimal,
 rounded to cents with `ROUND_HALF_UP`).
 
-**Member → source application:** a `Member` reaches its registration application
-via the `approved_member` reverse relation
-(`RegistrationApplication.objects.filter(approved_member=member)`). The engine
-reads `full_price_opt_out` (and the record creation reads `preferred_payment_mode`)
-from that application. `Member` itself has no `is_active` flag — the system has
-no member-deactivation concept yet, so **all** of a guardian's members count as
-siblings (`guardian.members.all()`).
+**Member → source application:** `approved_member` is a `OneToOneField` from
+`RegistrationApplication` to `Member` with `related_name="source_application"`,
+so a member reaches its application directly via `member.source_application`
+(may be `None` defensively; treated as "no opt-out"). The engine reads the
+opt-out as `member.source_application.support_club_instead_of_multi_child_discount
+is True`; record creation reads `preferred_payment_mode` from the same place.
+`Member` itself has no `is_active` flag — the system has no member-deactivation
+concept yet, so **all** of a guardian's members count as siblings
+(`guardian.members.all()`).
 
 **Rule:**
 
@@ -203,10 +215,10 @@ Idempotent; safe to re-run; no-op when no active plan.
 
 ### Parent registration
 
-The two new fields render in the existing review/consent step as a small
-"Maksājuma izvēles" block: full-price opt-out checkbox + upfront/installments
-choice. Latvian copy goes through the existing strings pattern (no hardcoded
-template strings). No new wizard step.
+The opt-out checkbox already renders in the agreement section. The new
+`preferred_payment_mode` choice (upfront/installments) is added alongside it in
+that same section — no new block, no new wizard step. Latvian copy goes through
+the existing strings/label pattern.
 
 ### Out of Slice A scope
 
@@ -230,9 +242,11 @@ template strings). No new wizard step.
   produces N due entries summing to the total (remainder in the last entry).
 - **Admin** (`test_billing_admin.py`): recompute action touches only drafts;
   read-only vs editable fields.
-- **Registration fields** (`test_billing_registration_fields.py`): opt-out +
-  payment-mode persist from the form and render in the workspace; Latvian copy
-  contract holds.
+- **Registration field** (`test_billing_registration_fields.py`):
+  `preferred_payment_mode` persists from the form and renders in the workspace;
+  Latvian copy contract holds. (Opt-out persistence is already covered by
+  existing registration tests; Slice A adds a test that the engine *consumes*
+  `support_club_instead_of_multi_child_discount`.)
 - **Backfill** (`test_backfill_billing.py`): creates drafts for already-signed
   agreements lacking one; idempotent.
 
@@ -244,8 +258,9 @@ template strings). No new wizard step.
 - **Out:** Invoice Ninja adapter/calls (B), payment-status read-back +
   scheduling (C), parent-facing amounts (C).
 - **Migrations:** one in `apps/billing` (new app: `MembershipPlan` +
-  `BillingRecord`), one in `apps/registrations` (two new nullable/defaulted
-  fields).
+  `BillingRecord`), one in `apps/registrations` (one new nullable field
+  `preferred_payment_mode`; opt-out reuses the existing
+  `support_club_instead_of_multi_child_discount`).
 - **No** change to the agreement state machine, OCR, documents, or deploy
   pipeline.
 
