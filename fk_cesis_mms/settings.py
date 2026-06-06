@@ -168,6 +168,9 @@ TINY_IDP_API_URL = os.environ.get("TINY_IDP_API_URL", "")
 TINY_IDP_API_KEY = os.environ.get("TINY_IDP_API_KEY", "")
 OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
+# Agreement-platform integration (P5 Slice D — DocuSeal self-hosted).
+AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
+
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
     os.environ.get("DOCUMENT_UPLOAD_MAX_BYTES", str(8 * 1024 * 1024))  # 8 MiB
