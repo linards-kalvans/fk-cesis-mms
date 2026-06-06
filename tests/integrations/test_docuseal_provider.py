@@ -120,17 +120,22 @@ def test_create_submission_request_shape_and_normalization(
     # No role sent: the template owns the role name; DocuSeal rejects a
     # mismatching role once values are present.
     assert "role" not in submitter
-    # Prefill values live on the submitter as a name->value map, not a
-    # top-level `fields` array (DocuSeal otherwise ignores them).
-    values = submitter["values"]
-    assert {"child_name", "guardian_name", "email", "phone"} <= set(values)
-    assert values["guardian_name"] == "Anna Bērziņa"
-    assert values["email"] == "anna@example.test"
-    assert values["phone"] == "+37120000000"
-    assert "training_group" not in values
+    # Prefill goes through the submitter `fields` array as readonly entries
+    # (not a `values` map): readonly fields are non-interactive, so the signer
+    # skips field re-confirmation and goes straight to the signatures.
+    assert "values" not in submitter
+    fields = submitter["fields"]
+    by_name = {f["name"]: f for f in fields}
+    assert {"child_name", "guardian_name", "email", "phone"} <= set(by_name)
+    assert by_name["guardian_name"]["default_value"] == "Anna Bērziņa"
+    assert by_name["email"]["default_value"] == "anna@example.test"
+    assert by_name["phone"]["default_value"] == "+37120000000"
+    assert all(f["readonly"] is True for f in fields)
+    assert "training_group" not in by_name
     # agreement_date is auto-filled by the DocuSeal template (current date),
     # so we no longer send it.
-    assert "agreement_date" not in values
+    assert "agreement_date" not in by_name
+    # Fields live on the submitter, never as a top-level array.
     assert "fields" not in body
 
 

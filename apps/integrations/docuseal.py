@@ -112,9 +112,16 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
 
 def create_submission(agreement) -> SubmissionResult:
     api_url, api_key, template_int = _require_config()
+    # Prefill as readonly fields, not a `values` map: readonly fields are
+    # non-interactive, so the signer skips field-by-field re-confirmation and
+    # goes straight to the signature fields.
+    fields = [
+        {"name": name, "default_value": value, "readonly": True}
+        for name, value in _build_field_payload(agreement).items()
+    ]
     submitter = {
         **_build_submitter(agreement),
-        "values": _build_field_payload(agreement),
+        "fields": fields,
     }
     body = {
         "template_id": template_int,
