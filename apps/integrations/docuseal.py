@@ -65,6 +65,8 @@ def _build_field_payload(agreement) -> dict:
         "guardian_name": guardian.full_name,
         "guardian_personal_id": guardian.personal_id,
         "guardian_address": guardian.address,
+        "email": guardian.email,
+        "phone": guardian.phone,
         "agreement_date": agreement.generated_at.date().isoformat(),
     }
 
