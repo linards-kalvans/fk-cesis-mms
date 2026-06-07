@@ -32,7 +32,7 @@ class MembershipPlan(TimeStampedModel):
     is_active = models.BooleanField(default=False)
 
     def __str__(self) -> str:
-        return self.name
+        return str(self.name)
 
 
 class BillingRecord(TimeStampedModel):
