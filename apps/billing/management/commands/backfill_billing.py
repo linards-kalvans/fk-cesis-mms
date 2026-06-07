@@ -12,9 +12,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         created = 0
         seen_members = set()
-        signed = Agreement.objects.filter(
-            state=Agreement.State.SIGNED
-        ).select_related("member")
+        signed = (
+            Agreement.objects.filter(state=Agreement.State.SIGNED)
+            .select_related("member")
+            .order_by("pk")
+        )
         for agreement in signed:
             if agreement.member_id in seen_members:
                 continue
