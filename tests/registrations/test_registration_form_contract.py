@@ -732,6 +732,7 @@ class TestGroupedFormContract:
         expected = (
             "preferred_agreement_signing",
             "support_club_instead_of_multi_child_discount",
+            "preferred_payment_mode",
         )
         assert agree_fields == expected, (
             f"Agreement section fields must be {expected}, got {agree_fields}."
@@ -768,7 +769,7 @@ class TestGroupedFormContract:
             "documents": 3,
             "guardian": 5,
             "member": 7,
-            "agreement": 2,
+            "agreement": 3,
         }
         for name, fields in sections:
             assert len(fields) == expected_counts[name], (

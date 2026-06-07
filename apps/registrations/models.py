@@ -77,6 +77,10 @@ class RegistrationApplication(TimeStampedModel):
         ELECTRONIC = "electronic", "Elektroniski"
         PAPER = "paper", "Ar roku, papīra dokuments"
 
+    class PaymentMode(models.TextChoices):
+        UPFRONT = "upfront", "Vienā maksājumā"
+        INSTALLMENTS = "installments", "Pa daļām"
+
     # Application-level fields
     preferred_agreement_signing = models.CharField(
         max_length=16,
@@ -87,6 +91,11 @@ class RegistrationApplication(TimeStampedModel):
         null=True,
         blank=True,
         default=None,
+    )
+    preferred_payment_mode = models.CharField(
+        max_length=16,
+        choices=PaymentMode.choices,
+        blank=True,
     )
 
     # Field source classification (JSON)

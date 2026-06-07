@@ -415,6 +415,7 @@ def create_or_update_draft(
         application.support_club_instead_of_multi_child_discount = bool(raw) if raw is not None else None
     else:
         application.support_club_instead_of_multi_child_discount = None
+    application.preferred_payment_mode = str(data.get("preferred_payment_mode", "")).strip()
 
     # Kit sizes — FK to KitSizeOption
     shirt_id = data.get("member_kit_size_shirt")
