@@ -43,7 +43,7 @@ def test_idempotent_on_second_call(active_plan, guardian):
     assert BillingRecord.objects.filter(member=member).count() == 1
 
 
-def test_no_active_plan_noops(db, guardian, caplog):
+def test_no_active_plan_noops(db, guardian):
     from apps.billing.services import create_draft_billing_for_member
     from apps.billing.models import BillingRecord
     from apps.members.models import Member

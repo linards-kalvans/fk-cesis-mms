@@ -11,7 +11,6 @@ import logging
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -125,17 +124,19 @@ def create_draft_billing_for_member(member, agreement):
             payment_mode = application.preferred_payment_mode
         opt_out = application.support_club_instead_of_multi_child_discount is True
 
-    with transaction.atomic():
-        return BillingRecord.objects.create(
-            member=member,
-            plan=plan,
-            agreement=agreement,
-            season=plan.season,
-            base_amount=amounts.base_amount,
-            is_full_price=amounts.is_full_price,
-            sibling_discount_percent_applied=amounts.discount_percent_applied,
-            discount_amount=amounts.discount_amount,
-            final_amount=amounts.final_amount,
-            payment_mode=payment_mode,
-            full_price_opt_out=opt_out,
-        )
+    record, _created = BillingRecord.objects.get_or_create(
+        member=member,
+        season=plan.season,
+        defaults={
+            "plan": plan,
+            "agreement": agreement,
+            "base_amount": amounts.base_amount,
+            "is_full_price": amounts.is_full_price,
+            "sibling_discount_percent_applied": amounts.discount_percent_applied,
+            "discount_amount": amounts.discount_amount,
+            "final_amount": amounts.final_amount,
+            "payment_mode": payment_mode,
+            "full_price_opt_out": opt_out,
+        },
+    )
+    return record
