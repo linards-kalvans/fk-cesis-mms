@@ -140,3 +140,34 @@ def create_draft_billing_for_member(member, agreement):
         },
     )
     return record
+
+
+def recompute_billing_record(record) -> None:
+    """Re-derive natural amounts from the record's plan for a DRAFT record.
+    No-op on a confirmed record. Honors a manual override for final_amount."""
+    from apps.billing.models import BillingRecord
+
+    if record.status != BillingRecord.Status.DRAFT:
+        return
+    # Refresh plan from DB so any edits made after the record was created are picked up.
+    plan = record.plan.__class__.objects.get(pk=record.plan_id)
+    amounts = compute_billing_amounts(record.member, plan)
+    record.base_amount = amounts.base_amount
+    record.is_full_price = amounts.is_full_price
+    record.sibling_discount_percent_applied = amounts.discount_percent_applied
+    record.discount_amount = amounts.discount_amount
+    record.final_amount = (
+        record.manual_amount_override
+        if record.manual_amount_override is not None
+        else amounts.final_amount
+    )
+    record.save(
+        update_fields=[
+            "base_amount",
+            "is_full_price",
+            "sibling_discount_percent_applied",
+            "discount_amount",
+            "final_amount",
+            "updated_at",
+        ]
+    )
