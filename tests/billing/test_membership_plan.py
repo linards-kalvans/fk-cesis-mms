@@ -18,3 +18,5 @@ def test_membership_plan_defaults():
     assert plan.sibling_discount_percent == Decimal("0.00")
     assert plan.is_active is False
     assert str(plan) == "Sezona 2026/2027"
+    assert plan.created_at is not None
+    assert plan.updated_at is not None
