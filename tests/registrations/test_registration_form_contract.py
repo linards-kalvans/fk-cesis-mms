@@ -722,7 +722,7 @@ class TestGroupedFormContract:
 
     def test_agreement_section_fields(self):
         """Agreement section must contain: preferred_agreement_signing,
-        support_club_instead_of_multi_child_discount."""
+        support_club_instead_of_multi_child_discount, and preferred_payment_mode."""
         from apps.registrations.forms import RegistrationApplicationForm
 
         agree_fields = [

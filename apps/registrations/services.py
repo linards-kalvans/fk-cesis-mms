@@ -62,6 +62,7 @@ MANUAL_P1_FIELDS = (
     "member_same_address_as_guardian",
     "preferred_agreement_signing",
     "support_club_instead_of_multi_child_discount",
+    "preferred_payment_mode",
 )
 
 
