@@ -6,6 +6,7 @@ snapshots the computed amounts so later plan edits do not mutate drafts.
 
 from __future__ import annotations
 
+import datetime
 import logging
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -64,3 +65,31 @@ def compute_billing_amounts(member, plan) -> BillingAmounts:
         discount_amount=discount,
         final_amount=_money(base - discount),
     )
+
+
+def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.date, Decimal]]:
+    """Split `total` into `plan.installment_count` equal monthly entries starting
+    at `plan.first_installment_month`. Equal cents; the last entry absorbs the
+    rounding remainder. Due dates are the 1st of each successive month; the year
+    is anchored to the first year in `plan.season` ("2026/2027" -> 2026) and rolls
+    forward when the month wraps past December.
+
+    Exact day-of-month and final calendar anchoring are revisited in Slice B once
+    the Invoice Ninja API dictates the invoice shape.
+    """
+    count = max(int(plan.installment_count), 1)
+    per = _money(total / Decimal(count))
+    amounts = [per] * (count - 1)
+    amounts.append(_money(total - per * (count - 1)))
+
+    start_year = int(plan.season.split("/")[0])
+    schedule: list[tuple[datetime.date, Decimal]] = []
+    month = int(plan.first_installment_month)
+    year = start_year
+    for amount in amounts:
+        schedule.append((datetime.date(year, month, 1), amount))
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return schedule
