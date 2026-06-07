@@ -11,6 +11,8 @@ import logging
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.db import transaction
+
 logger = logging.getLogger(__name__)
 
 _CENTS = Decimal("0.01")
@@ -93,3 +95,47 @@ def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.dat
             month = 1
             year += 1
     return schedule
+
+
+def create_draft_billing_for_member(member, agreement):
+    """Idempotently create a draft BillingRecord for the active plan's season.
+
+    Returns the record (existing or new), or None when no active plan exists.
+    Never raises on missing config — signing must not break.
+    """
+    from apps.billing.models import BillingRecord, MembershipPlan
+
+    plan = MembershipPlan.objects.filter(is_active=True).order_by("-pk").first()
+    if plan is None:
+        logger.warning(
+            "No active MembershipPlan; skipping billing draft for member %s", member.pk
+        )
+        return None
+
+    existing = BillingRecord.objects.filter(member=member, season=plan.season).first()
+    if existing is not None:
+        return existing
+
+    amounts = compute_billing_amounts(member, plan)
+    application = getattr(member, "source_application", None)
+    payment_mode = BillingRecord.PaymentMode.INSTALLMENTS
+    opt_out = False
+    if application is not None:
+        if application.preferred_payment_mode:
+            payment_mode = application.preferred_payment_mode
+        opt_out = application.support_club_instead_of_multi_child_discount is True
+
+    with transaction.atomic():
+        return BillingRecord.objects.create(
+            member=member,
+            plan=plan,
+            agreement=agreement,
+            season=plan.season,
+            base_amount=amounts.base_amount,
+            is_full_price=amounts.is_full_price,
+            sibling_discount_percent_applied=amounts.discount_percent_applied,
+            discount_amount=amounts.discount_amount,
+            final_amount=amounts.final_amount,
+            payment_mode=payment_mode,
+            full_price_opt_out=opt_out,
+        )
