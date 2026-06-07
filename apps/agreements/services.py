@@ -76,7 +76,8 @@ def mark_agreement_signed(
     agreement: Agreement,
     actor,  # noqa: ARG001
 ) -> Agreement:
-    """{generated, sent} → signed. Sets signed_at, sends Latvian email."""
+    """{generated, sent} → signed. Sets signed_at, sends Latvian email, emits
+    the agreement_signed signal (billing listens)."""
     if agreement.state not in (Agreement.State.GENERATED, Agreement.State.SENT):
         raise ValueError(
             f"cannot mark signed from state {agreement.state}"
@@ -85,6 +86,10 @@ def mark_agreement_signed(
     agreement.signed_at = timezone.now()
     agreement.save(update_fields=["state", "signed_at"])
     _render_and_send_agreement_email(agreement, template_name="signed")
+
+    from apps.agreements.signals import agreement_signed
+
+    agreement_signed.send(sender=Agreement, agreement=agreement)
     return agreement
 
 
