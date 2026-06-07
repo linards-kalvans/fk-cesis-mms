@@ -6,3 +6,8 @@ from django.apps import AppConfig
 class BillingConfig(AppConfig):
     name = "apps.billing"
     default_auto_field = "django.db.models.BigAutoField"
+
+    def ready(self) -> None:
+        from apps.billing.signals import connect_billing_signals
+
+        connect_billing_signals()
