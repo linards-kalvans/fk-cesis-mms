@@ -11,6 +11,8 @@ import logging
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +173,22 @@ def recompute_billing_record(record) -> None:
             "updated_at",
         ]
     )
+
+
+def roll_up_payment_status(record) -> None:
+    """Derive the record-level payment_status from its invoices and stamp
+    payment_synced_at. all paid -> paid; any paid/partial -> partial; else unpaid."""
+    from apps.billing.models import PaymentStatus
+
+    statuses = list(record.invoices.values_list("payment_status", flat=True))
+    if statuses and all(s == PaymentStatus.PAID for s in statuses):
+        record.payment_status = PaymentStatus.PAID
+    elif any(s in (PaymentStatus.PAID, PaymentStatus.PARTIAL) for s in statuses):
+        record.payment_status = PaymentStatus.PARTIAL
+    else:
+        record.payment_status = PaymentStatus.UNPAID
+    record.payment_synced_at = timezone.now()
+    record.save(update_fields=["payment_status", "payment_synced_at", "updated_at"])
 
 
 def membership_plan_product_key(plan) -> str:
