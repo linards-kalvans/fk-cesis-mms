@@ -104,6 +104,17 @@ def test_readback_auth_error_maps_to_auth_exception():
 
 
 @override_settings(**INVOICE_NINJA)
+def test_readback_not_found_maps_to_not_found_exception():
+    from apps.integrations import invoice_ninja
+    from apps.integrations.invoice_platform import InvoicePlatformNotFoundError
+
+    fake = SimpleNamespace(status_code=404, json=lambda: {}, text="missing")
+    with patch("apps.integrations.invoice_ninja.requests.request", return_value=fake):
+        with pytest.raises(InvoicePlatformNotFoundError):
+            invoice_ninja.fetch_invoice_payment("inv-gone")
+
+
+@override_settings(**INVOICE_NINJA)
 def test_readback_timeout_maps_to_transient():
     from apps.integrations import invoice_ninja
     from apps.integrations.invoice_platform import InvoicePlatformTransientError
