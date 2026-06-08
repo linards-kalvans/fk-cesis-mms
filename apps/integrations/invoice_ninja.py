@@ -98,10 +98,30 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
     return resp
 
 
+def _find_product_id_by_key(api_url: str, api_key: str, product_key: str) -> str:
+    resp = _request("GET", f"{api_url}/products?product_key={product_key}", api_key)
+    rows = resp.json().get("data", [])
+    if rows:
+        return str(rows[0].get("id", ""))
+    return ""
+
+
+def _find_client_id_by_pk(api_url: str, api_key: str, guardian_pk: int) -> str:
+    resp = _request("GET", f"{api_url}/clients?custom_value1={guardian_pk}", api_key)
+    rows = resp.json().get("data", [])
+    if rows:
+        return str(rows[0].get("id", ""))
+    return ""
+
+
 def ensure_product(plan) -> ProductResult:
     api_url, api_key = _require_config()
+    product_key = membership_plan_product_key(plan)
+    existing = _find_product_id_by_key(api_url, api_key, product_key)
+    if existing:
+        return ProductResult(external_id=existing)
     body = {
-        "product_key": membership_plan_product_key(plan),
+        "product_key": product_key,
         "notes": messages.product_name(plan),
         "price": str(plan.annual_amount),
     }
@@ -114,8 +134,12 @@ def ensure_product(plan) -> ProductResult:
 
 def ensure_client(guardian) -> ClientResult:
     api_url, api_key = _require_config()
+    existing = _find_client_id_by_pk(api_url, api_key, guardian.pk)
+    if existing:
+        return ClientResult(external_id=existing)
     body = {
         "name": guardian.full_name,
+        "custom_value1": str(guardian.pk),
         "contacts": [{"first_name": guardian.full_name, "email": guardian.email}],
     }
     resp = _request("POST", f"{api_url}/clients", api_key, json=body)
