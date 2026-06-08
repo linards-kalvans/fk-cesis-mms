@@ -175,6 +175,12 @@ DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")
 DOCUSEAL_TEMPLATE_ID = os.environ.get("DOCUSEAL_TEMPLATE_ID", "")
 DOCUSEAL_WEBHOOK_SECRET = os.environ.get("DOCUSEAL_WEBHOOK_SECRET", "")
 
+# Invoicing integration (P6 Slice B — Invoice Ninja self-hosted).
+INVOICE_PROVIDER_MODE = os.environ.get("INVOICE_PROVIDER_MODE") or "stub"
+INVOICE_NINJA_API_URL = os.environ.get("INVOICE_NINJA_API_URL", "")
+INVOICE_NINJA_API_KEY = os.environ.get("INVOICE_NINJA_API_KEY", "")
+INVOICE_NINJA_NUMBER_PREFIX = os.environ.get("INVOICE_NINJA_NUMBER_PREFIX") or "MMS"
+
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
     os.environ.get("DOCUMENT_UPLOAD_MAX_BYTES", str(8 * 1024 * 1024))  # 8 MiB
