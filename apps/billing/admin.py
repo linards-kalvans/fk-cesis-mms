@@ -52,18 +52,21 @@ class BillingRecordAdmin(admin.ModelAdmin):
         from apps.integrations.tasks import enqueue_push_billing_record
 
         pushed = 0
-        skipped = 0
+        unconfirmed = 0
+        already = 0
         for record in queryset:
             if record.status != BillingRecord.Status.CONFIRMED:
-                skipped += 1
+                unconfirmed += 1
+                continue
+            if record.external_status == "synced":
+                already += 1
                 continue
             enqueue_push_billing_record(record.pk)
             pushed += 1
-        if skipped:
-            self.message_user(
-                request,
-                f"Izrakstīti {pushed} rēķini. Izlaisti {skipped} (vispirms apstipriniet).",
-                level=messages.WARNING,
-            )
-        else:
-            self.message_user(request, f"Izrakstīti {pushed} rēķini.")
+        parts = [f"Izrakstīti {pushed} rēķini."]
+        if already:
+            parts.append(f"Jau izrakstīti: {already}.")
+        if unconfirmed:
+            parts.append(f"Izlaisti {unconfirmed} (vispirms apstipriniet).")
+        level = messages.WARNING if unconfirmed else messages.INFO
+        self.message_user(request, " ".join(parts), level=level)
