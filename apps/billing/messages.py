@@ -13,7 +13,7 @@ def invoice_line_label(record) -> str:
 
 
 def sibling_discount_note(record) -> str:
-    percent = int(record.sibling_discount_percent_applied)
+    percent = f"{record.sibling_discount_percent_applied:.2f}".rstrip("0").rstrip(".")
     return f"Ietverta {percent}% atlaide"
 
 

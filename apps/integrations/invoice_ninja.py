@@ -86,6 +86,8 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
         raise InvoicePlatformAuthError(f"auth failed: {status}")
     if status == 404:
         raise InvoicePlatformNotFoundError(f"not found: {url}")
+    if status == 408:
+        raise InvoicePlatformTransientError(f"request timeout: {status}")
     if status == 429:
         raise InvoicePlatformTransientError(f"rate limited: {status}")
     if status >= 500:

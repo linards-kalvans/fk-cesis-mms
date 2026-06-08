@@ -31,6 +31,21 @@ def test_sibling_discount_note_uses_percent(active_plan, guardian):
     assert messages.sibling_discount_note(rec) == "Ietverta 50% atlaide"
 
 
+def test_sibling_discount_note_fractional_percent(active_plan, guardian):
+    from apps.billing import messages
+    from apps.members.models import Member
+    from apps.billing.models import BillingRecord
+
+    member = Member.objects.create(full_name="Pēteris", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member, plan=active_plan, season="2026/2027",
+        base_amount=Decimal("300.00"), final_amount=Decimal("200.01"),
+        is_full_price=False,
+        sibling_discount_percent_applied=Decimal("33.33"),
+    )
+    assert messages.sibling_discount_note(rec) == "Ietverta 33.33% atlaide"
+
+
 def test_product_name(active_plan):
     from apps.billing import messages
 
