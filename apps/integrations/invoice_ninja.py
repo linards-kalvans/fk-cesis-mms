@@ -64,6 +64,14 @@ def _build_invoice_body(record, billing_invoice) -> dict:
     }
 
 
+def _unwrap(resp: requests.Response) -> dict:
+    payload = resp.json()
+    if isinstance(payload, dict):
+        inner = payload.get("data", payload)
+        return inner if isinstance(inner, dict) else {}
+    return {}
+
+
 def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response:
     headers = {"X-Api-Token": api_key, **kwargs.pop("headers", {})}
     try:
@@ -78,6 +86,8 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
         raise InvoicePlatformAuthError(f"auth failed: {status}")
     if status == 404:
         raise InvoicePlatformNotFoundError(f"not found: {url}")
+    if status == 429:
+        raise InvoicePlatformTransientError(f"rate limited: {status}")
     if status >= 500:
         raise InvoicePlatformTransientError(f"server error: {status}")
     return resp
@@ -93,7 +103,7 @@ def ensure_product(plan) -> ProductResult:
     resp = _request("POST", f"{api_url}/products", api_key, json=body)
     if resp.status_code >= 400:
         raise InvoicePlatformConfigError(f"product create rejected: {resp.status_code} {resp.text}")
-    data = resp.json().get("data", resp.json())
+    data = _unwrap(resp)
     return ProductResult(external_id=str(data.get("id", "")))
 
 
@@ -106,7 +116,7 @@ def ensure_client(guardian) -> ClientResult:
     resp = _request("POST", f"{api_url}/clients", api_key, json=body)
     if resp.status_code >= 400:
         raise InvoicePlatformConfigError(f"client create rejected: {resp.status_code} {resp.text}")
-    data = resp.json().get("data", resp.json())
+    data = _unwrap(resp)
     return ClientResult(external_id=str(data.get("id", "")))
 
 
@@ -125,10 +135,10 @@ def create_invoice(record, billing_invoice) -> InvoiceResult:
     if resp.status_code >= 400:
         # Idempotency: a duplicate invoice number means a prior attempt created
         # it but we crashed before storing the id. Recover by lookup.
-        if "number" in resp.text.lower():
+        if "invoice number" in resp.text.lower():
             existing = _find_invoice_id_by_number(api_url, api_key, body["number"])
             if existing:
                 return InvoiceResult(external_id=existing)
         raise InvoicePlatformConfigError(f"invoice create rejected: {resp.status_code} {resp.text}")
-    data = resp.json().get("data", resp.json())
+    data = _unwrap(resp)
     return InvoiceResult(external_id=str(data.get("id", "")))

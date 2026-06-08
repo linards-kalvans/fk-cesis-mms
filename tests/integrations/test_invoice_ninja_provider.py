@@ -96,6 +96,18 @@ def test_timeout_maps_to_transient(active_plan, guardian):
 
 
 @override_settings(**INVOICE_NINJA)
+def test_rate_limit_maps_to_transient(active_plan, guardian):
+    from apps.integrations import invoice_ninja
+    from apps.integrations.invoice_platform import InvoicePlatformTransientError
+
+    rec, bi = _record(active_plan, guardian)
+    fake = SimpleNamespace(status_code=429, json=lambda: {}, text="rate limited")
+    with patch("apps.integrations.invoice_ninja.requests.request", return_value=fake):
+        with pytest.raises(InvoicePlatformTransientError):
+            invoice_ninja.create_invoice(rec, bi)
+
+
+@override_settings(**INVOICE_NINJA)
 def test_duplicate_number_recovers_existing_id(active_plan, guardian):
     from apps.integrations import invoice_ninja
 
