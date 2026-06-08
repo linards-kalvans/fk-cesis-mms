@@ -332,6 +332,8 @@ def push_billing_record(record_id: int) -> None:
         return
     if record.status != BillingRecord.Status.CONFIRMED:
         return
+    if record.external_status == "synced":
+        return
 
     record.external_status = "pending"
     record.external_error_code = ""

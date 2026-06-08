@@ -42,6 +42,8 @@ def test_push_is_idempotent(active_plan, guardian):
     push_billing_record(rec.pk)
     push_billing_record(rec.pk)
     assert BillingInvoice.objects.filter(billing_record=rec).count() == 10
+    rec.refresh_from_db()
+    assert rec.external_status == "synced"
 
 
 def test_transient_failure_marks_failed_and_raises(active_plan, guardian, monkeypatch):
