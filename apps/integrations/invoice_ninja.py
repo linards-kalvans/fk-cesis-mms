@@ -6,7 +6,9 @@ apps.integrations.invoice_platform directly (no second mapping layer).
 
 from __future__ import annotations
 
+import datetime
 import logging
+from decimal import Decimal
 
 import requests
 from django.conf import settings
@@ -21,6 +23,7 @@ from apps.integrations.invoice_platform import (
     InvoicePlatformNotFoundError,
     InvoicePlatformTransientError,
     InvoiceResult,
+    PaymentResult,
     ProductResult,
 )
 
@@ -144,3 +147,48 @@ def create_invoice(record, billing_invoice) -> InvoiceResult:
         raise InvoicePlatformConfigError(f"invoice create rejected: {resp.status_code} {resp.text}")
     data = _unwrap(resp)
     return InvoiceResult(external_id=str(data.get("id", "")))
+
+
+def _to_decimal(value) -> Decimal:
+    return Decimal(str(value if value not in (None, "") else "0"))
+
+
+def _payment_status_from(data: dict, paid: Decimal, balance: Decimal) -> str:
+    status_id = str(data.get("status_id", ""))
+    if status_id == "4" or (paid > 0 and balance == 0):
+        return "paid"
+    if status_id == "3" or paid > 0:
+        return "partial"
+    return "unpaid"
+
+
+def _latest_payment_date(data: dict) -> datetime.date | None:
+    payments = data.get("payments") or []
+    dates: list[str] = [
+        str(p["date"]) for p in payments
+        if isinstance(p, dict) and p.get("date")
+    ]
+    if not dates:
+        return None
+    return datetime.date.fromisoformat(max(dates))
+
+
+def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
+    api_url, api_key = _require_config()
+    resp = _request("GET", f"{api_url}/invoices/{external_invoice_id}", api_key)
+    if resp.status_code >= 400:
+        raise InvoicePlatformConfigError(
+            f"invoice fetch rejected: {resp.status_code} {resp.text}"
+        )
+    data = _unwrap(resp)
+    amount = _to_decimal(data.get("amount"))
+    paid = _to_decimal(data.get("paid_to_date"))
+    balance = _to_decimal(data.get("balance"))
+    return PaymentResult(
+        external_invoice_id=external_invoice_id,
+        payment_status=_payment_status_from(data, paid, balance),
+        amount=amount,
+        paid_to_date=paid,
+        balance=balance,
+        last_payment_date=_latest_payment_date(data),
+    )
