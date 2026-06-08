@@ -57,3 +57,12 @@ def test_error_message_fallback():
 
     assert messages.get_invoice_error_message("auth_failed").startswith("Invoice Ninja")
     assert messages.get_invoice_error_message("totally-unknown") == messages._INVOICE_GENERIC
+
+
+def test_payment_status_labels_latvian():
+    from apps.billing.messages import PAYMENT_STATUS_LABELS
+
+    assert PAYMENT_STATUS_LABELS["unpaid"] == "Nav apmaksāts"
+    assert PAYMENT_STATUS_LABELS["partial"] == "Daļēji apmaksāts"
+    assert PAYMENT_STATUS_LABELS["paid"] == "Apmaksāts"
+    assert PAYMENT_STATUS_LABELS[""] == "—"

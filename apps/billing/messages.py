@@ -7,6 +7,13 @@ PAYMENT_MODE_LABELS = {
     "installments": "Pa daļām",
 }
 
+PAYMENT_STATUS_LABELS = {
+    "": "—",
+    "unpaid": "Nav apmaksāts",
+    "partial": "Daļēji apmaksāts",
+    "paid": "Apmaksāts",
+}
+
 
 def invoice_line_label(record) -> str:
     return f"Biedra maksa — {record.member.full_name} — {record.season}"
