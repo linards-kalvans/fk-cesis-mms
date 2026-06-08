@@ -45,7 +45,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
         "member", "plan", "agreement", "season", "base_amount", "is_full_price",
         "sibling_discount_percent_applied", "discount_amount", "final_amount",
         "payment_mode", "full_price_opt_out", "external_status", "external_error_code",
-        "payment_status", "payment_synced_at",
+        "payment_status", "payment_synced_at", "payment_error_code",
         "created_at", "updated_at",
     )
     fields = readonly_fields + (

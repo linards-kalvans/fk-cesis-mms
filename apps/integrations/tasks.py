@@ -468,7 +468,7 @@ def enqueue_sync_billing_record_payments(record_id: int) -> None:
 
 def sync_billing_record_payments(record_id: int) -> None:
     """Manual single-record payment sync (admin action). Surfaces a terminal
-    error on the record's external_error_code; re-raises transient errors so
+    error on the record's payment_error_code; re-raises transient errors so
     the cluster retries."""
     from apps.billing.models import BillingRecord
     from apps.billing.services import roll_up_payment_status
@@ -483,13 +483,13 @@ def sync_billing_record_payments(record_id: int) -> None:
             _sync_invoice_payment(billing_invoice)
         except Exception as exc:
             code, retry = _classify_invoice_error(exc)
-            record.external_error_code = code
-            record.save(update_fields=["external_error_code", "updated_at"])
+            record.payment_error_code = code
+            record.save(update_fields=["payment_error_code", "updated_at"])
             if retry:
                 raise RetryableInvoiceError(code) from exc
             return
 
-    if record.external_error_code:
-        record.external_error_code = ""
-        record.save(update_fields=["external_error_code", "updated_at"])
+    if record.payment_error_code:
+        record.payment_error_code = ""
+        record.save(update_fields=["payment_error_code", "updated_at"])
     roll_up_payment_status(record)

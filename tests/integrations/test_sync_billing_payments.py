@@ -102,7 +102,7 @@ def test_manual_record_sync_surfaces_terminal_error(active_plan, guardian):
     ):
         sync_billing_record_payments(rec.pk)
     rec.refresh_from_db()
-    assert rec.external_error_code == "auth_failed"
+    assert rec.payment_error_code == "auth_failed"
 
 
 def test_manual_record_sync_retryable_raises(active_plan, guardian):
@@ -123,12 +123,33 @@ def test_manual_record_sync_success_clears_error_and_rolls_up(active_plan, guard
     from apps.billing.models import BillingRecord, PaymentStatus
 
     rec = _confirmed_record_with_invoices(active_plan, guardian, ["inv-1"])
-    BillingRecord.objects.filter(pk=rec.pk).update(external_error_code="auth_failed")
+    BillingRecord.objects.filter(pk=rec.pk).update(payment_error_code="auth_failed")
     with patch(
         "apps.integrations.invoice_platform.fetch_invoice_payment",
         return_value=_payment(),
     ):
         sync_billing_record_payments(rec.pk)
     rec.refresh_from_db()
-    assert rec.external_error_code == ""
+    assert rec.payment_error_code == ""
     assert rec.payment_status == PaymentStatus.PAID
+
+
+def test_manual_record_sync_does_not_clear_push_error(active_plan, guardian):
+    """A successful payment read-back must NOT erase a push-side failure signal
+    (external_error_code is the push health field, not the read-back one)."""
+    from apps.integrations.tasks import sync_billing_record_payments
+    from apps.billing.models import BillingRecord, PaymentStatus
+
+    rec = _confirmed_record_with_invoices(active_plan, guardian, ["inv-1"])
+    BillingRecord.objects.filter(pk=rec.pk).update(
+        external_status="failed", external_error_code="misconfigured"
+    )
+    with patch(
+        "apps.integrations.invoice_platform.fetch_invoice_payment",
+        return_value=_payment(),
+    ):
+        sync_billing_record_payments(rec.pk)
+    rec.refresh_from_db()
+    assert rec.external_error_code == "misconfigured"  # push signal preserved
+    assert rec.external_status == "failed"
+    assert rec.payment_status == PaymentStatus.PAID  # read-back still worked

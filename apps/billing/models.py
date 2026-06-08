@@ -98,6 +98,7 @@ class BillingRecord(TimeStampedModel):
         max_length=16, choices=PaymentStatus.choices, blank=True, default=""
     )
     payment_synced_at = models.DateTimeField(null=True, blank=True)
+    payment_error_code = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         constraints = [
