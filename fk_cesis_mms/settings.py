@@ -180,6 +180,13 @@ INVOICE_PROVIDER_MODE = os.environ.get("INVOICE_PROVIDER_MODE") or "stub"
 INVOICE_NINJA_API_URL = os.environ.get("INVOICE_NINJA_API_URL", "")
 INVOICE_NINJA_API_KEY = os.environ.get("INVOICE_NINJA_API_KEY", "")
 INVOICE_NINJA_NUMBER_PREFIX = os.environ.get("INVOICE_NINJA_NUMBER_PREFIX") or "MMS"
+# Localization / time zone. Datetimes are stored in UTC (USE_TZ); TIME_ZONE is
+# the project's local zone used for `timezone.localtime()` and admin rendering.
+# This also fixes the local hour interpreted by the nightly payment-sync schedule
+# below (without it, Django's America/Chicago default would offset the run time).
+TIME_ZONE = os.environ.get("TIME_ZONE") or "Europe/Riga"
+USE_TZ = True
+
 # Hour-of-day (local time, 0-23) for the nightly billing payment-sync sweep.
 # Editable per-environment; the django-q2 Schedule row created by
 # apps/billing/migrations/0005 reads this for its initial next_run.
