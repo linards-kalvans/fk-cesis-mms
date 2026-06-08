@@ -29,6 +29,7 @@ class Guardian(models.Model):
     email = models.EmailField(blank=True, default="")
     phone = models.CharField(max_length=32, blank=True, default="")
     address = models.CharField(max_length=255, blank=True, default="")
+    external_client_id = models.CharField(max_length=64, blank=True, default="")
 
     def __str__(self):
         return self.full_name or str(self.pk)

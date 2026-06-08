@@ -30,6 +30,7 @@ class MembershipPlan(TimeStampedModel):
     installment_count = models.PositiveSmallIntegerField(default=1)
     first_installment_month = models.PositiveSmallIntegerField(default=9)
     is_active = models.BooleanField(default=False)
+    external_product_id = models.CharField(max_length=64, blank=True, default="")
 
     def __str__(self) -> str:
         return str(self.name)
@@ -85,6 +86,8 @@ class BillingRecord(TimeStampedModel):
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.DRAFT
     )
+    external_status = models.CharField(max_length=16, blank=True, default="")
+    external_error_code = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         constraints = [
@@ -96,3 +99,32 @@ class BillingRecord(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.member} — {self.season} — {self.final_amount} {self.plan.currency}"
+
+
+class BillingInvoice(TimeStampedModel):
+    """One Invoice Ninja invoice per installment of a BillingRecord (upfront =
+    a single row). Materialized at push time from derive_installment_schedule;
+    holds the external invoice id + sync status (payment status arrives in
+    Slice C)."""
+
+    billing_record = models.ForeignKey(
+        BillingRecord, on_delete=models.CASCADE, related_name="invoices"
+    )
+    sequence = models.PositiveSmallIntegerField()
+    due_date = models.DateField()
+    amount = models.DecimalField(max_digits=8, decimal_places=2)
+
+    external_invoice_id = models.CharField(max_length=64, blank=True, default="")
+    external_status = models.CharField(max_length=16, blank=True, default="")
+    external_error_code = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["billing_record", "sequence"],
+                name="one_invoice_per_record_sequence",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.billing_record_id} #{self.sequence} — {self.amount}"
