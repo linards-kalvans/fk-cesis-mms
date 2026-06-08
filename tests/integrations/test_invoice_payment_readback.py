@@ -6,8 +6,6 @@ from unittest.mock import patch  # noqa: F401
 import requests  # noqa: F401
 from django.test import override_settings
 
-pytestmark = pytest.mark.django_db
-
 INVOICE_NINJA = dict(
     INVOICE_PROVIDER_MODE="invoiceninja",
     INVOICE_NINJA_API_URL="https://in.example.com/api/v1",
@@ -21,6 +19,7 @@ def test_stub_mode_returns_unpaid_projection():
     result = invoice_platform.fetch_invoice_payment("anything")
     assert result.external_invoice_id == "anything"
     assert result.payment_status == "unpaid"
+    assert result.amount == Decimal("0.00")
     assert result.paid_to_date == Decimal("0.00")
     assert result.balance is None
     assert result.last_payment_date is None
