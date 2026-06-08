@@ -46,3 +46,15 @@ def test_backfill_noop_without_active_plan(db, guardian):
     _signed_member(guardian, "Jānis")
     call_command("backfill_billing", stdout=StringIO())
     assert BillingRecord.objects.count() == 0
+
+
+def test_backfill_reports_honest_created_count(active_plan, guardian):
+    member = _signed_member(guardian, "Jānis")  # noqa: F841
+
+    out = StringIO()
+    call_command("backfill_billing", stdout=out)
+    assert "1 created" in out.getvalue()
+
+    out2 = StringIO()
+    call_command("backfill_billing", stdout=out2)
+    assert "0 created" in out2.getvalue()

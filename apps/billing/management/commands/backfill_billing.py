@@ -10,7 +10,9 @@ class Command(BaseCommand):
     help = "Backfill draft billing records for signed agreements without one."
 
     def handle(self, *args, **options):
-        created = 0
+        from apps.billing.models import BillingRecord
+
+        before = BillingRecord.objects.count()
         seen_members = set()
         signed = (
             Agreement.objects.filter(state=Agreement.State.SIGNED)
@@ -21,7 +23,6 @@ class Command(BaseCommand):
             if agreement.member_id in seen_members:
                 continue
             seen_members.add(agreement.member_id)
-            record = create_draft_billing_for_member(agreement.member, agreement=agreement)
-            if record is not None and record.agreement_id == agreement.pk:
-                created += 1
+            create_draft_billing_for_member(agreement.member, agreement=agreement)
+        created = BillingRecord.objects.count() - before
         self.stdout.write(self.style.SUCCESS(f"Backfill complete: {created} created."))
