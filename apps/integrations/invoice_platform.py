@@ -57,9 +57,9 @@ def ensure_product(plan) -> ProductResult:
     if mode == "stub":
         return ProductResult(external_id=f"stub-product-{plan.pk}")
     if mode == "invoiceninja":
-        from apps.integrations import invoice_ninja  # type: ignore[attr-defined]
+        from apps.integrations import invoice_ninja
 
-        return invoice_ninja.ensure_product(plan)  # type: ignore[no-any-return]
+        return invoice_ninja.ensure_product(plan)
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
 
 
@@ -68,9 +68,9 @@ def ensure_client(guardian) -> ClientResult:
     if mode == "stub":
         return ClientResult(external_id=f"stub-client-{guardian.pk}")
     if mode == "invoiceninja":
-        from apps.integrations import invoice_ninja  # type: ignore[attr-defined]
+        from apps.integrations import invoice_ninja
 
-        return invoice_ninja.ensure_client(guardian)  # type: ignore[no-any-return]
+        return invoice_ninja.ensure_client(guardian)
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
 
 
@@ -79,7 +79,7 @@ def create_invoice(record, billing_invoice) -> InvoiceResult:
     if mode == "stub":
         return InvoiceResult(external_id=f"stub-invoice-{billing_invoice.pk}")
     if mode == "invoiceninja":
-        from apps.integrations import invoice_ninja  # type: ignore[attr-defined]
+        from apps.integrations import invoice_ninja
 
-        return invoice_ninja.create_invoice(record, billing_invoice)  # type: ignore[no-any-return]
+        return invoice_ninja.create_invoice(record, billing_invoice)
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
