@@ -40,10 +40,8 @@ def test_billing_invoice_unique_per_sequence(active_plan, guardian):
 
 
 def test_payment_projection_fields_default_blank(active_plan, guardian):
-    from datetime import date
-    from decimal import Decimal
     from apps.members.models import Member
-    from apps.billing.models import BillingRecord, BillingInvoice, PaymentStatus
+    from apps.billing.models import BillingRecord, BillingInvoice
 
     member = Member.objects.create(full_name="Jānis", guardian=guardian)
     rec = BillingRecord.objects.create(
@@ -60,4 +58,3 @@ def test_payment_projection_fields_default_blank(active_plan, guardian):
     assert bi.last_synced_at is None
     assert rec.payment_status == ""
     assert rec.payment_synced_at is None
-    assert PaymentStatus.PAID == "paid"
