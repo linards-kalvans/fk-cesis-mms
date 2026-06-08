@@ -180,6 +180,10 @@ INVOICE_PROVIDER_MODE = os.environ.get("INVOICE_PROVIDER_MODE") or "stub"
 INVOICE_NINJA_API_URL = os.environ.get("INVOICE_NINJA_API_URL", "")
 INVOICE_NINJA_API_KEY = os.environ.get("INVOICE_NINJA_API_KEY", "")
 INVOICE_NINJA_NUMBER_PREFIX = os.environ.get("INVOICE_NINJA_NUMBER_PREFIX") or "MMS"
+# Hour-of-day (local time, 0-23) for the nightly billing payment-sync sweep.
+# Editable per-environment; the django-q2 Schedule row created by
+# apps/billing/migrations/0005 reads this for its initial next_run.
+BILLING_PAYMENT_SYNC_HOUR = int(os.environ.get("BILLING_PAYMENT_SYNC_HOUR", "3"))
 
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
