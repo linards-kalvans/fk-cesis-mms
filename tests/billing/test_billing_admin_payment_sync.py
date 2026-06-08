@@ -70,4 +70,6 @@ def test_changelist_shows_payment_status_column(active_plan, guardian, staff_cli
     url = reverse("admin:billing_billingrecord_changelist")
     resp = staff_client.get(url)
     assert resp.status_code == 200
-    assert b"payment" in resp.content.lower()
+    # Django renders the column as a `column-payment_status` <th>, so this
+    # asserts the column is actually present (not just the action label copy).
+    assert b"column-payment_status" in resp.content
