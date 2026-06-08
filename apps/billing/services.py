@@ -171,3 +171,34 @@ def recompute_billing_record(record) -> None:
             "updated_at",
         ]
     )
+
+
+def membership_plan_product_key(plan) -> str:
+    """Deterministic Invoice Ninja product_key for a plan (no stored column,
+    so it can never drift): season "2026/2027" -> "biedra-maksa-2026-2027"."""
+    slug = plan.season.replace("/", "-")
+    return f"biedra-maksa-{slug}"
+
+
+def materialize_installments(record):
+    """Create the BillingInvoice rows for a record from the snapshotted
+    final_amount, idempotently. Upfront -> one row due on the first
+    installment date; installments -> derive_installment_schedule rows."""
+    from apps.billing.models import BillingInvoice, BillingRecord
+
+    existing = list(record.invoices.order_by("sequence"))
+    if existing:
+        return existing
+
+    schedule = derive_installment_schedule(record.plan, record.final_amount)
+    if record.payment_mode == BillingRecord.PaymentMode.UPFRONT:
+        first_due = schedule[0][0]
+        schedule = [(first_due, record.final_amount)]
+
+    rows = [
+        BillingInvoice.objects.create(
+            billing_record=record, sequence=i, due_date=due, amount=amount
+        )
+        for i, (due, amount) in enumerate(schedule, start=1)
+    ]
+    return rows
