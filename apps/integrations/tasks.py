@@ -405,3 +405,91 @@ def push_billing_record(record_id: int) -> None:
         record.external_status = "synced"
         record.external_error_code = ""
     record.save(update_fields=["external_status", "external_error_code", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# Payment sync pipeline — P6 Slice C
+# ---------------------------------------------------------------------------
+
+
+def _sync_invoice_payment(billing_invoice) -> None:
+    """Fetch + write the payment projection for one invoice. Raises on
+    provider error (caller decides isolation vs. surfacing)."""
+    result = invoice_platform.fetch_invoice_payment(billing_invoice.external_invoice_id)
+    billing_invoice.payment_status = result.payment_status
+    billing_invoice.paid_to_date = result.paid_to_date
+    billing_invoice.balance = result.balance
+    billing_invoice.last_payment_date = result.last_payment_date
+    billing_invoice.last_synced_at = timezone.now()
+    billing_invoice.save(
+        update_fields=[
+            "payment_status",
+            "paid_to_date",
+            "balance",
+            "last_payment_date",
+            "last_synced_at",
+            "updated_at",
+        ]
+    )
+
+
+def sync_billing_payments() -> None:
+    """Scheduled nightly sweep: refresh the payment projection for every
+    invoice with an external id. Per-row errors are logged and skipped so one
+    bad row never aborts the run."""
+    from apps.billing.models import BillingInvoice
+    from apps.billing.services import roll_up_payment_status
+
+    invoices = BillingInvoice.objects.exclude(external_invoice_id="").select_related(
+        "billing_record"
+    )
+    touched: dict[int, object] = {}
+    for billing_invoice in invoices:
+        try:
+            _sync_invoice_payment(billing_invoice)
+        except Exception as exc:  # noqa: BLE001 - batch sweep isolates per-row failures
+            logger.warning(
+                "payment sync failed for invoice %s: %s", billing_invoice.pk, exc
+            )
+            continue
+        touched[billing_invoice.billing_record_id] = billing_invoice.billing_record
+    for record in touched.values():
+        roll_up_payment_status(record)
+
+
+def enqueue_sync_billing_record_payments(record_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.sync_billing_record_payments", record_id
+        )
+    except RetryableInvoiceError:
+        return
+
+
+def sync_billing_record_payments(record_id: int) -> None:
+    """Manual single-record payment sync (admin action). Surfaces a terminal
+    error on the record's external_error_code; re-raises transient errors so
+    the cluster retries."""
+    from apps.billing.models import BillingRecord
+    from apps.billing.services import roll_up_payment_status
+
+    try:
+        record = BillingRecord.objects.get(pk=record_id)
+    except BillingRecord.DoesNotExist:
+        return
+
+    for billing_invoice in record.invoices.exclude(external_invoice_id=""):
+        try:
+            _sync_invoice_payment(billing_invoice)
+        except Exception as exc:
+            code, retry = _classify_invoice_error(exc)
+            record.external_error_code = code
+            record.save(update_fields=["external_error_code", "updated_at"])
+            if retry:
+                raise RetryableInvoiceError(code) from exc
+            return
+
+    if record.external_error_code:
+        record.external_error_code = ""
+        record.save(update_fields=["external_error_code", "updated_at"])
+    roll_up_payment_status(record)
