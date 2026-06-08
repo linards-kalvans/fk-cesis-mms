@@ -13,6 +13,12 @@ from django.db import models
 from apps.core.models import TimeStampedModel
 
 
+class PaymentStatus(models.TextChoices):
+    UNPAID = "unpaid", "Nav apmaksāts"
+    PARTIAL = "partial", "Daļēji apmaksāts"
+    PAID = "paid", "Apmaksāts"
+
+
 class MembershipPlan(TimeStampedModel):
     """Staff-editable billing configuration. Exactly one row is expected to be
     active at a time (enforced by convention + the active-plan lookup, not a DB
@@ -88,6 +94,10 @@ class BillingRecord(TimeStampedModel):
     )
     external_status = models.CharField(max_length=16, blank=True, default="")
     external_error_code = models.CharField(max_length=64, blank=True, default="")
+    payment_status = models.CharField(
+        max_length=16, choices=PaymentStatus.choices, blank=True, default=""
+    )
+    payment_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -117,6 +127,17 @@ class BillingInvoice(TimeStampedModel):
     external_invoice_id = models.CharField(max_length=64, blank=True, default="")
     external_status = models.CharField(max_length=16, blank=True, default="")
     external_error_code = models.CharField(max_length=64, blank=True, default="")
+    payment_status = models.CharField(
+        max_length=16, choices=PaymentStatus.choices, blank=True, default=""
+    )
+    paid_to_date = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal("0.00")
+    )
+    balance = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True
+    )
+    last_payment_date = models.DateField(null=True, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

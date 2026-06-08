@@ -37,3 +37,27 @@ def test_billing_invoice_unique_per_sequence(active_plan, guardian):
         BillingInvoice.objects.create(
             billing_record=rec, sequence=1, due_date=date(2026, 10, 1), amount=Decimal("30.00")
         )
+
+
+def test_payment_projection_fields_default_blank(active_plan, guardian):
+    from datetime import date
+    from decimal import Decimal
+    from apps.members.models import Member
+    from apps.billing.models import BillingRecord, BillingInvoice, PaymentStatus
+
+    member = Member.objects.create(full_name="Jānis", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member, plan=active_plan, season="2026/2027",
+        base_amount=Decimal("300.00"), final_amount=Decimal("300.00"),
+    )
+    bi = BillingInvoice.objects.create(
+        billing_record=rec, sequence=1, due_date=date(2026, 9, 1), amount=Decimal("30.00"),
+    )
+    assert bi.payment_status == ""
+    assert bi.paid_to_date == Decimal("0.00")
+    assert bi.balance is None
+    assert bi.last_payment_date is None
+    assert bi.last_synced_at is None
+    assert rec.payment_status == ""
+    assert rec.payment_synced_at is None
+    assert PaymentStatus.PAID == "paid"
