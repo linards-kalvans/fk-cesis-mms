@@ -10,6 +10,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fk_cesis_mms.settings")
 # (which used to exercise a synchronous code path) keep their existing
 # observable behavior under the Phase 1 async refactor.
 os.environ.setdefault("Q_CLUSTER_SYNC", "1")
+# Tests must never hit live external providers from a developer's .env.
+# settings.py loads .env with override=False, so these defaults (set before
+# settings import) win over any real-provider values in .env. Tests that need a
+# real-provider code path opt in explicitly via @override_settings(...).
+os.environ.setdefault("INVOICE_PROVIDER_MODE", "stub")
+os.environ.setdefault("AGREEMENT_PROVIDER_MODE", "stub")
+os.environ.setdefault("OCR_PROVIDER_MODE", "stub")
 
 
 def pytest_configure(config):
