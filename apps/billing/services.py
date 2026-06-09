@@ -91,15 +91,15 @@ def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.dat
     schedule: list[tuple[datetime.date, Decimal]] = []
     month = int(plan.first_installment_month)
     year = start_year
-    guard = 0
     for amount in amounts:
+        skipped = 0
         while month in skip:
             month += 1
             if month > 12:
                 month = 1
                 year += 1
-            guard += 1
-            if guard > 240:  # safety: skip_months must never cover all 12
+            skipped += 1
+            if skipped > 12:  # 12 consecutive skips => every month is skipped
                 raise ValueError(
                     "derive_installment_schedule: no billing months available"
                 )
