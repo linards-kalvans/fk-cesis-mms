@@ -6,6 +6,7 @@ snapshots the computed amounts so later plan edits do not mutate drafts.
 
 from __future__ import annotations
 
+import calendar
 import datetime
 import logging
 from dataclasses import dataclass
@@ -71,26 +72,39 @@ def compute_billing_amounts(member, plan) -> BillingAmounts:
 
 
 def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.date, Decimal]]:
-    """Split `total` into `plan.installment_count` equal monthly entries starting
-    at `plan.first_installment_month`. Equal cents; the last entry absorbs the
-    rounding remainder. Due dates are the 1st of each successive month; the year
-    is anchored to the first year in `plan.season` ("2026/2027" -> 2026) and rolls
-    forward when the month wraps past December.
-
-    Exact day-of-month and final calendar anchoring are revisited in Slice B once
-    the Invoice Ninja API dictates the invoice shape.
-    """
+    """Split `total` into `plan.installment_count` equal monthly entries, placed on
+    successive billing months starting at `plan.first_installment_month` and SKIPPING
+    any month in `plan.skip_months_list` (default July + December). Equal cents; the
+    last entry absorbs the rounding remainder. Each due date is `plan.payment_due_day`
+    clamped to the month length. The year is anchored to the first year in
+    `plan.season` ("2026/2027" -> 2026) and rolls forward when the month wraps past
+    December."""
     count = max(int(plan.installment_count), 1)
     per = _money(total / Decimal(count))
     amounts = [per] * (count - 1)
     amounts.append(_money(total - per * (count - 1)))
 
+    skip = set(plan.skip_months_list)
+    due_day = int(plan.payment_due_day)
     start_year = int(plan.season.split("/")[0])
+
     schedule: list[tuple[datetime.date, Decimal]] = []
     month = int(plan.first_installment_month)
     year = start_year
+    guard = 0
     for amount in amounts:
-        schedule.append((datetime.date(year, month, 1), amount))
+        while month in skip:
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+            guard += 1
+            if guard > 240:  # safety: skip_months must never cover all 12
+                raise ValueError(
+                    "derive_installment_schedule: no billing months available"
+                )
+        day = min(due_day, calendar.monthrange(year, month)[1])
+        schedule.append((datetime.date(year, month, day), amount))
         month += 1
         if month > 12:
             month = 1
