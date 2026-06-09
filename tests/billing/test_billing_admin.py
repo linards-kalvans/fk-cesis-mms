@@ -68,3 +68,13 @@ def test_admin_registered():
 
     assert admin.site.is_registered(BillingRecord)
     assert admin.site.is_registered(MembershipPlan)
+
+
+def test_membership_plan_admin_shows_schedule_fields(active_plan, staff_client):
+    from django.urls import reverse
+
+    url = reverse("admin:billing_membershipplan_change", args=[active_plan.pk])
+    resp = staff_client.get(url)
+    assert resp.status_code == 200
+    assert b"payment_due_day" in resp.content
+    assert b"skip_months" in resp.content

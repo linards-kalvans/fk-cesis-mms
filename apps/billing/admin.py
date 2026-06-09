@@ -10,7 +10,7 @@ from apps.billing.services import recompute_billing_record
 class MembershipPlanAdmin(admin.ModelAdmin):
     list_display = (
         "name", "season", "annual_amount", "sibling_discount_percent",
-        "installment_count", "first_installment_month", "is_active",
+        "installment_count", "first_installment_month", "payment_due_day", "is_active",
     )
     list_filter = ("season", "is_active")
 
