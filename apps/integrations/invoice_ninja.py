@@ -110,18 +110,29 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
 
 
 def _find_product_id_by_key(api_url: str, api_key: str, product_key: str) -> str:
-    resp = _request("GET", f"{api_url}/products?product_key={product_key}", api_key)
+    # Invoice Ninja's `?filter=` does a fuzzy search (it does NOT support an exact
+    # `?product_key=` filter — that param is silently ignored and returns every
+    # row). So narrow with `?filter=` then verify the exact product_key
+    # client-side; never reuse a row that does not actually match.
+    resp = _request("GET", f"{api_url}/products?filter={product_key}&per_page=100", api_key)
     rows = resp.json().get("data", [])
-    if rows:
-        return str(rows[0].get("id", ""))
+    for row in rows:
+        if str(row.get("product_key", "")) == product_key:
+            return str(row.get("id", ""))
     return ""
 
 
 def _find_client_id_by_pk(api_url: str, api_key: str, guardian_pk: int) -> str:
-    resp = _request("GET", f"{api_url}/clients?custom_value1={guardian_pk}", api_key)
+    # `?custom_value1=` is ignored by Invoice Ninja (returns every client), so a
+    # bare rows[0] would reuse an arbitrary/foreign client. Narrow with the fuzzy
+    # `?filter=` (which DOES search custom fields) then verify custom_value1
+    # equals the guardian pk exactly before reusing.
+    target = str(guardian_pk)
+    resp = _request("GET", f"{api_url}/clients?filter={target}&per_page=100", api_key)
     rows = resp.json().get("data", [])
-    if rows:
-        return str(rows[0].get("id", ""))
+    for row in rows:
+        if str(row.get("custom_value1", "")) == target:
+            return str(row.get("id", ""))
     return ""
 
 
