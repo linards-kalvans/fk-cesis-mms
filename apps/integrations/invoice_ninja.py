@@ -109,14 +109,25 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
     return resp
 
 
+def _is_deleted(row: dict) -> bool:
+    """True if an Invoice Ninja row is archived or soft-deleted — such rows must
+    never be reused for idempotency (their ids are invalid on new invoices)."""
+    return bool(row.get("is_deleted")) or bool(row.get("archived_at"))
+
+
 def _find_product_id_by_key(api_url: str, api_key: str, product_key: str) -> str:
     # Invoice Ninja's `?filter=` does a fuzzy search (it does NOT support an exact
     # `?product_key=` filter — that param is silently ignored and returns every
-    # row). So narrow with `?filter=` then verify the exact product_key
-    # client-side; never reuse a row that does not actually match.
-    resp = _request("GET", f"{api_url}/products?filter={product_key}&per_page=100", api_key)
+    # row). So narrow with `?filter=`, restrict to active records (`status=active`
+    # — the default list also returns archived/soft-deleted rows, which must never
+    # be reused), then verify the exact product_key client-side.
+    resp = _request(
+        "GET", f"{api_url}/products?filter={product_key}&status=active&per_page=100", api_key
+    )
     rows = resp.json().get("data", [])
     for row in rows:
+        if _is_deleted(row):
+            continue
         if str(row.get("product_key", "")) == product_key:
             return str(row.get("id", ""))
     return ""
@@ -125,12 +136,17 @@ def _find_product_id_by_key(api_url: str, api_key: str, product_key: str) -> str
 def _find_client_id_by_pk(api_url: str, api_key: str, guardian_pk: int) -> str:
     # `?custom_value1=` is ignored by Invoice Ninja (returns every client), so a
     # bare rows[0] would reuse an arbitrary/foreign client. Narrow with the fuzzy
-    # `?filter=` (which DOES search custom fields) then verify custom_value1
+    # `?filter=` (which DOES search custom fields), restrict to active records
+    # (`status=active` excludes archived/soft-deleted), then verify custom_value1
     # equals the guardian pk exactly before reusing.
     target = str(guardian_pk)
-    resp = _request("GET", f"{api_url}/clients?filter={target}&per_page=100", api_key)
+    resp = _request(
+        "GET", f"{api_url}/clients?filter={target}&status=active&per_page=100", api_key
+    )
     rows = resp.json().get("data", [])
     for row in rows:
+        if _is_deleted(row):
+            continue
         if str(row.get("custom_value1", "")) == target:
             return str(row.get("id", ""))
     return ""
@@ -172,10 +188,17 @@ def ensure_client(guardian) -> ClientResult:
 
 
 def _find_invoice_id_by_number(api_url: str, api_key: str, number: str) -> str:
-    resp = _request("GET", f"{api_url}/invoices?number={number}", api_key)
+    # Only recover an ACTIVE invoice with this number (a soft-deleted one must
+    # not be reused), and verify the number matches exactly.
+    resp = _request(
+        "GET", f"{api_url}/invoices?number={number}&status=active&per_page=100", api_key
+    )
     rows = resp.json().get("data", [])
-    if rows:
-        return str(rows[0].get("id", ""))
+    for row in rows:
+        if _is_deleted(row):
+            continue
+        if str(row.get("number", "")) == number:
+            return str(row.get("id", ""))
     return ""
 
 

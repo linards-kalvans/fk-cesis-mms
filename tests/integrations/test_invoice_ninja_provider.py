@@ -130,12 +130,16 @@ def test_duplicate_number_recovers_existing_id(active_plan, guardian):
     from apps.integrations import invoice_ninja
 
     rec, bi = _record(active_plan, guardian)
+    number = invoice_ninja._number(rec, bi.sequence)
     post_resp = SimpleNamespace(
         status_code=422, json=lambda: {},
         text='{"message":"The given data was invalid.","errors":{"number":["The number has already been taken."]}}'
     )
+    # The recovery lookup verifies the number matches and the row is active.
     lookup_resp = SimpleNamespace(
-        status_code=200, json=lambda: {"data": [{"id": "inv-existing"}]}, text=""
+        status_code=200,
+        json=lambda: {"data": [{"id": "inv-existing", "number": number}]},
+        text="",
     )
     with patch(
         "apps.integrations.invoice_ninja.requests.request",

@@ -33,8 +33,10 @@ def test_ensure_product_reuses_existing_by_product_key(active_plan):
     assert result.external_id == "prod-existing"
     # Only the GET lookup happened — no POST create.
     assert all(call.args[0] == "GET" for call in m.call_args_list)
-    # And the lookup used the fuzzy ?filter= (not the ignored ?product_key=).
+    # The lookup uses the fuzzy ?filter= (not the ignored ?product_key=) and
+    # restricts to active records (archived/soft-deleted must not be reused).
     assert "filter=" in m.call_args_list[0].args[1]
+    assert "status=active" in m.call_args_list[0].args[1]
 
 
 @override_settings(**INVOICE_NINJA)
@@ -90,6 +92,34 @@ def test_ensure_client_reuses_existing_by_guardian_pk(guardian):
     assert result.external_id == "client-existing"
     assert all(call.args[0] == "GET" for call in m.call_args_list)
     assert "filter=" in m.call_args_list[0].args[1]
+    assert "status=active" in m.call_args_list[0].args[1]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_ensure_client_ignores_soft_deleted_match(guardian):
+    from apps.integrations import invoice_ninja
+
+    # Regression: a row whose custom_value1 matches but which is archived/
+    # soft-deleted must NOT be reused (its id is invalid on a new invoice —
+    # this is what broke a re-push after the IN test data was wiped).
+    lookup = SimpleNamespace(
+        status_code=200,
+        json=lambda: {
+            "data": [
+                {"id": "dead-client", "custom_value1": str(guardian.pk),
+                 "is_deleted": True, "archived_at": 1781012696}
+            ]
+        },
+        text="",
+    )
+    create = SimpleNamespace(status_code=200, json=lambda: {"id": "client-new"}, text="")
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request",
+        side_effect=[lookup, create],
+    ) as m:
+        result = invoice_ninja.ensure_client(guardian)
+    assert result.external_id == "client-new"
+    assert m.call_args_list[1].args[0] == "POST"
 
 
 @override_settings(**INVOICE_NINJA)
