@@ -48,7 +48,9 @@ def test_build_invoice_body_shape(active_plan, guardian):
     line = body["line_items"][0]
     assert line["product_key"] == "biedra-maksa-2026-2027"
     assert line["cost"] == "30.00"
-    assert line["notes"] == "Biedra maksa — Jānis — 2026/2027"
+    assert line["notes"] == "Biedra maksa 2026/2027"
+    assert "Jānis" not in line["notes"]
+    assert body["public_notes"] == "Biedra maksa — Jānis — 2026/2027"
 
 
 @override_settings(**INVOICE_NINJA)
@@ -56,8 +58,10 @@ def test_sibling_note_appended_for_discounted(active_plan, guardian):
     from apps.integrations import invoice_ninja
 
     rec, bi = _record(active_plan, guardian, full_price=False)
-    line = invoice_ninja._build_invoice_body(rec, bi)["line_items"][0]
-    assert "Ietverta 50% atlaide" in line["notes"]
+    body = invoice_ninja._build_invoice_body(rec, bi)
+    line = body["line_items"][0]
+    assert "Ietverta 50% atlaide" in body["public_notes"]
+    assert "Ietverta" not in line["notes"]
 
 
 @override_settings(**INVOICE_NINJA)
@@ -70,6 +74,8 @@ def test_create_invoice_posts_and_returns_id(active_plan, guardian):
         result = invoice_ninja.create_invoice(rec, bi)
     assert result.external_id == "inv-99"
     assert m.call_args.kwargs["headers"]["X-Api-Token"] == "secret-token"
+    assert m.call_args.kwargs["headers"]["X-Requested-With"] == "XMLHttpRequest"
+    assert m.call_args.kwargs["headers"]["Accept"] == "application/json"
 
 
 @override_settings(**INVOICE_NINJA)
@@ -125,7 +131,8 @@ def test_duplicate_number_recovers_existing_id(active_plan, guardian):
 
     rec, bi = _record(active_plan, guardian)
     post_resp = SimpleNamespace(
-        status_code=422, json=lambda: {}, text="invoice number has already been taken"
+        status_code=422, json=lambda: {},
+        text='{"message":"The given data was invalid.","errors":{"number":["The number has already been taken."]}}'
     )
     lookup_resp = SimpleNamespace(
         status_code=200, json=lambda: {"data": [{"id": "inv-existing"}]}, text=""

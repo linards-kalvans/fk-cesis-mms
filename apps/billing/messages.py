@@ -24,6 +24,16 @@ def sibling_discount_note(record) -> str:
     return f"Ietverta {percent}% atlaide"
 
 
+def invoice_public_note(record) -> str:
+    """Per-member, per-invoice detail shown on the Invoice Ninja invoice
+    (public_notes). Kept off the line item so it never pollutes the shared
+    catalog product via Invoice Ninja's "Update Products" behaviour."""
+    note = invoice_line_label(record)
+    if not record.is_full_price:
+        note = f"{note}  {sibling_discount_note(record)}"
+    return note
+
+
 def product_name(plan) -> str:
     return f"Biedra maksa {plan.season}"
 

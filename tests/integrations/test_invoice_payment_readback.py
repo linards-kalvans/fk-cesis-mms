@@ -53,6 +53,7 @@ def test_paid_invoice_maps_to_paid_with_amounts():
     assert result.last_payment_date == date(2026, 9, 15)
     assert m.call_args.kwargs["headers"]["X-Api-Token"] == "secret-token"
     assert m.call_args.args[0] == "GET"
+    assert "include=payments" in m.call_args.args[1]
 
 
 @override_settings(**INVOICE_NINJA)

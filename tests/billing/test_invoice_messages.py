@@ -66,3 +66,17 @@ def test_payment_status_labels_latvian():
     assert PAYMENT_STATUS_LABELS["partial"] == "Daļēji apmaksāts"
     assert PAYMENT_STATUS_LABELS["paid"] == "Apmaksāts"
     assert PAYMENT_STATUS_LABELS[""] == "—"
+
+
+def test_invoice_public_note_full_price_and_discounted(active_plan, guardian):
+    from apps.billing import messages
+
+    full_rec = _record(active_plan, guardian, full_price=True)
+    note_full = messages.invoice_public_note(full_rec)
+    assert note_full == f"Biedra maksa — {full_rec.member.full_name} — {full_rec.season}"
+    assert "atlaide" not in note_full
+
+    disc_rec = _record(active_plan, guardian, full_price=False)
+    note_disc = messages.invoice_public_note(disc_rec)
+    assert f"Biedra maksa — {disc_rec.member.full_name} — {disc_rec.season}" in note_disc
+    assert "Ietverta 50% atlaide" in note_disc

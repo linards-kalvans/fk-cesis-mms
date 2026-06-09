@@ -46,12 +46,13 @@ def _number(record, sequence: int) -> str:
 
 
 def _build_line_item(record, billing_invoice) -> dict:
-    notes = messages.invoice_line_label(record)
-    if not record.is_full_price:
-        notes = f"{notes}  {messages.sibling_discount_note(record)}"
+    # Keep the line description generic. Invoice Ninja's "Update Products"
+    # setting copies a line's notes onto the shared catalog product whenever
+    # the line carries that product_key, so member-specific text here would
+    # pollute the product. Per-member detail goes on the invoice public_notes.
     return {
         "product_key": membership_plan_product_key(record.plan),
-        "notes": notes,
+        "notes": messages.product_name(record.plan),
         "cost": str(billing_invoice.amount),
         "quantity": 1,
     }
@@ -63,6 +64,7 @@ def _build_invoice_body(record, billing_invoice) -> dict:
         "number": _number(record, billing_invoice.sequence),
         "date": timezone.now().date().isoformat(),
         "due_date": billing_invoice.due_date.isoformat(),
+        "public_notes": messages.invoice_public_note(record),
         "line_items": [_build_line_item(record, billing_invoice)],
     }
 
@@ -76,7 +78,16 @@ def _unwrap(resp: requests.Response) -> dict:
 
 
 def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response:
-    headers = {"X-Api-Token": api_key, **kwargs.pop("headers", {})}
+    # Invoice Ninja only returns JSON + proper HTTP status codes when the
+    # request is marked as an API/XHR call. Without these headers a failed
+    # request (e.g. a 422 validation error) redirects to the web app and comes
+    # back as 200 + SPA HTML, which then breaks JSON parsing downstream.
+    headers = {
+        "X-Api-Token": api_key,
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json",
+        **kwargs.pop("headers", {}),
+    }
     try:
         resp = requests.request(method, url, headers=headers, timeout=_TIMEOUT, **kwargs)
     except requests.Timeout as exc:
@@ -163,8 +174,9 @@ def create_invoice(record, billing_invoice) -> InvoiceResult:
     resp = _request("POST", f"{api_url}/invoices", api_key, json=body)
     if resp.status_code >= 400:
         # Idempotency: a duplicate invoice number means a prior attempt created
-        # it but we crashed before storing the id. Recover by lookup.
-        if "invoice number" in resp.text.lower():
+        # it but we crashed before storing the id. Recover by lookup. Invoice
+        # Ninja reports this as a 422 with "The number has already been taken."
+        if "already been taken" in resp.text.lower():
             existing = _find_invoice_id_by_number(api_url, api_key, body["number"])
             if existing:
                 return InvoiceResult(external_id=existing)
@@ -199,7 +211,11 @@ def _latest_payment_date(data: dict) -> datetime.date | None:
 
 def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
     api_url, api_key = _require_config()
-    resp = _request("GET", f"{api_url}/invoices/{external_invoice_id}", api_key)
+    # ?include=payments embeds the payment records so we can read the latest
+    # payment date — Invoice Ninja does not embed them on the invoice by default.
+    resp = _request(
+        "GET", f"{api_url}/invoices/{external_invoice_id}?include=payments", api_key
+    )
     if resp.status_code >= 400:
         raise InvoicePlatformConfigError(
             f"invoice fetch rejected: {resp.status_code} {resp.text}"
