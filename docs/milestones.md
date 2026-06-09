@@ -95,6 +95,12 @@ Do **not** use archived implementation plans for current planning unless user ex
 - billing / Invoice Ninja sync not implemented yet (P6 target)
 - admin export and operations polish still pending (P7 target)
 
+### Billing gaps (P6 follow-ups, deferred during Slice C live validation 2026-06-09)
+- **Invoice issue/send policy** — pushed invoices land in Invoice Ninja **Draft** status (`status_id=1`), invisible to the guardian until "sent". Decide and implement auto-issue (set `status_id=2` on push) vs. a staff review-then-send step. Deferred pending the policy decision.
+
+### Data integrity gaps
+- **Guardian dedup by email** — repeated registrations with the same guardian email create **separate `Guardian` rows**, which in billing become **separate Invoice Ninja clients** and, more importantly, **break sibling-discount linkage** (the discount derives from one guardian's set of children). Surfaced during P6 Slice C live testing. Decide whether registration should dedupe/merge guardians by verified email; affects billing correctness, not just cosmetics.
+
 ---
 
 ## 5. Priority order for future development
