@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.core.models import TimeStampedModel
@@ -35,8 +36,28 @@ class MembershipPlan(TimeStampedModel):
     )
     installment_count = models.PositiveSmallIntegerField(default=1)
     first_installment_month = models.PositiveSmallIntegerField(default=9)
+    payment_due_day = models.PositiveSmallIntegerField(
+        default=20,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text="Mēneša diena, kad iestājas maksājuma termiņš (1–31).",
+    )
+    skip_months = models.CharField(
+        max_length=32,
+        default="7,12",
+        blank=True,
+        help_text='Mēneši (1–12) bez rēķina, ar komatu, piem. "7,12" (jūlijs, decembris).',
+    )
     is_active = models.BooleanField(default=False)
     external_product_id = models.CharField(max_length=64, blank=True, default="")
+
+    @property
+    def skip_months_list(self) -> list[int]:
+        months: set[int] = set()
+        for part in self.skip_months.split(","):
+            part = part.strip()
+            if part.isdigit() and 1 <= int(part) <= 12:
+                months.add(int(part))
+        return sorted(months)
 
     def __str__(self) -> str:
         return str(self.name)
