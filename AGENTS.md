@@ -277,6 +277,13 @@ Target Django monolith with domain apps:
   - Full-repo gate after the live fixes: `uv run pytest -q` → **1115 passed**, ruff + mypy clean. Remaining for P6 close-out: a confirmation pass on the deployed cloud `:dev` artifact (container + `qcluster` service + migrate-on-deploy at production fidelity).
   - Plan: `docs/superpowers/plans/2026-06-08-p6-slice-c-payment-readback-sync-health.md`. Design: `docs/superpowers/specs/2026-06-08-p6-slice-c-payment-readback-sync-health-design.md`.
 
+- **P6 installment calendar + per-plan due day (2026-06-09)** — completes P6 acceptance item 6 ("agreed installment calendar … billing start month respected"), surfaced during live validation.
+  - `MembershipPlan` gains `payment_due_day` (PositiveSmallInteger, default **20**, 1–31 validated) and `skip_months` (CharField, default **"7,12"** = July + December) + a `skip_months_list` parsing property (tolerant: trims, drops non-numeric/out-of-range, sorted-unique). Migration `billing/0007`.
+  - `derive_installment_schedule` now places `installment_count` **real** installments on successive months starting at `first_installment_month`, **skipping** any month in `skip_months_list` (so e.g. start=Jan, skip Jul+Dec, count=10 → Jan–Jun + Aug–Nov), with each due date on `payment_due_day` **clamped to the month length** (`min(due_day, monthrange)`), year-wrap preserved. Per-installment guard raises `ValueError` if 12 consecutive months are skipped (all-skipped misconfig). Decision: chose N real installments over the 12-invoices-with-€0-on-Jul/Dec alternative; amount split (€300 ÷ count, last absorbs remainder) unchanged.
+  - `MembershipPlanAdmin` surfaces `payment_due_day` in the list; both new fields editable on the change form.
+  - **Go-forward only:** already-materialized `BillingInvoice` rows (and invoices already in IN) keep their prior schedule; `materialize_installments` is idempotent. To get the Jan–Jun + Aug–Nov calendar, set the plan's `first_installment_month=1` in admin (data config, not code).
+  - Gate: `uv run pytest -q` → **1123 passed**, ruff + mypy clean. Plan: `docs/superpowers/plans/2026-06-09-p6-installment-calendar-due-day.md`.
+
 ### Test suite consolidation (2026-05-24)
 - `tests/` reduced from 18,277 LOC / 807 tests / 153 s → **16,276 LOC / 762 tests / 84 s** (−11% LOC, −45% runtime). Plan: `docs/superpowers/plans/2026-05-24-test-suite-consolidation.md`.
 - Shared fixture homes (use these for new tests instead of repeating per-test bootstrap):
