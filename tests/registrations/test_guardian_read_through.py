@@ -147,3 +147,22 @@ def test_admin_review_detail_renders_guardian_via_read_through(client, django_us
     body = resp.content.decode()
     assert "Edited Shared Name" in body          # read-through wins
     assert "Render Name" not in body             # stale column value not shown
+
+
+def test_prefill_uses_guardian_profile_for_returning_parent():
+    from apps.registrations.services import create_or_update_draft, get_application_prefill
+
+    account = ParentAccount.objects.create(email="prefill@example.com")
+    create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "Prefill Guardian",
+              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
+              "guardian_declared_address": "Prefill Addr"},
+        files={}, verified_account=account,
+    )
+    # Edit the shared Guardian directly; prefill must reflect it, not a stale column.
+    guardian = Guardian.objects.get(parent_account=account)
+    guardian.full_name = "Updated Guardian"
+    guardian.save(update_fields=["full_name"])
+
+    prefill = get_application_prefill(account)
+    assert prefill["guardian_full_name"] == "Updated Guardian"

@@ -121,9 +121,9 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
     if latest is not None:
         prefill.update(
             {
-                "guardian_full_name": latest.guardian_full_name,
-                "guardian_personal_id": latest.guardian_personal_id,
-                "guardian_declared_address": latest.guardian_declared_address,
+                "guardian_full_name": latest.guardian_name,
+                "guardian_personal_id": latest.guardian_pid,
+                "guardian_declared_address": latest.guardian_address,
             }
         )
 
@@ -625,10 +625,10 @@ def submit_application(
     # Sync the parent account's phone to the contact phone the parent entered
     # in this application. account.phone is the source of truth for prefill;
     # keeping it current means later new-app prefill suggests the right phone.
-    if application.parent_account_id is not None and application.guardian_phone:
+    if application.parent_account_id is not None and application.guardian_contact_phone:
         account = application.parent_account
-        if account.phone != application.guardian_phone:
-            account.phone = application.guardian_phone
+        if account.phone != application.guardian_contact_phone:
+            account.phone = application.guardian_contact_phone
             account.save(update_fields=["phone", "updated_at"])
 
     return application
@@ -803,7 +803,7 @@ def _render_and_send_notification(
     context: dict[str, Any] = {
         "application": application,
         "member_full_name": application.member_full_name,
-        "guardian_full_name": application.guardian_full_name,
+        "guardian_full_name": application.guardian_name,
         "review_message": application.review_message or "",
         "application_url": f"{settings.SITE_URL}{application_path}",
         "portal_url": f"{settings.SITE_URL}{portal_path}",
@@ -815,6 +815,6 @@ def _render_and_send_notification(
         subject=subject,
         message=body,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[application.guardian_email],
+        recipient_list=[application.guardian_contact_email],
         fail_silently=False,
     )

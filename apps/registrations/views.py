@@ -267,11 +267,11 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     else:
         form = RegistrationApplicationForm(
             initial={
-                "guardian_full_name": application.guardian_full_name,
-                "guardian_personal_id": application.guardian_personal_id,
-                "guardian_email": application.guardian_email,
-                "guardian_phone": application.guardian_phone,
-                "guardian_declared_address": application.guardian_declared_address,
+                "guardian_full_name": application.guardian_name,
+                "guardian_personal_id": application.guardian_pid,
+                "guardian_email": application.guardian_contact_email,
+                "guardian_phone": application.guardian_contact_phone,
+                "guardian_declared_address": application.guardian_address,
                 "member_full_name": application.member_full_name,
                 "member_personal_id": application.member_personal_id,
                 "member_birth_date": application.member_birth_date,
