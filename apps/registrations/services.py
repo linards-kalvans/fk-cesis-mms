@@ -723,14 +723,25 @@ def approve_application(
     if training_group is not None and not training_group.is_active:
         raise ValueError("cannot assign inactive training group at approval time")
 
-    # Create Guardian from application guardian data
-    guardian = Guardian.objects.create(
-        full_name=application.guardian_full_name,
-        personal_id=application.guardian_personal_id,
-        email=application.guardian_email,
-        phone=application.guardian_phone,
-        address=application.guardian_declared_address,
-    )
+    # Reuse the canonical Guardian resolved at initiation (1:1 with the
+    # ParentAccount), so a parent's children share one Guardian — fixing
+    # sibling-discount linkage and yielding one Invoice Ninja client per parent.
+    # Fallbacks keep ORM-built applications (older tests) working.
+    guardian = application.guardian
+    if guardian is None:
+        if application.parent_account_id is not None:
+            guardian = resolve_guardian_for_account(application.parent_account)
+        else:
+            guardian = Guardian.objects.create()
+        application.guardian = guardian
+
+    # Refresh the canonical profile from this application's snapshot.
+    guardian.full_name = application.guardian_full_name
+    guardian.personal_id = application.guardian_personal_id
+    guardian.email = application.guardian_email
+    guardian.phone = application.guardian_phone
+    guardian.address = application.guardian_declared_address
+    guardian.save()
 
     # Create Member linked to Guardian, optionally to a TrainingGroup
     member = Member.objects.create(
@@ -753,7 +764,7 @@ def approve_application(
     application.approved_member = member
     application.reviewed_by = reviewer
     application.reviewed_at = timezone.now()
-    application.save(update_fields=["status", "approved_member_id", "reviewed_by_id", "reviewed_at", "updated_at"])
+    application.save(update_fields=["status", "approved_member_id", "guardian", "reviewed_by_id", "reviewed_at", "updated_at"])
 
     _render_and_send_notification(
         application,
