@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 
-from apps.members.models import Member, TrainingGroup
+from apps.members.models import Guardian, Member, TrainingGroup
 
 
 def assign_training_group(
@@ -26,3 +26,19 @@ def assign_training_group(
     member.training_group = group
     member.save(update_fields=["training_group"])
     return member
+
+
+def resolve_guardian_for_account(account) -> Guardian:
+    """Return the canonical Guardian for a verified ParentAccount, creating it
+    if absent. One verified email maps to exactly one Guardian, forever.
+
+    Called when a registration is initiated so every application carries its
+    parent's canonical guardian. The email is mirrored from the account on
+    create (the Invoice Ninja client contact reads Guardian.email).
+    """
+    guardian: Guardian
+    guardian, _created = Guardian.objects.get_or_create(
+        parent_account=account,
+        defaults={"email": account.email},
+    )
+    return guardian
