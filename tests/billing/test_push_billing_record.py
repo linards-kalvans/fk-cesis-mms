@@ -154,3 +154,20 @@ def test_ensure_product_id_reuses_id_committed_concurrently(active_plan, monkeyp
     assert called is False, "must not create a second product when one already exists"
     active_plan.refresh_from_db()
     assert active_plan.external_product_id == "racer-product"
+
+
+def test_ensure_product_id_creates_and_persists_when_absent(active_plan, monkeypatch):
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+
+    monkeypatch.setattr(
+        invoice_platform,
+        "ensure_product",
+        lambda p: invoice_platform.ProductResult(external_id="fresh-product"),
+    )
+
+    result = tasks._ensure_product_id(active_plan.pk)
+
+    assert result == "fresh-product"
+    active_plan.refresh_from_db()
+    assert active_plan.external_product_id == "fresh-product"
