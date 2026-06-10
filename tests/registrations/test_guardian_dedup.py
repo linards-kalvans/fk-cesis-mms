@@ -129,3 +129,38 @@ def test_approval_reuses_guardian_no_duplicates(kit_pks, staff_reviewer):
     assert guardian.members.count() == 2
     # Profile populated from the application snapshot.
     assert guardian.full_name == "Sibling Guardian"
+
+
+def test_sibling_discount_applies_after_approving_two_children(kit_pks, staff_reviewer):
+    from apps.billing.models import MembershipPlan
+    from apps.billing.services import compute_billing_amounts
+
+    shirt, shorts = kit_pks
+    plan = MembershipPlan.objects.create(
+        name="Sezona 2026/2027",
+        season="2026/2027",
+        annual_amount=Decimal("300.00"),
+        sibling_discount_percent=Decimal("50.00"),
+        installment_count=10,
+        first_installment_month=9,
+        is_active=True,
+    )
+    account = ParentAccount.objects.create(email="discount@example.com")
+
+    app1 = _build_submitted_application(account, "First Child", "010120-11111", shirt, shorts)
+    app2 = _build_submitted_application(account, "Second Child", "010122-22222", shirt, shorts)
+    approve_application(app1, staff_reviewer)
+    approve_application(app2, staff_reviewer)
+    app1.refresh_from_db()
+    app2.refresh_from_db()
+
+    first = compute_billing_amounts(app1.approved_member, plan)
+    second = compute_billing_amounts(app2.approved_member, plan)
+
+    # Earliest child pays full price; the sibling is discounted — only possible
+    # because both members now share one Guardian.
+    assert first.is_full_price is True
+    assert first.final_amount == Decimal("300.00")
+    assert second.is_full_price is False
+    assert second.discount_amount == Decimal("150.00")
+    assert second.final_amount == Decimal("150.00")
