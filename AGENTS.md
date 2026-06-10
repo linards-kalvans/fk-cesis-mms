@@ -24,7 +24,7 @@ Target Django monolith with domain apps:
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
-**Tasks 1–6 complete in current worktree, P1 + P2 are complete, P3 is signed off (live validation evidence in `docs/p3_tiny_idp_validation.md`), P4 is complete, P5 Slices A–D are delivered (full approval-to-agreement flow including DocuSeal-backed e-signature), and P6 Slices A–B are delivered (local billing domain + sibling-discount engine, plus the admin-confirmed Invoice Ninja push; payment read-back is Slice C).** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, guardian-email-first verified registration gate, OCR-backed parent/admin review flow, the agreement lifecycle (generate → sent → DocuSeal-signed/manual, with void + regenerate), signing-triggered draft billing records, and the admin-confirmed Invoice Ninja invoice push are operational.
+**P1 + P2 are complete, P3 is signed off (live validation evidence in `docs/p3_tiny_idp_validation.md`), P4 is complete, P5 Slices A–D are delivered (full approval-to-agreement flow including DocuSeal-backed e-signature), P6 Slices A–C + installment-calendar + guardian-identity Slice A are delivered (local billing domain + sibling-discount engine, admin-confirmed Invoice Ninja push, payment read-back, installment-calendar with skip-months/due-day, and canonical Guardian 1:1 dedup).** Registration workflow is usable for LAN acceptance testing; admin review queue, member creation baseline, guardian-email-first verified registration gate, OCR-backed parent/admin review flow, the agreement lifecycle (generate → sent → DocuSeal-signed/manual, with void + regenerate), signing-triggered draft billing records, the admin-confirmed Invoice Ninja invoice push, payment read-back, and canonical guardian deduplication (one Guardian per ParentAccount, sibling-discount linkage correct) are operational.
 - Django project scaffold exists and boots.
 - `apps/` package exists with app configs for `core`, `accounts`, `registrations`, `members`, `billing`, `documents`, `integrations`.
 - `apps/core/models.py` includes abstract `TimeStampedModel`.
@@ -228,6 +228,17 @@ Target Django monolith with domain apps:
     - `agreement_date` is no longer sent — the template auto-fills the current date (`75a41ae`).
     - Prefill now goes through the submitter `fields` array as `readonly:true` entries (not a `values` map): readonly fields are non-interactive, so the signer skips field-by-field re-confirmation and lands straight on the signatures. Confirmed in the signing UI (`170f988`).
   - Manual LAN smoke (stub mode) confirmed 2026-06-07 for the non-DocuSeal transitions — void email + archive enqueue, empty-email → paper fallback, and paper-path emails all verified. **P5 fully LAN-verified and signed off 2026-06-07.**
+
+- **P6 guardian-identity Slice A delivered — canonical Guardian + dedup (2026-06-10)**
+  - `Guardian` is now 1:1 with `ParentAccount` via `Guardian.parent_account` (OneToOneField, `on_delete=PROTECT`, nullable). Migration `members/0004`.
+  - `RegistrationApplication.guardian` FK added (`on_delete=PROTECT`, nullable, `related_name="applications"`). Migration `registrations/0009`.
+  - New `apps/members/services.py::resolve_guardian_for_account(account)` — `get_or_create` keyed by `parent_account`, mirrors `email` on create.
+  - `create_or_update_draft` attaches `application.guardian = resolve_guardian_for_account(verified_account)` at initiation (and on every verified save).
+  - `approve_application` now REUSES `application.guardian` (with a `resolve_guardian_for_account` fallback for account-bearing apps; bare create only for account-less ORM-built apps), refreshes the Guardian profile from the application snapshot, and persists the link via `update_fields`. The previous unconditional `Guardian.objects.create(...)` is gone.
+  - Effect: a parent's children share ONE `Guardian`, so the sibling discount applies correctly and there is one Invoice Ninja client per parent.
+  - Scope note: the denormalized `guardian_*` columns on `RegistrationApplication` remain in place — read-through + column drop is Slice B; locked-profile UX + admin-initiated email change is Slice C; parent self-service email change is deferred.
+  - New tests: `tests/members/test_guardian_resolution.py` (3 tests: 1:1 link, unique constraint, `resolve_guardian_for_account` idempotency), `tests/registrations/test_guardian_dedup.py` (7 tests including the sibling-discount payoff across two approved children).
+  - Full-repo gate: `uv run pytest -q` → **1133 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (245 source files).
 
 - **P6 Slice A delivered — local billing domain + sibling-discount engine (2026-06-07)**
   - LOCAL ONLY: no Invoice Ninja calls. The Invoice Ninja adapter + admin-confirmed push is Slice B; payment read-back + sync health is Slice C.
