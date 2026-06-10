@@ -107,3 +107,22 @@ Record the exact value/observation in the right-hand column as you go.
 - Capture any defect with the scenario letter, exact step, and observed-vs-expected. Live runs in this project have repeatedly surfaced stub-hidden integration bugs (P3 tiny-IDP, P6 Invoice Ninja) — treat any surprise as a real finding, not noise.
 - On a clean pass, record the outcome (pass/fail per scenario + date + the build SHA) in `AGENTS.md` under the Slice A entry, matching the existing LAN-verification record style.
 - Any bug found here is fixed before merging/pushing `dev` onward.
+
+---
+
+## Results — run 2026-06-10 (build `dev` @ `7470d2f`)
+
+Instance: `uv` runserver + qcluster on `0.0.0.0:8000`, SQLite (fresh-start), stub OCR, **live** Invoice Ninja, console email (OTP read from server log).
+
+| # | Scenario | Result | Evidence |
+|---|---|---|---|
+| A | Child #1 flow (no regression) | ✅ PASS | OTP→verify→workspace→3 uploads (OCR stub)→submit |
+| B | Child #2 same parent | ✅ PASS | guardian reused at init; opt-out enforced + left unticked |
+| C | Guardian dedup core | ✅ PASS | 1 Guardian (Anna Bērziņa), 2 Members; total guardians in DB = 1 |
+| D | Idempotent re-approval | ✅ PASS | re-approve app1 → 0 new guardian/member/agreement |
+| E | Sibling discount | ✅ PASS | Jānis €300 full / Pēteris €150 (50%) |
+| F | One IN client for both children | ✅ PASS *(after fix)* | initial run created 2 clients + 2 products (concurrency bug); fixed (`2fa6510`,`7470d2f`); re-test → 1 client `7LDdwRb1YK`, 1 product, both invoices under it |
+| G | Guardian profile latest-wins | ⚠️ not differentiated | both apps carried identical guardian data; profile correct + populated |
+| H | Abandoned draft benign | ✅ PASS | app3 reuses guardian, no new guardian, no billing |
+
+**Headline finding:** scenario F surfaced a high-severity concurrency bug — parallel `push_billing_record` workers duplicated the shared IN client + product. Fixed via `select_for_update`-locked ensure helpers; re-validated. See the AGENTS.md Slice A entry. Gate after fix: 1137 passed, ruff + mypy clean.
