@@ -405,6 +405,16 @@ def create_or_update_draft(
     application.guardian_email = email
     application.guardian_phone = str(data.get("guardian_phone", "")).strip()
     application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
+    # Slice B1: the Guardian profile is now the read source, so populate it at
+    # draft-save (was previously only set at approval). Latest write wins;
+    # field-locking is Slice C. Email stays sourced from ParentAccount.
+    if application.guardian_id is not None:
+        _guardian = application.guardian
+        _guardian.full_name = application.guardian_full_name
+        _guardian.personal_id = application.guardian_personal_id
+        _guardian.phone = application.guardian_phone
+        _guardian.address = application.guardian_declared_address
+        _guardian.save(update_fields=["full_name", "personal_id", "phone", "address"])
     application.member_full_name = str(data.get("member_full_name", "")).strip()
     application.member_personal_id = str(data.get("member_personal_id", "")).strip()
     application.member_birth_date = data.get("member_birth_date") or None

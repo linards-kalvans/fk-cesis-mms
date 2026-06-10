@@ -77,3 +77,47 @@ def test_linked_guardian_is_source_even_when_field_empty():
     assert app.guardian_pid == ""          # empty Guardian value wins, not the column
     assert app.guardian_contact_phone == ""
     assert app.guardian_address == ""
+
+
+def test_draft_save_populates_the_guardian_profile():
+    from apps.registrations.services import create_or_update_draft
+
+    account = ParentAccount.objects.create(email="draft@example.com")
+    app = create_or_update_draft(
+        data={
+            "guardian_email": account.email,
+            "guardian_full_name": "Anna Bērziņa",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000001",
+            "guardian_declared_address": "Rīga, Brīvības 1",
+        },
+        files={},
+        verified_account=account,
+    )
+    guardian = Guardian.objects.get(parent_account=account)
+    assert guardian.full_name == "Anna Bērziņa"
+    assert guardian.personal_id == "010101-12345"
+    assert guardian.phone == "+37120000001"
+    assert guardian.address == "Rīga, Brīvības 1"
+
+
+def test_editing_guardian_on_second_app_propagates_to_first():
+    """Propagation: two apps share one Guardian; editing guardian data on the
+    second is visible through the first app's accessors."""
+    from apps.registrations.services import create_or_update_draft
+
+    account = ParentAccount.objects.create(email="prop@example.com")
+    app1 = create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "Old Name",
+              "guardian_phone": "+37120000000", "guardian_declared_address": "Addr 1",
+              "guardian_personal_id": "010101-11111"},
+        files={}, verified_account=account,
+    )
+    create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "New Name",
+              "guardian_phone": "+37120000000", "guardian_declared_address": "Addr 1",
+              "guardian_personal_id": "010101-11111"},
+        files={}, verified_account=account,
+    )
+    app1.refresh_from_db()
+    assert app1.guardian_name == "New Name"
