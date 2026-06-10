@@ -22,7 +22,7 @@ class KitSizeOption(models.Model):
 
 
 class Guardian(models.Model):
-    """A parent/guardian record created on application approval."""
+    """Canonical parent/guardian record, 1:1 with ParentAccount, resolved at registration initiation and reused at approval."""
 
     full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")

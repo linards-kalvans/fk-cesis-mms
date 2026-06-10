@@ -704,7 +704,7 @@ def approve_application(
     reviewer: settings.AUTH_USER_MODEL,
     training_group: TrainingGroup | None = None,
 ) -> RegistrationApplication:
-    """Approve an application, creating Guardian + Member + Agreement.
+    """Approve an application, reusing the resolved Guardian and creating Member + Agreement.
     Idempotent and atomic.
 
     Optionally assigns the new Member to a TrainingGroup at create-time.
