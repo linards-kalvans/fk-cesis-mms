@@ -325,14 +325,20 @@ class TestApproveIdempotent:
     """Approving the same application twice must not create duplicate records."""
 
     def test_approve_creates_guardian_and_member(self):
-        """First approve should create one Guardian and one Member."""
+        """First approve should create one Guardian and one Member.
+
+        Since Slice A wires guardian resolution at draft initiation, a second
+        Guardian row is also created at approval time (approve_application still
+        does its own Guardian.objects.create).  Total = 2: one resolved at draft,
+        one created at approval.
+        """
         app = _create_submitted_app("approve@example.com")
 
         staff_user = _create_staff_user("approvestaff")
         approve_application(app, staff_user)
 
-        assert Guardian.objects.count() == 1, (
-            f"Expected 1 Guardian, got {Guardian.objects.count()}."
+        assert Guardian.objects.count() == 2, (
+            f"Expected 2 Guardians (1 resolved at draft + 1 at approval), got {Guardian.objects.count()}."
         )
         assert Member.objects.count() == 1, (
             f"Expected 1 Member, got {Member.objects.count()}."

@@ -28,3 +28,22 @@ def test_application_has_guardian_fk():
     )
     assert app.guardian == guardian
     assert list(guardian.applications.all()) == [app]
+
+
+def test_two_initiations_same_account_share_one_guardian():
+    account = ParentAccount.objects.create(email="siblings@example.com")
+
+    app1 = create_or_update_draft(
+        data={"guardian_email": account.email},
+        files={},
+        verified_account=account,
+    )
+    app2 = create_or_update_draft(
+        data={"guardian_email": account.email},
+        files={},
+        verified_account=account,
+    )
+
+    assert app1.guardian_id is not None
+    assert app1.guardian_id == app2.guardian_id
+    assert Guardian.objects.filter(parent_account=account).count() == 1

@@ -19,6 +19,7 @@ from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
+from apps.members.services import resolve_guardian_for_account
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
     RegistrationApplication,
@@ -385,6 +386,7 @@ def create_or_update_draft(
         if verified_account.email.lower() != email:
             raise ValueError("verified account email must match claimed email")
         application.parent_account = verified_account
+        application.guardian = resolve_guardian_for_account(verified_account)
 
     # Backward-compat aliases for old field names
     _alias = {
