@@ -26,7 +26,7 @@
       {% for application in applications %}
       <tr>
         <th scope="row"><a href="{% url 'registrations:admin-review-detail' application.id %}">{{ application.member_full_name|default:"—" }}</a></th>
-        <td>{{ application.guardian_full_name|default:"—" }}</td>
+        <td>{{ application.guardian_name|default:"—" }}</td>
         <td>{{ application.get_status_display }}</td>
         <td>{{ application.submitted_at|date:"d.m.Y H:i" }}</td>
       </tr>

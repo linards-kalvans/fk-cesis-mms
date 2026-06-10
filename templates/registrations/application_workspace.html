@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded',function(){
           {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
             {{ bound_field.value|yesno:"Jā,Nē" }}
           {% elif bound_field.name == "guardian_email" %}
-            {{ application.guardian_email }}
+            {{ application.guardian_contact_email }}
           {% else %}
             {{ bound_field.value|default:"—" }}
           {% endif %}

@@ -121,3 +121,29 @@ def test_editing_guardian_on_second_app_propagates_to_first():
     )
     app1.refresh_from_db()
     assert app1.guardian_name == "New Name"
+
+
+def test_admin_review_detail_renders_guardian_via_read_through(client, django_user_model):
+    from apps.registrations.services import create_or_update_draft
+
+    account = ParentAccount.objects.create(email="render@example.com")
+    app = create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "Render Name",
+              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
+              "guardian_declared_address": "Render Addr"},
+        files={}, verified_account=account,
+    )
+    # Simulate a later shared-Guardian edit that the column on THIS app never saw.
+    guardian = Guardian.objects.get(parent_account=account)
+    guardian.full_name = "Edited Shared Name"
+    guardian.save(update_fields=["full_name"])
+
+    staff = django_user_model.objects.create_user(
+        username="staff-rt", password="pw", is_staff=True, is_superuser=True
+    )
+    client.force_login(staff)
+    resp = client.get(f"/admin/review/applications/{app.id}/")
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "Edited Shared Name" in body          # read-through wins
+    assert "Render Name" not in body             # stale column value not shown

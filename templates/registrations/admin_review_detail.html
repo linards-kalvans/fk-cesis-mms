@@ -29,11 +29,11 @@
 
   <div class="module">
     <h2>Vecāka informācija</h2>
-    <div class="form-row"><strong>Vārds, uzvārds:</strong> {{ application.guardian_full_name }}</div>
-    <div class="form-row"><strong>Personas kods:</strong> {{ application.guardian_personal_id }}</div>
-    <div class="form-row"><strong>E-pasts:</strong> {{ application.guardian_email }}</div>
-    <div class="form-row"><strong>Tālrunis:</strong> {{ application.guardian_phone }}</div>
-    <div class="form-row"><strong>Adrese:</strong> {{ application.guardian_declared_address }}</div>
+    <div class="form-row"><strong>Vārds, uzvārds:</strong> {{ application.guardian_name }}</div>
+    <div class="form-row"><strong>Personas kods:</strong> {{ application.guardian_pid }}</div>
+    <div class="form-row"><strong>E-pasts:</strong> {{ application.guardian_contact_email }}</div>
+    <div class="form-row"><strong>Tālrunis:</strong> {{ application.guardian_contact_phone }}</div>
+    <div class="form-row"><strong>Adrese:</strong> {{ application.guardian_address }}</div>
   </div>
 
   {% include "registrations/admin/_doc_panel.html" with panel=guardian_panel %}
