@@ -129,6 +129,15 @@ class RegistrationApplication(TimeStampedModel):
         related_name="source_application",
     )
 
+    # Canonical guardian (1:1 with ParentAccount), resolved at initiation.
+    guardian = models.ForeignKey(
+        "members.Guardian",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="applications",
+    )
+
     def is_draft(self) -> bool:
         result: bool = self.status == self.Status.DRAFT
         return result
