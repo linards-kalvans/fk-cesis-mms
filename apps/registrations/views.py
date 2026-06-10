@@ -487,7 +487,8 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             return redirect("registrations:application-workspace", application_id=draft.id)
 
     # Show all applications linked to this verified parent
-    applications = account.applications.order_by("-created_at")
+    # select_related("guardian") avoids an N+1 from the guardian-read accessors (Slice B1).
+    applications = account.applications.select_related("guardian").order_by("-created_at")
     has_draft = applications.filter(
         status__in=(
             RegistrationApplication.Status.DRAFT,
@@ -552,7 +553,7 @@ def admin_review_queue(request: HttpRequest) -> HttpResponse:
     result = _require_staff(request)
     if result is not None:
         return result
-    applications = RegistrationApplication.objects.filter(
+    applications = RegistrationApplication.objects.select_related("guardian").filter(
         status=RegistrationApplication.Status.SUBMITTED
     ).order_by("-submitted_at")
     return render(
