@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from django.utils import timezone
 from django_q.tasks import async_task
 
@@ -320,6 +321,47 @@ def enqueue_push_billing_record(record_id: int) -> None:
         return
 
 
+def _ensure_product_id(plan_id: int) -> str:
+    """Return the Invoice Ninja product id for a plan, creating it at most once.
+
+    The check-and-create runs inside a ``select_for_update`` row lock and
+    re-reads the locked row, so a product id committed by a concurrent sibling
+    push is reused rather than duplicated. On Postgres the lock serialises
+    concurrent django-q workers; the re-read picks up the committed value.
+    """
+    from apps.billing.models import MembershipPlan
+
+    with transaction.atomic():
+        plan = MembershipPlan.objects.select_for_update().get(pk=plan_id)
+        if plan.external_product_id:
+            return str(plan.external_product_id)
+        external_id = invoice_platform.ensure_product(plan).external_id
+        plan.external_product_id = external_id
+        plan.save(update_fields=["external_product_id", "updated_at"])
+        return external_id
+
+
+def _ensure_client_id(guardian_id: int) -> str:
+    """Return the Invoice Ninja client id for a guardian, creating it at most once.
+
+    Same row-locked, re-read pattern as :func:`_ensure_product_id`. This is what
+    makes the "one Invoice Ninja client per parent" guarantee hold when a
+    parent's siblings are pushed concurrently: the second worker blocks on the
+    lock, then reuses the client the first worker committed.
+    """
+    from apps.members.models import Guardian
+
+    with transaction.atomic():
+        guardian = Guardian.objects.select_for_update().get(pk=guardian_id)
+        if guardian.external_client_id:
+            return str(guardian.external_client_id)
+        external_id = invoice_platform.ensure_client(guardian).external_id
+        guardian.external_client_id = external_id
+        # Guardian has no updated_at — do not include it in update_fields.
+        guardian.save(update_fields=["external_client_id"])
+        return external_id
+
+
 def push_billing_record(record_id: int) -> None:
     from apps.billing.models import BillingRecord
     from apps.billing.services import materialize_installments
@@ -339,17 +381,16 @@ def push_billing_record(record_id: int) -> None:
     record.external_error_code = ""
     record.save(update_fields=["external_status", "external_error_code", "updated_at"])
 
-    # Steps 1-2: ensure product + client (idempotent via stored external ids).
+    # Steps 1-2: ensure product + client. Each is created at most once under a
+    # row lock so concurrent sibling pushes (separate django-q workers, same
+    # guardian/plan) reuse the shared id instead of creating duplicates. The
+    # returned ids are written back onto the in-memory record so the downstream
+    # invoice build uses them.
     try:
-        plan = record.plan
-        if not plan.external_product_id:
-            plan.external_product_id = invoice_platform.ensure_product(plan).external_id
-            plan.save(update_fields=["external_product_id", "updated_at"])
-        guardian = record.member.guardian
-        if not guardian.external_client_id:
-            # Guardian has no updated_at — do not include it in update_fields.
-            guardian.external_client_id = invoice_platform.ensure_client(guardian).external_id
-            guardian.save(update_fields=["external_client_id"])
+        record.plan.external_product_id = _ensure_product_id(record.plan_id)
+        record.member.guardian.external_client_id = _ensure_client_id(
+            record.member.guardian_id
+        )
     except Exception as exc:
         code, retry = _classify_invoice_error(exc)
         record.external_status = "failed"

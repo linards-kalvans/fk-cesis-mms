@@ -79,3 +79,78 @@ def test_terminal_failure_marks_failed_no_raise(active_plan, guardian, monkeypat
     rec.refresh_from_db()
     assert rec.external_status == "failed"
     assert rec.external_error_code == "auth_failed"
+
+
+# --- Concurrency guard: sibling pushes must not duplicate client/product ---
+#
+# Two BillingRecords for the same guardian (siblings) are pushed by separate
+# django-q worker processes concurrently. Each must resolve the shared client
+# (and shared product) without creating a duplicate. The guard re-reads the
+# locked row, so an id committed by a concurrent task is reused, not recreated.
+
+
+def test_ensure_client_id_reuses_id_committed_concurrently(guardian, monkeypatch):
+    from apps.members.models import Guardian
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+
+    # A concurrent push already created + committed the client id. Any object
+    # loaded before that commit (e.g. via record.member.guardian) is now stale.
+    Guardian.objects.filter(pk=guardian.pk).update(external_client_id="racer-client")
+
+    called = False
+
+    def should_not_create(g):
+        nonlocal called
+        called = True
+        return invoice_platform.ClientResult(external_id="duplicate-client")
+
+    monkeypatch.setattr(invoice_platform, "ensure_client", should_not_create)
+
+    result = tasks._ensure_client_id(guardian.pk)
+
+    assert result == "racer-client"
+    assert called is False, "must not create a second client when one already exists"
+    guardian.refresh_from_db()
+    assert guardian.external_client_id == "racer-client"
+
+
+def test_ensure_client_id_creates_and_persists_when_absent(guardian, monkeypatch):
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+
+    monkeypatch.setattr(
+        invoice_platform,
+        "ensure_client",
+        lambda g: invoice_platform.ClientResult(external_id="fresh-client"),
+    )
+
+    result = tasks._ensure_client_id(guardian.pk)
+
+    assert result == "fresh-client"
+    guardian.refresh_from_db()
+    assert guardian.external_client_id == "fresh-client"
+
+
+def test_ensure_product_id_reuses_id_committed_concurrently(active_plan, monkeypatch):
+    from apps.billing.models import MembershipPlan
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+
+    MembershipPlan.objects.filter(pk=active_plan.pk).update(external_product_id="racer-product")
+
+    called = False
+
+    def should_not_create(p):
+        nonlocal called
+        called = True
+        return invoice_platform.ProductResult(external_id="duplicate-product")
+
+    monkeypatch.setattr(invoice_platform, "ensure_product", should_not_create)
+
+    result = tasks._ensure_product_id(active_plan.pk)
+
+    assert result == "racer-product"
+    assert called is False, "must not create a second product when one already exists"
+    active_plan.refresh_from_db()
+    assert active_plan.external_product_id == "racer-product"
