@@ -237,7 +237,7 @@ Target Django monolith with domain apps:
   - `approve_application` now REUSES `application.guardian` (with a `resolve_guardian_for_account` fallback for account-bearing apps; bare create only for account-less ORM-built apps), refreshes the Guardian profile from the application snapshot, and persists the link via `update_fields`. The previous unconditional `Guardian.objects.create(...)` is gone.
   - Effect: a parent's children share ONE `Guardian`, so the sibling discount applies correctly and there is one Invoice Ninja client per parent.
   - Scope note: the denormalized `guardian_*` columns on `RegistrationApplication` remain in place — read-through + column drop is Slice B; locked-profile UX + admin-initiated email change is Slice C; parent self-service email change is deferred.
-  - New tests: `tests/members/test_guardian_resolution.py` (3 tests: 1:1 link, unique constraint, `resolve_guardian_for_account` idempotency), `tests/registrations/test_guardian_dedup.py` (7 tests including the sibling-discount payoff across two approved children).
+  - New tests: `tests/members/test_guardian_resolution.py` (3 tests: 1:1 link, unique constraint, `resolve_guardian_for_account` idempotency), `tests/registrations/test_guardian_dedup.py` (4 tests including the sibling-discount payoff across two approved children; 7 tests total across both files).
   - Full-repo gate: `uv run pytest -q` → **1133 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (245 source files).
 
 - **P6 Slice A delivered — local billing domain + sibling-discount engine (2026-06-07)**
