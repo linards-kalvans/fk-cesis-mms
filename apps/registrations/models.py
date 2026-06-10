@@ -161,25 +161,25 @@ class RegistrationApplication(TimeStampedModel):
     # exist. Slice B2 drops the columns and the fallback halves. ---
     @property
     def guardian_name(self) -> str:
-        if self.guardian_id is not None and self.guardian.full_name:
+        if self.guardian_id is not None:
             return str(self.guardian.full_name)
         return str(self.guardian_full_name)
 
     @property
     def guardian_pid(self) -> str:
-        if self.guardian_id is not None and self.guardian.personal_id:
+        if self.guardian_id is not None:
             return str(self.guardian.personal_id)
         return str(self.guardian_personal_id)
 
     @property
     def guardian_contact_phone(self) -> str:
-        if self.guardian_id is not None and self.guardian.phone:
+        if self.guardian_id is not None:
             return str(self.guardian.phone)
         return str(self.guardian_phone)
 
     @property
     def guardian_address(self) -> str:
-        if self.guardian_id is not None and self.guardian.address:
+        if self.guardian_id is not None:
             return str(self.guardian.address)
         return str(self.guardian_declared_address)
 

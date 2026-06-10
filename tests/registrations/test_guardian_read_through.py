@@ -59,3 +59,21 @@ def test_email_accessor_prefers_parent_account_over_column():
         parent_account=account, guardian_email="old-column@example.com"
     )
     assert app.guardian_contact_email == "verified@example.com"
+
+
+def test_linked_guardian_is_source_even_when_field_empty():
+    """A linked Guardian is the source of truth: an empty Guardian field must NOT
+    fall back to a stale column (so clearing a field propagates)."""
+    account = ParentAccount.objects.create(email="empty@example.com")
+    guardian = Guardian.objects.create(
+        parent_account=account, full_name="Has Name", personal_id="", phone="", address=""
+    )
+    app = RegistrationApplication.objects.create(
+        parent_account=account, guardian=guardian, guardian_email="x@example.com",
+        guardian_personal_id="111111-11111", guardian_phone="+37100000000",
+        guardian_declared_address="Stale Col Addr",
+    )
+    assert app.guardian_name == "Has Name"
+    assert app.guardian_pid == ""          # empty Guardian value wins, not the column
+    assert app.guardian_contact_phone == ""
+    assert app.guardian_address == ""
