@@ -733,10 +733,9 @@ def approve_application(
     if training_group is not None and not training_group.is_active:
         raise ValueError("cannot assign inactive training group at approval time")
 
-    # Reuse the canonical Guardian resolved at initiation (1:1 with the
-    # ParentAccount), so a parent's children share one Guardian — fixing
-    # sibling-discount linkage and yielding one Invoice Ninja client per parent.
-    # Fallbacks keep ORM-built applications (older tests) working.
+    # Guardian is resolved at initiation and its profile is written at draft-save
+    # (Slice B1), so approval just reuses it — no snapshot copy. The fallback
+    # covers ORM-built applications that never went through create_or_update_draft.
     guardian = application.guardian
     if guardian is None:
         if application.parent_account_id is not None:
@@ -744,14 +743,6 @@ def approve_application(
         else:
             guardian = Guardian.objects.create()
         application.guardian = guardian
-
-    # Refresh the canonical profile from this application's snapshot.
-    guardian.full_name = application.guardian_full_name
-    guardian.personal_id = application.guardian_personal_id
-    guardian.email = application.guardian_email
-    guardian.phone = application.guardian_phone
-    guardian.address = application.guardian_declared_address
-    guardian.save()
 
     # Create Member linked to Guardian, optionally to a TrainingGroup
     member = Member.objects.create(
