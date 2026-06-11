@@ -64,3 +64,16 @@ def test_db_level_collision_converted_to_valueerror(monkeypatch):
 
     with pytest.raises(ValueError):
         change_parent_email(account, "taken@example.com")
+
+
+def test_changed_email_visible_through_application_accessor():
+    from apps.registrations.models import RegistrationApplication
+
+    account = ParentAccount.objects.create(email="before@example.com")
+    guardian = resolve_guardian_for_account(account)
+    app = RegistrationApplication.objects.create(parent_account=account, guardian=guardian)
+    assert app.guardian_contact_email == "before@example.com"
+
+    change_parent_email(account, "after@example.com")
+    app.refresh_from_db()
+    assert app.guardian_contact_email == "after@example.com"
