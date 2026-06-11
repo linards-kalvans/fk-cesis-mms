@@ -43,13 +43,6 @@ class RegistrationApplication(TimeStampedModel):
     draft_session_key = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
 
-    # Guardian snapshot fields (P1 names)
-    guardian_full_name = models.CharField(max_length=255, blank=True)
-    guardian_personal_id = models.CharField(max_length=32, blank=True)
-    guardian_email = models.EmailField()
-    guardian_phone = models.CharField(max_length=32, blank=True)
-    guardian_declared_address = models.CharField(max_length=255, blank=True)
-
     # Member (child/player) snapshot fields (P1 names)
     member_full_name = models.CharField(max_length=255, blank=True)
     member_personal_id = models.CharField(max_length=32, blank=True)
