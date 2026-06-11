@@ -154,37 +154,25 @@ class RegistrationApplication(TimeStampedModel):
         return result
 
     def __str__(self):
-        return f"{self.guardian_email} — {self.member_full_name or 'draft'}"
+        return f"{self.guardian_contact_email or self.claimed_email} — {self.member_full_name or 'draft'}"
 
-    # --- Guardian-read accessors (Slice B1). Prefer the canonical Guardian /
-    # ParentAccount; fall back to the denormalized columns while they still
-    # exist. Slice B2 drops the columns and the fallback halves. ---
+    # --- Guardian-read accessors (Slice B2). No fallback to legacy columns. ---
     @property
     def guardian_name(self) -> str:
-        if self.guardian_id is not None:
-            return str(self.guardian.full_name)
-        return str(self.guardian_full_name)
+        return str(self.guardian.full_name) if self.guardian_id is not None else ""
 
     @property
     def guardian_pid(self) -> str:
-        if self.guardian_id is not None:
-            return str(self.guardian.personal_id)
-        return str(self.guardian_personal_id)
+        return str(self.guardian.personal_id) if self.guardian_id is not None else ""
 
     @property
     def guardian_contact_phone(self) -> str:
-        if self.guardian_id is not None:
-            return str(self.guardian.phone)
-        return str(self.guardian_phone)
+        return str(self.guardian.phone) if self.guardian_id is not None else ""
 
     @property
     def guardian_address(self) -> str:
-        if self.guardian_id is not None:
-            return str(self.guardian.address)
-        return str(self.guardian_declared_address)
+        return str(self.guardian.address) if self.guardian_id is not None else ""
 
     @property
     def guardian_contact_email(self) -> str:
-        if self.parent_account_id is not None and self.parent_account.email:
-            return str(self.parent_account.email)
-        return str(self.guardian_email)
+        return str(self.parent_account.email) if self.parent_account_id is not None else ""

@@ -170,3 +170,15 @@ def test_draft_save_writes_guardian_not_columns(make_guardian):
     assert guardian.personal_id == "010101-12345"
     assert guardian.phone == "+37120000000"
     assert guardian.address == "Form Addr"
+
+
+def test_str_uses_account_email_not_column():
+    account = ParentAccount.objects.create(email="str@example.com")
+    app = RegistrationApplication.objects.create(parent_account=account, member_full_name="Kid")
+    assert str(app) == "str@example.com — Kid"
+
+
+def test_accessors_return_empty_when_unlinked():
+    app = RegistrationApplication.objects.create(claimed_email="anon@example.com")
+    assert app.guardian_name == ""
+    assert app.guardian_contact_email == ""

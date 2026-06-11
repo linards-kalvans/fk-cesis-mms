@@ -12,13 +12,13 @@ from apps.registrations.models import RegistrationApplication
 class RegistrationApplicationAdmin(admin.ModelAdmin):
     list_display = (
         "member_full_name",
-        "guardian_email",
+        "guardian_contact_email",
         "status",
         "submitted_at",
         "review_link",
     )
     list_filter = ("status",)
-    search_fields = ("member_full_name", "guardian_email", "guardian_full_name")
+    search_fields = ("member_full_name", "parent_account__email", "guardian__full_name")
     readonly_fields = (
         "status",
         "submitted_at",
