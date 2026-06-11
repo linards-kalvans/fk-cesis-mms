@@ -41,14 +41,13 @@ class TestSchema:
         assert PERSONAL_DATA_CONSENT_VERSION  # non-empty
 
     def test_consent_fields_default_to_null(self):
-        app = RegistrationApplication.objects.create(guardian_email="parent@example.com")
+        app = RegistrationApplication.objects.create()
         assert app.personal_data_consent_at is None
         assert app.personal_data_consent_version is None
 
     def test_consent_fields_persist_when_set(self):
         when = datetime(2026, 5, 23, 12, 0, tzinfo=dt_timezone.utc)
         app = RegistrationApplication.objects.create(
-            guardian_email="parent@example.com",
             personal_data_consent_at=when,
             personal_data_consent_version=PERSONAL_DATA_CONSENT_VERSION,
         )
@@ -65,7 +64,6 @@ class TestSchema:
 def _make_application(email: str = "parent@example.com", **extra) -> RegistrationApplication:
     """Persist a bare-bones draft application for stamping tests."""
     app: RegistrationApplication = RegistrationApplication.objects.create(
-        guardian_email=email,
         claimed_email=email,
         **extra,
     )

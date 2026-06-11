@@ -605,8 +605,6 @@ class TestOcrExtractedFieldsDob:
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
-            guardian_email=parent_account.email,
-            guardian_phone="+37100000099",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(
@@ -652,8 +650,6 @@ class TestOcrExtractedFieldsDob:
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
-            guardian_email=parent_account.email,
-            guardian_phone="+37100000098",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(

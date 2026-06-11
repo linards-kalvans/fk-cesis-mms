@@ -341,7 +341,7 @@ class TestSameBrowserVsCrossBrowser:
         # Fresh client = different browser
         other_browser = Client()
         app = RegistrationApplication.objects.get(
-            guardian_email="crosscross@example.com"
+            claimed_email="crosscross@example.com"
         )
         resp = other_browser.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 404, (

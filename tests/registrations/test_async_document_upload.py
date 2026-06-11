@@ -41,13 +41,6 @@ def _verified_client(account: ParentAccount) -> Client:
 def _make_application(account: ParentAccount) -> RegistrationApplication:
     app: RegistrationApplication = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="Test Parent",
-        guardian_personal_id="010101-12345",
-        guardian_phone="+37120000001",
-        guardian_declared_address="Riga 1",
-        member_full_name="Test Child",
-        member_personal_id="010125-12345",
         member_birth_date="2025-01-01",
     )
     return app

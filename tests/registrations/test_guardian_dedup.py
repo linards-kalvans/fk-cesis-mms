@@ -24,7 +24,7 @@ def test_application_has_guardian_fk():
     account = ParentAccount.objects.create(email="fk@example.com")
     guardian = Guardian.objects.create(parent_account=account)
     app = RegistrationApplication.objects.create(
-        guardian_email=account.email, parent_account=account, guardian=guardian
+        parent_account=account, guardian=guardian
     )
     assert app.guardian == guardian
     assert list(guardian.applications.all()) == [app]

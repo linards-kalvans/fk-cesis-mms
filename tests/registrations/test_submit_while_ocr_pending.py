@@ -40,26 +40,33 @@ def _make_account(email: str = "submit@example.com") -> ParentAccount:
 def _make_complete_draft(account: ParentAccount) -> RegistrationApplication:
     """Build a draft with all fields + active documents required for submit."""
     from apps.members.models import KitSizeOption
+    from apps.registrations.services import create_or_update_draft
 
-    shirt = KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="M")
-    shorts = KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHORTS, label="M")
+    shirt, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHIRT, label="M", defaults={"is_active": True}
+    )
+    shorts, _ = KitSizeOption.objects.get_or_create(
+        kind=KitSizeOption.Kind.SHORTS, label="M", defaults={"is_active": True}
+    )
 
-    app = RegistrationApplication.objects.create(
-        parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="Submit Parent",
-        guardian_personal_id="010101-99999",
-        guardian_phone="+37120000001",
-        guardian_declared_address="Riga 1",
-        member_full_name="Submit Child",
-        member_personal_id="010125-99999",
-        member_birth_date="2025-01-01",
-        member_actual_address="Riga 1",
-        member_same_address_as_guardian=True,
-        member_kit_size_shirt=shirt,
-        member_kit_size_shorts=shorts,
-        preferred_agreement_signing=RegistrationApplication.AgreementSigning.PAPER,
-        status=RegistrationApplication.Status.DRAFT,
+    app = create_or_update_draft(
+        data={
+            "guardian_email": account.email,
+            "guardian_full_name": "Submit Parent",
+            "guardian_personal_id": "010101-99999",
+            "guardian_phone": "+37120000001",
+            "guardian_declared_address": "Riga 1",
+            "member_full_name": "Submit Child",
+            "member_personal_id": "010125-99999",
+            "member_birth_date": "2025-01-01",
+            "member_actual_address": "Riga 1",
+            "member_same_address_as_guardian": True,
+            "member_kit_size_shirt": shirt.pk,
+            "member_kit_size_shorts": shorts.pk,
+            "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+        },
+        files={},
+        verified_account=account,
     )
     # Active docs (no extraction yet for guardian/member identity — OCR is pending)
     for kind, status in (

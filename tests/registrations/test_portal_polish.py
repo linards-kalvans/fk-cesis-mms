@@ -98,7 +98,6 @@ class TestPortalNoInlineStyles:
         RegistrationApplication.objects.create(
             parent_account=parent_account,
             status=RegistrationApplication.Status.DRAFT,
-            guardian_full_name="Anna Bērziņa",
             member_full_name="Jānis Bērziņš",
         )
         response = verified_client.get(reverse("registrations:parent-portal"))

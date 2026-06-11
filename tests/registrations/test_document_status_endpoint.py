@@ -35,13 +35,6 @@ def _verified_client(account: ParentAccount) -> Client:
 def _make_application(account: ParentAccount) -> RegistrationApplication:
     app: RegistrationApplication = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="",
-        guardian_personal_id="",
-        guardian_phone="+37120000001",
-        guardian_declared_address="Riga 1",
-        member_full_name="",
-        member_personal_id="",
         member_birth_date="2025-01-01",
     )
     return app
@@ -224,13 +217,6 @@ def test_status_returns_404_when_document_belongs_to_other_application():
     app1 = _make_application(account)
     app2 = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="",
-        guardian_personal_id="",
-        guardian_phone="+37120000007",
-        guardian_declared_address="Riga 1",
-        member_full_name="",
-        member_personal_id="",
         member_birth_date="2025-01-01",
     )
     doc = _make_document(app1)
