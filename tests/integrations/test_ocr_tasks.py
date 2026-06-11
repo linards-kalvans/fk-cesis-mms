@@ -54,11 +54,6 @@ def _make_application(email: str = "job-test@example.com") -> RegistrationApplic
     account = ParentAccount.objects.create(email=email, phone="+37120000001")
     app: RegistrationApplication = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="Job Parent",
-        guardian_personal_id="010101-00001",
-        guardian_phone="+37120000001",
-        guardian_declared_address="Riga 1",
         member_full_name="Job Child",
         member_personal_id="010125-00001",
         member_birth_date="2025-01-01",

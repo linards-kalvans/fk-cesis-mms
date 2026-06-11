@@ -33,11 +33,6 @@ def _make_doc(
     )
     app = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="X",
-        guardian_personal_id="010101-00099",
-        guardian_phone="+37120000099",
-        guardian_declared_address="Riga 99",
         member_full_name="Y",
         member_personal_id="010125-00099",
         member_birth_date="2025-01-01",

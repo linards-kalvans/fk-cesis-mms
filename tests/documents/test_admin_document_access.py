@@ -50,7 +50,6 @@ def _make_non_admin_user():
 
 def _make_document():
     application = RegistrationApplication.objects.create(
-        guardian_email="guardian@example.com",
         claimed_email="guardian@example.com",
     )
     return Document.objects.create(
