@@ -99,7 +99,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - **Invoice issue/send policy** — pushed invoices land in Invoice Ninja **Draft** status (`status_id=1`), invisible to the guardian until "sent". Decide and implement auto-issue (set `status_id=2` on push) vs. a staff review-then-send step. Deferred pending the policy decision.
 
 ### Data integrity gaps
-- **Guardian dedup by email** — **fully landed (B1 + B2, 2026-06-10/11).** `Guardian` is 1:1 with `ParentAccount` (Slice A); read-through accessors read `Guardian`/`ParentAccount` only (Slice B1 + B2); the five `guardian_*` columns are dropped (Slice B2, migration `registrations/0010`). **Only Slice C remains:** locked-profile UX + admin-initiated email change workflow. Parent self-service email change is deferred.
+- **Guardian dedup by email** — **fully landed (Slices A + B1 + B2 + C, 2026-06-10/11).** `Guardian` is 1:1 with `ParentAccount` (Slice A); read-through accessors read `Guardian`/`ParentAccount` only (Slice B1 + B2); the five `guardian_*` columns are dropped (Slice B2, migration `registrations/0010`); locked-profile UX (returning parents see guardian fields read-only + "Rediģēt vecāka datus" unlock toggle) and admin-initiated email change (`change_parent_email` service with uniqueness + `Guardian.email` mirror; `ParentAccount` registered in admin) landed in Slice C. **Slice C LAN acceptance pending.** Parent self-service email change (with OTP re-verification of the new address) remains **deferred**.
 
 ---
 
