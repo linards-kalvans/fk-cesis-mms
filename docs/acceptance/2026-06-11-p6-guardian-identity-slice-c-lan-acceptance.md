@@ -19,10 +19,10 @@ Drive via browser against `http://192.168.3.245:8000`. Staff/admin checks use Dj
 
 | # | Scenario | Steps | Expected | Result |
 |---|----------|-------|----------|--------|
-| L1 | Lock + unlock | As a returning parent (one prior populated registration), open a new application workspace → guardian step | Guardian name / PID / phone / address render **read-only**; the verified email is **read-only**. Clicking **"Rediģēt vecāka datus"** makes the four profile fields editable (email stays read-only); the toggle hides. Edit the name + save (auto-save). | |
-| L2 | Propagation | After the L1 edit, open the parent's **other** application workspace + `/portal/` | Both show the **edited** guardian value (one shared `Guardian`). | |
-| L3 | First registration unlocked | As a brand-new parent, start the first application → guardian step | Guardian profile fields are **editable**, no unlock toggle; verified email is read-only. | |
-| L4 | Admin email change | Django admin → Parent accounts → change a parent's email and save. Then check admin → Guardians, and the parent's application display. Also try setting an email already owned by another account. | The change saves; the linked **Guardian.email** updates to match; the parent's applications display the **new** verified email (read-through). Setting an email owned by another account is **rejected** (admin unique validation). | |
+| L1 | Lock + unlock | As a returning parent (one prior populated registration), open a new application workspace → guardian step | Guardian name / PID / phone / address render **read-only**; the verified email is **read-only**. Clicking **"Rediģēt vecāka datus"** makes the four profile fields editable (email stays read-only); the toggle hides. Edit the name + save (auto-save). | ✅ PASS |
+| L2 | Propagation | After the L1 edit, open the parent's **other** application workspace + `/portal/` | Both show the **edited** guardian value (one shared `Guardian`). | ✅ PASS (sibling workspace) |
+| L3 | First registration unlocked | As a brand-new parent, start the first application → guardian step | Guardian profile fields are **editable**, no unlock toggle; verified email is read-only. | ✅ PASS |
+| L4 | Admin email change | Django admin → Parent accounts → change a parent's email and save. Then check admin → Guardians, and the parent's application display. Also try setting an email already owned by another account. | The change saves; the linked **Guardian.email** updates to match; the parent's applications display the **new** verified email (read-through). Setting an email owned by another account is **rejected** (admin unique validation). | ✅ PASS |
 
 ## Explicitly NOT re-tested (unchanged by Slice C)
 
@@ -30,9 +30,18 @@ Drive via browser against `http://192.168.3.245:8000`. Staff/admin checks use Dj
 - Read-through display on portal / workspace / admin / DocuSeal payload — covered by Slice B1/B2 acceptance + the suite.
 - Parent registration flow, OCR, document upload, wizard gating — unchanged.
 
-## Results — run YYYY-MM-DD
+## Results — run 2026-06-11 (build `dev` @ `1dd1a93`, local `uv` instance, SQLite, stub OCR, console email)
 
-PENDING — to be filled in during the LAN acceptance session.
+Driven via Playwright against `http://192.168.3.245:8000`. Magic-link login per parent; Django admin login as a staff superuser for L4. Seed: parent A `returning@example.com` with a populated `Guardian` ("Anna Ozola") + two draft apps (49, 50); parent B `fresh@example.com` with an empty guardian + one draft app (51); `other@example.com` for the collision; staff superuser.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| L1 | ✅ PASS | App 49 guardian step: all four profile inputs `readonly=true` and prefilled ("Anna Ozola" / "010180-12345" / "+37120000001" / "Rīgas iela 1, Cēsis"); email `readonly=true`; toggle present, label "Rediģēt vecāka datus", note "Vecāka dati ir aizpildīti no Jūsu profila. Lai labotu, nospiediet pogu." After clicking the toggle: the four profile fields `readonly=false`, **email stays `readonly=true`**, toggle hidden. |
+| L2 | ✅ PASS | After unlocking app 49, edited name→"Anna Atjaunota" + phone→"+37129999999" and saved via the auto-save AJAX endpoint (200, `saved_at`). App **50** (sibling "Bērns Divi") workspace then shows guardian name "Anna Atjaunota" + phone "+37129999999" — propagated through the shared `Guardian` FK without touching app 50. (The `/portal/` is member-centric and does not surface the guardian name; propagation is verified on the sibling workspace, consistent with the B1/B2 finding.) |
+| L3 | ✅ PASS | App 51 (fresh parent, empty guardian, member "Jauns Bērns"): four profile fields `readonly=false`, **no** unlock toggle; email `readonly=true`. |
+| L4 | ✅ PASS | Admin changed pk 25 email `returning@example.com`→`returning2@example.com`: afterward `ParentAccount.email`, `Guardian.email` mirror, and `RegistrationApplication(49).guardian_contact_email` all read `returning2@example.com`. Attempting to set pk 25 email to the already-owned `other@example.com` was **rejected** with the form error "Parent account with this Email already exists." (clean validation, **no 500**); the DB was unchanged (`returning2@example.com` retained; `other@example.com` still owned by pk 27). |
+
+**Slice C LAN acceptance: COMPLETE (signed off 2026-06-11).** All four checks pass. Local SQLite test DB was restored to its pre-acceptance state afterward; the deployed `:dev` (Postgres) requires no migration for Slice C (code-only).
 
 ## Recording results
 
