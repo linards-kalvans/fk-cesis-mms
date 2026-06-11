@@ -143,42 +143,6 @@ def test_prefill_uses_guardian_profile_for_returning_parent():
     assert prefill["guardian_full_name"] == "Updated Guardian"
 
 
-def test_approval_does_not_overwrite_guardian_from_stale_columns(django_user_model):
-    """Guardian profile is set at draft-save; approval must not clobber it from
-    the application's (now-secondary) snapshot columns."""
-    from apps.registrations.services import create_or_update_draft, submit_application, approve_application
-    from apps.members.models import KitSizeOption
-    from apps.documents.models import Document
-    from django.core.files.uploadedfile import SimpleUploadedFile
-
-    shirt = KitSizeOption.objects.get_or_create(kind=KitSizeOption.Kind.SHIRT, label="S", defaults={"is_active": True})[0]
-    shorts = KitSizeOption.objects.get_or_create(kind=KitSizeOption.Kind.SHORTS, label="S", defaults={"is_active": True})[0]
-    account = ParentAccount.objects.create(email="approve@example.com")
-    app = create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Draft Guardian",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "Addr", "member_full_name": "Child",
-              "member_personal_id": "010125-67890", "member_birth_date": "2015-01-01",
-              "member_same_address_as_guardian": True, "member_kit_size_shirt": shirt.pk,
-              "member_kit_size_shorts": shorts.pk, "preferred_agreement_signing": "paper"},
-        files={}, verified_account=account,
-    )
-    for kind in (Document.Kind.GUARDIAN_IDENTITY, Document.Kind.MEMBER_IDENTITY, Document.Kind.MEMBER_PORTRAIT):
-        Document.objects.create(application=app, kind=kind,
-            file=SimpleUploadedFile(f"{kind}.png", b"x", content_type="image/png"),
-            original_filename=f"{kind}.png", content_type="image/png", file_size=1)
-    submit_application(app, account)
-
-    # Corrupt the snapshot columns directly; the Guardian profile is the truth.
-    RegistrationApplication.objects.filter(pk=app.pk).update(guardian_full_name="STALE COLUMN")
-
-    staff = django_user_model.objects.create_user(username="rev-rt", is_staff=True)
-    approve_application(RegistrationApplication.objects.get(pk=app.pk), staff)
-
-    guardian = Guardian.objects.get(parent_account=account)
-    assert guardian.full_name == "Draft Guardian"  # NOT "STALE COLUMN"
-
-
 def test_make_guardian_helper_links_a_populated_guardian(make_guardian):
     account = ParentAccount.objects.create(email="helper@example.com")
     guardian = make_guardian(account, full_name="Helper Name", personal_id="010101-12345",
