@@ -2,9 +2,17 @@
 
 import pytest
 
+from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
+
+GUARDIAN_PROFILE_FIELDS = (
+    "guardian_full_name",
+    "guardian_personal_id",
+    "guardian_phone",
+    "guardian_declared_address",
+)
 
 
 class TestGuardianProfilePopulated:
@@ -25,3 +33,19 @@ class TestGuardianProfilePopulated:
             parent_account=parent_account, guardian=guardian
         )
         assert app.guardian_profile_populated is True
+
+
+class TestFormReadonlyLocking:
+    def test_email_always_readonly(self):
+        form = RegistrationApplicationForm()
+        assert form.fields["guardian_email"].widget.attrs.get("readonly") == "readonly"
+
+    def test_profile_fields_readonly_when_locked(self):
+        form = RegistrationApplicationForm(guardian_profile_locked=True)
+        for name in GUARDIAN_PROFILE_FIELDS:
+            assert form.fields[name].widget.attrs.get("readonly") == "readonly", name
+
+    def test_profile_fields_editable_when_unlocked(self):
+        form = RegistrationApplicationForm(guardian_profile_locked=False)
+        for name in GUARDIAN_PROFILE_FIELDS:
+            assert "readonly" not in form.fields[name].widget.attrs, name

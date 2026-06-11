@@ -97,10 +97,18 @@ class RegistrationApplicationForm(forms.Form):
         "preferred_agreement_signing",
     )
 
-    def __init__(self, *args, is_submit: bool = False, has_existing_document: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        is_submit: bool = False,
+        has_existing_document: bool = False,
+        guardian_profile_locked: bool = False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.is_submit = is_submit
         self.has_existing_document = has_existing_document
+        self.guardian_profile_locked = guardian_profile_locked
 
         # Populate kit size choices from database
         from apps.members.models import KitSizeOption
@@ -166,6 +174,22 @@ class RegistrationApplicationForm(forms.Form):
             widget.attrs["data-step-error-empty"] = STEP_FIELD_REQUIRED
             if field_name in _format_validated:
                 widget.attrs["data-step-error-format"] = STEP_FIELD_FORMAT
+
+        # Slice C — verified email is the OTP identity; never parent-editable.
+        # Staff change it via Django admin (apps.accounts.services.change_parent_email).
+        self.fields["guardian_email"].widget.attrs["readonly"] = "readonly"
+
+        # Slice C — returning parents see the guardian profile locked. readonly
+        # (NOT disabled) keeps the values in the POST so a save round-trips them
+        # unchanged; the template's unlock toggle removes readonly client-side.
+        if guardian_profile_locked:
+            for _name in (
+                "guardian_full_name",
+                "guardian_personal_id",
+                "guardian_phone",
+                "guardian_declared_address",
+            ):
+                self.fields[_name].widget.attrs["readonly"] = "readonly"
 
     def clean(self):
         cleaned_data = super().clean()
