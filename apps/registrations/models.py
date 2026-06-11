@@ -169,3 +169,9 @@ class RegistrationApplication(TimeStampedModel):
     @property
     def guardian_contact_email(self) -> str:
         return str(self.parent_account.email) if self.parent_account_id is not None else ""
+
+    @property
+    def guardian_profile_populated(self) -> bool:
+        """True when this application's canonical Guardian profile is already
+        filled (returning parent). Drives the locked-profile UX in Slice C."""
+        return bool(self.guardian_id is not None and self.guardian.full_name)
