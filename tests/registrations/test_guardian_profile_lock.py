@@ -84,3 +84,35 @@ class TestWorkspaceLockWiring:
         assert resp.status_code == 200
         assert resp.context["guardian_profile_locked"] is False
         assert "readonly" not in resp.context["form"].fields["guardian_full_name"].widget.attrs
+
+
+class TestLockedRenderMarkup:
+    def _make_locked_app(self, parent_account):
+        from apps.members.services import resolve_guardian_for_account
+        from apps.registrations.models import RegistrationApplication
+
+        guardian = resolve_guardian_for_account(parent_account)
+        guardian.full_name = "Anna Ozola"
+        guardian.save(update_fields=["full_name"])
+        return RegistrationApplication.objects.create(
+            parent_account=parent_account,
+            guardian=guardian,
+            claimed_email=parent_account.email,
+        )
+
+    def test_locked_render_includes_unlock_toggle(self, verified_client, parent_account):
+        app = self._make_locked_app(parent_account)
+        html = verified_client.get(f"/applications/{app.id}/").content.decode()
+        assert "data-guardian-unlock" in html
+        assert "Rediģēt vecāka datus" in html
+
+    def test_unlocked_render_omits_unlock_toggle(self, verified_client, parent_account):
+        from apps.members.services import resolve_guardian_for_account
+        from apps.registrations.models import RegistrationApplication
+
+        guardian = resolve_guardian_for_account(parent_account)  # empty profile
+        app = RegistrationApplication.objects.create(
+            parent_account=parent_account, guardian=guardian, claimed_email=parent_account.email
+        )
+        html = verified_client.get(f"/applications/{app.id}/").content.decode()
+        assert "data-guardian-unlock" not in html

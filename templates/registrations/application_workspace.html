@@ -85,6 +85,27 @@
           </div>
           {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map document_bound_fields=document_bound_fields workspace_mode=workspace_mode %}
         {% endif %}
+        {% if section_name == "guardian" and guardian_profile_locked %}
+          <div class="fk-guardian-lock" data-guardian-lock>
+            <p class="fk-guardian-lock__note">Vecāka dati ir aizpildīti no Jūsu profila. Lai labotu, nospiediet pogu.</p>
+            <button type="button" class="fk-button fk-button--secondary" data-guardian-unlock>Rediģēt vecāka datus</button>
+          </div>
+          <script>
+// GuardianProfileUnlock — Slice C. Removes readonly from the four guardian
+// profile inputs on click so a returning parent can edit. Email stays readonly.
+document.addEventListener('DOMContentLoaded', function () {
+  var btn = document.querySelector('[data-guardian-unlock]');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    ['id_guardian_full_name', 'id_guardian_personal_id', 'id_guardian_phone', 'id_guardian_declared_address'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.removeAttribute('readonly');
+    });
+    btn.setAttribute('hidden', 'hidden');
+  });
+});
+          </script>
+        {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "documents" and bound_field.field.widget.input_type == "file" %}
             {# Rendered by document_card.html above — skip here to avoid duplicate input. #}
