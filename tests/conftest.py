@@ -120,3 +120,25 @@ def staff_client(db):
     client = Client()
     client.login(username="staff", password="pw")
     return client
+
+
+@pytest.fixture
+def make_guardian(db):
+    """Create a Guardian linked to a ParentAccount with a populated profile.
+
+    Use in tests that previously set guardian_* columns on RegistrationApplication
+    and assert guardian values through the read accessors.
+    """
+    from apps.members.models import Guardian
+
+    def _make(account, *, full_name="", personal_id="", phone="", address=""):
+        return Guardian.objects.create(
+            parent_account=account,
+            email=account.email,
+            full_name=full_name,
+            personal_id=personal_id,
+            phone=phone,
+            address=address,
+        )
+
+    return _make

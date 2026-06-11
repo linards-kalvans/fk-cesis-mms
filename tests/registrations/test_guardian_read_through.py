@@ -202,3 +202,14 @@ def test_approval_does_not_overwrite_guardian_from_stale_columns(django_user_mod
 
     guardian = Guardian.objects.get(parent_account=account)
     assert guardian.full_name == "Draft Guardian"  # NOT "STALE COLUMN"
+
+
+def test_make_guardian_helper_links_a_populated_guardian(make_guardian):
+    account = ParentAccount.objects.create(email="helper@example.com")
+    guardian = make_guardian(account, full_name="Helper Name", personal_id="010101-12345",
+                             phone="+37120000000", address="Helper Addr")
+    assert guardian.parent_account_id == account.id
+    assert guardian.full_name == "Helper Name"
+    assert guardian.email == "helper@example.com"  # mirrored from the account
+    app = RegistrationApplication.objects.create(parent_account=account, guardian=guardian)
+    assert app.guardian_name == "Helper Name"
