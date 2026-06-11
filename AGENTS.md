@@ -263,6 +263,7 @@ Target Django monolith with domain apps:
   - `parent_portal` and `admin_review_queue` querysets use `select_related("guardian", "parent_account")` to avoid N+1 from the email accessor traversing `parent_account` (Slice B2 carryover).
   - Carryover test: `test_update_existing_draft_repopulates_guardian_profile` in `tests/registrations/test_guardian_read_through.py` (total 12 tests in file).
   - Full-repo gate: `uv run pytest -q` → **1149 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (247 source files).
+  - **LAN acceptance COMPLETE — signed off 2026-06-11** (`docs/acceptance/2026-06-11-p6-guardian-identity-slice-b1-b2-lan-acceptance.md`). Browser checks (local): propagation across a parent's apps (edit guardian on one → visible on siblings + portal + admin), admin search by `parent_account__email` / `guardian__full_name`, no display regression — all pass. Deploy checks on `:dev` (Postgres): migration `0010` applied, services healthy (qcluster has no healthcheck by design — no HTTP server). **Migration `0010` is lossy** (drops columns, no data migration): 2 `guardian__isnull=True` rows on `:dev` were disposable old test apps. **Prod cutover must be fresh-start** (no pre-guardian-identity rows) to avoid guardian-data loss on real applications.
   - Guardian-identity work now has only **Slice C** remaining: locked-profile UX + admin-initiated email change workflow.
 
 - **P6 Slice A delivered — local billing domain + sibling-discount engine (2026-06-07)**

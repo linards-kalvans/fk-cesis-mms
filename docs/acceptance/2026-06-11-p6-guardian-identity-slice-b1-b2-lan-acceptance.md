@@ -49,7 +49,14 @@ Browser-checkable rows driven via Playwright against `http://192.168.3.245:8000`
 
 Note on P2/agreement display: the agreement surfaces read `member.guardian.*` directly (unchanged since before B1), so they propagate by the same mechanism; covered by the test suite. Not separately re-driven here (would require approving + generating an agreement).
 
-**Deploy checks D1–D3 (the lossy-migration verification) remain — they need real Postgres + the migration on the deployed `:dev`, not the local SQLite run.**
+Deploy checks on the deployed `:dev` (Postgres) — verified 2026-06-11:
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| D2 | Migration `0010` applied + services healthy | ✅ PASS | `showmigrations registrations` → `0010 [X]`; `web` healthy; `qcluster` `Up` (no health by design — no HTTP server) |
+| D1/D3 | Pre-B1 data / display | ✅ PASS (with note) | 2 `guardian__isnull=True` rows — disposable old test applications; their guardian columns are already dropped. New/current data renders correctly. **Prod must be fresh-start (no pre-guardian-identity rows) at cutover.** |
+
+**Slice B1 + B2 LAN acceptance: COMPLETE (signed off 2026-06-11).**
 
 ## Recording results
 
