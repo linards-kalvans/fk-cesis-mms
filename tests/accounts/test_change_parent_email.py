@@ -50,3 +50,17 @@ def test_safe_when_account_has_no_guardian():
     change_parent_email(account, "moved@example.com")  # must not raise
     account.refresh_from_db()
     assert account.email == "moved@example.com"
+
+
+def test_db_level_collision_converted_to_valueerror(monkeypatch):
+    from django.db.models.query import QuerySet
+
+    ParentAccount.objects.create(email="taken@example.com")
+    account = ParentAccount.objects.create(email="mine@example.com")
+
+    # Simulate the TOCTOU race: pre-check sees the email as free, but the DB
+    # unique constraint still rejects the save.
+    monkeypatch.setattr(QuerySet, "exists", lambda self: False)
+
+    with pytest.raises(ValueError):
+        change_parent_email(account, "taken@example.com")

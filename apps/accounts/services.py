@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone as django_timezone
 
 from apps.accounts.models import EmailVerificationCode, MagicLinkToken, ParentAccount
@@ -344,10 +344,14 @@ def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount
     if clash:
         raise ValueError("email already in use by another account")
 
-    account.email = normalized
-    account.save(update_fields=["email", "updated_at"])
-
     from apps.members.models import Guardian
+
+    try:
+        with transaction.atomic():
+            account.email = normalized
+            account.save(update_fields=["email", "updated_at"])
+    except IntegrityError as exc:
+        raise ValueError("email already in use by another account") from exc
 
     Guardian.objects.filter(parent_account=account).update(email=normalized)
     return account
