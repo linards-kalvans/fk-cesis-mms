@@ -50,6 +50,16 @@ REQUIRED_SUBMIT_FIELDS = (
     "preferred_agreement_signing",
 )
 
+# Slice B2: guardian fields in REQUIRED_SUBMIT_FIELDS are legacy column names;
+# resolve them through the read accessors instead of direct attribute access.
+_GUARDIAN_SUBMIT_ACCESSORS = {
+    "guardian_full_name": "guardian_name",
+    "guardian_personal_id": "guardian_pid",
+    "guardian_email": "guardian_contact_email",
+    "guardian_phone": "guardian_contact_phone",
+    "guardian_declared_address": "guardian_address",
+}
+
 # All manual P1 form fields that map to model columns (excl. guardian_email = derived)
 MANUAL_P1_FIELDS = (
     "guardian_full_name",
@@ -400,21 +410,25 @@ def create_or_update_draft(
             data = dict(data)
             data[new] = data[old]
 
-    application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
-    application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
-    application.guardian_email = email
-    application.guardian_phone = str(data.get("guardian_phone", "")).strip()
-    application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
-    # Slice B1: the Guardian profile is now the read source, so populate it at
-    # draft-save (was previously only set at approval). Latest write wins;
-    # field-locking is Slice C. Email stays sourced from ParentAccount.
+    # Slice B2: when a Guardian is linked, write only the canonical Guardian
+    # row; the legacy columns are not written. For anonymous drafts (no
+    # verified_account → no Guardian yet) the columns remain the temporary
+    # store until the parent verifies and a Guardian is linked. Email stays
+    # sourced from ParentAccount.
     if application.guardian_id is not None:
         _guardian = application.guardian
-        _guardian.full_name = application.guardian_full_name
-        _guardian.personal_id = application.guardian_personal_id
-        _guardian.phone = application.guardian_phone
-        _guardian.address = application.guardian_declared_address
+        _guardian.full_name = str(data.get("guardian_full_name", "")).strip()
+        _guardian.personal_id = str(data.get("guardian_personal_id", "")).strip()
+        _guardian.phone = str(data.get("guardian_phone", "")).strip()
+        _guardian.address = str(data.get("guardian_declared_address", "")).strip()
         _guardian.save(update_fields=["full_name", "personal_id", "phone", "address"])
+    else:
+        # Anonymous draft: write columns as temporary store (no Guardian yet).
+        application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
+        application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
+        application.guardian_email = email
+        application.guardian_phone = str(data.get("guardian_phone", "")).strip()
+        application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
     application.member_full_name = str(data.get("member_full_name", "")).strip()
     application.member_personal_id = str(data.get("member_personal_id", "")).strip()
     application.member_birth_date = data.get("member_birth_date") or None
@@ -540,7 +554,8 @@ def _require_complete_application(application: RegistrationApplication) -> None:
     }
     missing = []
     for field in REQUIRED_SUBMIT_FIELDS:
-        val = getattr(application, field)
+        attr = _GUARDIAN_SUBMIT_ACCESSORS.get(field, field)
+        val = getattr(application, attr)
         if field in boolean_fields:
             if val is None:
                 missing.append(field)

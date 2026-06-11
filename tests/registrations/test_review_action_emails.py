@@ -164,7 +164,7 @@ def test_email_subject_is_latvian(
 def test_email_recipient_is_guardian_email(submitted_application, staff_user):
     mail.outbox.clear()
     approve_application(submitted_application, staff_user)
-    assert mail.outbox[0].to == [submitted_application.guardian_email]
+    assert mail.outbox[0].to == [submitted_application.guardian_contact_email]
 
 
 def test_email_body_is_plain_text_only(submitted_application, staff_user):

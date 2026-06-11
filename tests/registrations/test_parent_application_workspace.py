@@ -298,5 +298,5 @@ class TestEditableWorkspaceActions:
         assert resp.status_code == 302
         assert f"/applications/{app.pk}/" in resp.headers["Location"]
         app.refresh_from_db()
-        assert app.guardian_full_name == "Updated Parent"
+        assert app.guardian_name == "Updated Parent"
         assert app.status == "draft"

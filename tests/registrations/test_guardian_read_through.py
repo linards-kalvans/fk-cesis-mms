@@ -152,3 +152,21 @@ def test_make_guardian_helper_links_a_populated_guardian(make_guardian):
     assert guardian.email == "helper@example.com"  # mirrored from the account
     app = RegistrationApplication.objects.create(parent_account=account, guardian=guardian)
     assert app.guardian_name == "Helper Name"
+
+
+def test_draft_save_writes_guardian_not_columns(make_guardian):
+    """create_or_update_draft populates the Guardian from form data."""
+    from apps.registrations.services import create_or_update_draft
+
+    account = ParentAccount.objects.create(email="nocol@example.com")
+    app = create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "Form Name",
+              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
+              "guardian_declared_address": "Form Addr"},
+        files={}, verified_account=account,
+    )
+    guardian = app.guardian
+    assert guardian.full_name == "Form Name"
+    assert guardian.personal_id == "010101-12345"
+    assert guardian.phone == "+37120000000"
+    assert guardian.address == "Form Addr"

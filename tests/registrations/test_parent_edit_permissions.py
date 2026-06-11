@@ -473,7 +473,7 @@ class TestFixRequestedDraftSavePreservesStatus:
         assert app.status == RegistrationApplication.Status.FIX_REQUESTED, (
             f"Expected fix_requested after save-draft, got {app.status}."
         )
-        assert app.guardian_full_name == "Updated Guardian", (
+        assert app.guardian_name == "Updated Guardian", (
             "Edited field must be persisted after save-draft."
         )
         assert app.review_message == "Please correct the personal ID format.", (
