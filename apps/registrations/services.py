@@ -60,7 +60,8 @@ _GUARDIAN_SUBMIT_ACCESSORS = {
     "guardian_declared_address": "guardian_address",
 }
 
-# All manual P1 form fields that map to model columns (excl. guardian_email = derived)
+# Manual P1 form-field names used as field_sources keys (guardian fields now
+# live on the Guardian row; guardian_email is derived from ParentAccount).
 MANUAL_P1_FIELDS = (
     "guardian_full_name",
     "guardian_personal_id",
@@ -398,7 +399,8 @@ def create_or_update_draft(
         application.parent_account = verified_account
         application.guardian = resolve_guardian_for_account(verified_account)
 
-    # Backward-compat aliases for old field names
+    # Backward-compat aliases for old field names. "guardian_address" feeds the
+    # verified-path Guardian write below; the child_* entries feed member fields.
     _alias = {
         "guardian_address": "guardian_declared_address",
         "child_full_name": "member_full_name",
