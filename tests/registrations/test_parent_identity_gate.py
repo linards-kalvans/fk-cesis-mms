@@ -297,7 +297,7 @@ class TestPostVerificationPortalVisibility:
             portal_resp = client.get("/portal/")
             assert portal_resp.status_code == 200
             portal_content = portal_resp.content.decode()
-            assert "Verify Portal" in portal_content or "verifyportal" in portal_content, (
+            assert "Child VP" in portal_content, (
                 "Verified parent must see matching claimed-email applications in portal."
             )
 

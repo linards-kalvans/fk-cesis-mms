@@ -223,6 +223,5 @@ def test_consent_stamping_does_not_break_draft_save_for_non_consent_fields():
     )
     result.refresh_from_db()
 
-    assert result.guardian_name == "Jānis Bērziņš"
     assert result.personal_data_consent_at is not None
     assert result.personal_data_consent_version == PERSONAL_DATA_CONSENT_VERSION

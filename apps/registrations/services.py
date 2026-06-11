@@ -411,10 +411,8 @@ def create_or_update_draft(
             data[new] = data[old]
 
     # Slice B2: when a Guardian is linked, write only the canonical Guardian
-    # row; the legacy columns are not written. For anonymous drafts (no
-    # verified_account → no Guardian yet) the columns remain the temporary
-    # store until the parent verifies and a Guardian is linked. Email stays
-    # sourced from ParentAccount.
+    # row; the legacy columns are not written. Unverified drafts hold only
+    # claimed_email — no guardian_* column writes.
     if application.guardian_id is not None:
         _guardian = application.guardian
         _guardian.full_name = str(data.get("guardian_full_name", "")).strip()
@@ -422,13 +420,6 @@ def create_or_update_draft(
         _guardian.phone = str(data.get("guardian_phone", "")).strip()
         _guardian.address = str(data.get("guardian_declared_address", "")).strip()
         _guardian.save(update_fields=["full_name", "personal_id", "phone", "address"])
-    else:
-        # Anonymous draft: write columns as temporary store (no Guardian yet).
-        application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
-        application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
-        application.guardian_email = email
-        application.guardian_phone = str(data.get("guardian_phone", "")).strip()
-        application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
     application.member_full_name = str(data.get("member_full_name", "")).strip()
     application.member_personal_id = str(data.get("member_personal_id", "")).strip()
     application.member_birth_date = data.get("member_birth_date") or None
