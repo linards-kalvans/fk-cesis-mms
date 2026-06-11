@@ -215,6 +215,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         raise Http404
 
     editable = application.is_editable_by(account)
+    guardian_profile_locked = editable and application.guardian_profile_populated
 
     if request.method == "POST":
         if not editable:
@@ -230,6 +231,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             request.FILES,
             is_submit=submit_requested,
             has_existing_document=_active_guardian_identity_exists(application),
+            guardian_profile_locked=guardian_profile_locked,
         )
         if form.is_valid():
             try:
@@ -281,7 +283,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 "member_kit_size_shorts": application.member_kit_size_shorts_id,
                 "preferred_agreement_signing": application.preferred_agreement_signing,
                 "support_club_instead_of_multi_child_discount": application.support_club_instead_of_multi_child_discount,
-            }
+            },
+            guardian_profile_locked=guardian_profile_locked,
         )
 
     ocr_decrypted_summaries: dict[str, list[tuple[str, str]] | None] = {}
@@ -322,6 +325,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         {
             "application": application,
             "form": form,
+            "guardian_profile_locked": guardian_profile_locked,
             "workspace_mode": workspace_mode(application, account),
             "agreement_status": agreement_status,
             "document_state": active_documents_by_kind(application),
@@ -420,11 +424,14 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
     if not allowed:
         raise Http404
 
+    guardian_profile_locked = allowed and application.guardian_profile_populated
+
     form = RegistrationApplicationForm(
         request.POST,
         request.FILES,
         is_submit=True,
         has_existing_document=_active_guardian_identity_exists(application),
+        guardian_profile_locked=guardian_profile_locked,
     )
     if form.is_valid():
         application = create_or_update_draft(
@@ -442,6 +449,7 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
         {
             "form": form,
             "application": application,
+            "guardian_profile_locked": guardian_profile_locked,
             "workspace_mode": workspace_mode(application, account),
             "document_state": active_documents_by_kind(application),
             "document_by_field": documents_by_field_name(application),

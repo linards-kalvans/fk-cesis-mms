@@ -49,3 +49,38 @@ class TestFormReadonlyLocking:
         form = RegistrationApplicationForm(guardian_profile_locked=False)
         for name in GUARDIAN_PROFILE_FIELDS:
             assert "readonly" not in form.fields[name].widget.attrs, name
+
+
+class TestWorkspaceLockWiring:
+    def test_returning_parent_sees_locked_profile(self, verified_client, parent_account):
+        from apps.members.services import resolve_guardian_for_account
+        from apps.registrations.models import RegistrationApplication
+
+        guardian = resolve_guardian_for_account(parent_account)
+        guardian.full_name = "Anna Ozola"
+        guardian.save(update_fields=["full_name"])
+
+        app = RegistrationApplication.objects.create(
+            parent_account=parent_account,
+            guardian=guardian,
+            claimed_email=parent_account.email,
+        )
+        resp = verified_client.get(f"/applications/{app.id}/")
+        assert resp.status_code == 200
+        assert resp.context["guardian_profile_locked"] is True
+        assert resp.context["form"].fields["guardian_full_name"].widget.attrs.get("readonly") == "readonly"
+
+    def test_first_registration_profile_unlocked(self, verified_client, parent_account):
+        from apps.members.services import resolve_guardian_for_account
+        from apps.registrations.models import RegistrationApplication
+
+        guardian = resolve_guardian_for_account(parent_account)  # empty profile
+        app = RegistrationApplication.objects.create(
+            parent_account=parent_account,
+            guardian=guardian,
+            claimed_email=parent_account.email,
+        )
+        resp = verified_client.get(f"/applications/{app.id}/")
+        assert resp.status_code == 200
+        assert resp.context["guardian_profile_locked"] is False
+        assert "readonly" not in resp.context["form"].fields["guardian_full_name"].widget.attrs
