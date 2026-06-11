@@ -33,6 +33,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    def get_queryset(self, request):
+        # guardian_contact_email (list_display) traverses parent_account, and
+        # guardian__full_name is searched — select_related avoids a changelist N+1.
+        return super().get_queryset(request).select_related("guardian", "parent_account")
+
     def review_link(self, obj) -> str:  # type: ignore[override]
         """Link to the custom review detail page."""
         if obj.pk:
