@@ -252,6 +252,19 @@ Target Django monolith with domain apps:
   - New test file `tests/registrations/test_guardian_read_through.py` (9 tests). Full-repo gate: `uv run pytest -q` → **1146 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (246 source files).
   - Plan: `docs/superpowers/plans/2026-06-10-p6-guardian-identity-slice-b1-read-through.md`.
 
+- **P6 guardian-identity Slice B2 delivered — drop guardian columns (2026-06-11)**
+  - The five `guardian_*` columns (`guardian_full_name`, `guardian_personal_id`, `guardian_contact_phone`, `guardian_declared_address`, `guardian_contact_email`) are DROPPED from `RegistrationApplication`. Migration `registrations/0010`.
+  - The read accessors (`guardian_name`, `guardian_pid`, `guardian_contact_phone`, `guardian_address`, `guardian_contact_email`) now read the `Guardian` / `ParentAccount` only — no column fallback. The email accessor prefers `parent_account.email`; the four profile accessors use the linked `Guardian` exclusively (empty string when no Guardian is linked).
+  - `create_or_update_draft` writes only the `Guardian` row. Unverified drafts hold only `claimed_email` — the Guardian profile requires a verified account.
+  - Submit validation reads guardian fields via `_GUARDIAN_SUBMIT_ACCESSORS` (the five accessor names).
+  - `RegistrationApplication.__str__` uses `guardian_contact_email` (falls through to `claimed_email` when no account is linked).
+  - Django admin `search_fields` use `parent_account__email` and `guardian__full_name` (no longer the dropped columns).
+  - `make_guardian` test fixture added in `tests/conftest.py` (or `tests/registrations/conftest.py`) to create a linked `Guardian` in one call. ~24 test files swept off the dropped columns (all `RegistrationApplication.objects.create(guardian_*=…)` replaced with `make_guardian` or accessor-based assertions).
+  - `parent_portal` and `admin_review_queue` querysets use `select_related("guardian", "parent_account")` to avoid N+1 from the email accessor traversing `parent_account` (Slice B2 carryover).
+  - Carryover test: `test_update_existing_draft_repopulates_guardian_profile` in `tests/registrations/test_guardian_read_through.py` (total 12 tests in file).
+  - Full-repo gate: `uv run pytest -q` → **1149 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (247 source files).
+  - Guardian-identity work now has only **Slice C** remaining: locked-profile UX + admin-initiated email change workflow.
+
 - **P6 Slice A delivered — local billing domain + sibling-discount engine (2026-06-07)**
   - LOCAL ONLY: no Invoice Ninja calls. The Invoice Ninja adapter + admin-confirmed push is Slice B; payment read-back + sync health is Slice C.
   - New `apps/billing/` app. `MembershipPlan` (staff-editable: name, season, currency, annual_amount, sibling_discount_percent, installment_count, first_installment_month, is_active — exactly one active row by convention, not a DB constraint, so a next-season plan can be staged inactive). `BillingRecord` (one per `(member, season)` via `UniqueConstraint`; money fields snapshotted at creation so a later plan edit never silently mutates an existing draft; `Status` draft/confirmed + `PaymentMode` upfront/installments TextChoices with Latvian labels; `final_amount` = `manual_amount_override` when set, else `base_amount − discount_amount`). Migrations `0001_initial` (plan) + `0002_billingrecord`.
