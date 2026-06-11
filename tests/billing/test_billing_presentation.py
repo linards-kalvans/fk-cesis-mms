@@ -11,7 +11,7 @@ def test_billing_summary_copy(active_plan, guardian):
 
     member = Member.objects.create(full_name="Jānis", guardian=guardian)
     RegistrationApplication.objects.create(
-        guardian_email=guardian.email, approved_member=member,
+        approved_member=member,
         preferred_payment_mode="upfront",
     )
     rec = create_draft_billing_for_member(member, agreement=None)

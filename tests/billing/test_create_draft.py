@@ -10,7 +10,6 @@ def _member_with_app(guardian, name, payment_mode="installments", opt_out=None):
 
     member = Member.objects.create(full_name=name, guardian=guardian)
     RegistrationApplication.objects.create(
-        guardian_email=guardian.email,
         approved_member=member,
         preferred_payment_mode=payment_mode,
         support_club_instead_of_multi_child_discount=opt_out,

@@ -6,7 +6,7 @@ pytestmark = pytest.mark.django_db
 def test_preferred_payment_mode_field_exists_with_choices():
     from apps.registrations.models import RegistrationApplication
 
-    app = RegistrationApplication(guardian_email="a@example.com")
+    app = RegistrationApplication()
     app.preferred_payment_mode = "installments"
     assert RegistrationApplication.PaymentMode.UPFRONT == "upfront"
     assert RegistrationApplication.PaymentMode.INSTALLMENTS == "installments"

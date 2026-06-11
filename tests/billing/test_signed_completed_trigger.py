@@ -17,7 +17,6 @@ def test_electronic_agreement_signed_completes_and_triggers_billing(active_plan,
 
     member = Member.objects.create(full_name="Jānis", guardian=guardian)
     RegistrationApplication.objects.create(
-        guardian_email=guardian.email,
         approved_member=member,
         preferred_agreement_signing="electronic",
     )

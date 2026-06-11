@@ -84,7 +84,6 @@ def test_backfill_honours_application_preferred_signing_path(db):
     member = Member.objects.create(full_name="Member X", guardian=guardian)
     staff = User.objects.create_user(username="staff", is_staff=True)
     RegistrationApplication.objects.create(
-        guardian_email="g@example.test",
         preferred_agreement_signing="paper",
         status="approved",
         approved_member=member,

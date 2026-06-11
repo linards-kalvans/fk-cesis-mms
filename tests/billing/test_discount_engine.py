@@ -11,7 +11,6 @@ def _make_member(guardian, name, opt_out=None):
 
     member = Member.objects.create(full_name=name, guardian=guardian)
     RegistrationApplication.objects.create(
-        guardian_email=guardian.email,
         approved_member=member,
         support_club_instead_of_multi_child_discount=opt_out,
     )

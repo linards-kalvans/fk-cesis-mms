@@ -13,7 +13,7 @@ def _signed_member(guardian, name):
 
     member = Member.objects.create(full_name=name, guardian=guardian)
     RegistrationApplication.objects.create(
-        guardian_email=guardian.email, approved_member=member,
+        approved_member=member,
     )
     Agreement.objects.create(
         member=member, generated_at=timezone.now(),
