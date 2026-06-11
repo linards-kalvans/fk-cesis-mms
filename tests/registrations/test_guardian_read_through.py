@@ -182,3 +182,25 @@ def test_accessors_return_empty_when_unlinked():
     app = RegistrationApplication.objects.create(claimed_email="anon@example.com")
     assert app.guardian_name == ""
     assert app.guardian_contact_email == ""
+
+
+def test_update_existing_draft_repopulates_guardian_profile():
+    """create_or_update_draft on an existing draft updates the linked Guardian
+    from the new form data (the guardian_id-guarded write)."""
+    from apps.registrations.services import create_or_update_draft
+
+    account = ParentAccount.objects.create(email="update@example.com")
+    app = create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "First",
+              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
+              "guardian_declared_address": "A"},
+        files={}, verified_account=account,
+    )
+    create_or_update_draft(
+        data={"guardian_email": account.email, "guardian_full_name": "Second",
+              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
+              "guardian_declared_address": "A"},
+        files={}, application=app, verified_account=account,
+    )
+    app.refresh_from_db()
+    assert app.guardian_name == "Second"
