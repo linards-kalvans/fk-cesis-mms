@@ -112,6 +112,20 @@ def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.dat
     return schedule
 
 
+def is_invoice_due_to_send(invoice, today: datetime.date) -> bool:
+    """True when a Draft installment invoice should be issued + emailed: it
+    exists in Invoice Ninja, is still Draft, and today is on/after the first
+    day of its due month. Sending from the 1st gives the parent the whole month
+    until the due day; using >= also covers mid-season signups and overdue
+    catch-up. (Guardian-email presence + the autosend flag are checked by the
+    caller — see apps.integrations.tasks.send_due_invoices.)"""
+    if not invoice.external_invoice_id:
+        return False
+    if invoice.external_status != "created":
+        return False
+    return bool(today >= invoice.due_date.replace(day=1))
+
+
 def create_draft_billing_for_member(member, agreement):
     """Idempotently create a draft BillingRecord for the active plan's season.
 
