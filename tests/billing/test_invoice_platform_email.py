@@ -1,6 +1,6 @@
 """Platform seam: email_invoice dispatches stub vs invoiceninja."""
 
-import pytest  # noqa: F401
+import pytest
 from django.test import override_settings
 
 
@@ -20,3 +20,12 @@ def test_email_invoice_invoiceninja_delegates(monkeypatch):
 
     invoice_platform.email_invoice("HASHED123")
     assert called["id"] == "HASHED123"
+
+
+@override_settings(INVOICE_PROVIDER_MODE="bogus")
+def test_email_invoice_unknown_mode_raises():
+    from apps.integrations import invoice_platform
+    from apps.integrations.invoice_platform import InvoicePlatformConfigError
+
+    with pytest.raises(InvoicePlatformConfigError):
+        invoice_platform.email_invoice("anything")
