@@ -410,3 +410,15 @@ class TestOcrSettingsExposed:
         assert snapshot["ocr_encryption_key"] == "", (
             f"Expected ocr_encryption_key='' default, got {snapshot['ocr_encryption_key']!r}."
         )
+
+
+def test_billing_autosend_defaults_off():
+    from django.conf import settings
+
+    assert settings.BILLING_AUTOSEND_ENABLED is False
+
+
+def test_billing_send_due_hour_default():
+    from django.conf import settings
+
+    assert isinstance(settings.BILLING_SEND_DUE_HOUR, int)

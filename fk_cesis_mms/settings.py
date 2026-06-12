@@ -179,6 +179,11 @@ DOCUSEAL_WEBHOOK_SECRET = os.environ.get("DOCUSEAL_WEBHOOK_SECRET", "")
 INVOICE_PROVIDER_MODE = os.environ.get("INVOICE_PROVIDER_MODE") or "stub"
 INVOICE_NINJA_API_URL = os.environ.get("INVOICE_NINJA_API_URL", "")
 INVOICE_NINJA_API_KEY = os.environ.get("INVOICE_NINJA_API_KEY", "")
+# Billing auto-send (P6 invoice issue/send policy). When False, the nightly
+# send job is a no-op — deploy the machinery, verify on one parent, then flip on.
+BILLING_AUTOSEND_ENABLED = os.environ.get("BILLING_AUTOSEND_ENABLED", "false").lower() in {"1", "true", "yes"}
+# Hour (local time) for the nightly send sweep; offset from payment-sync (3).
+BILLING_SEND_DUE_HOUR = int(os.environ.get("BILLING_SEND_DUE_HOUR", "4"))
 INVOICE_NINJA_NUMBER_PREFIX = os.environ.get("INVOICE_NINJA_NUMBER_PREFIX") or "MMS"
 # Localization / time zone. Datetimes are stored in UTC (USE_TZ); TIME_ZONE is
 # the project's local zone used for `timezone.localtime()` and admin rendering.
