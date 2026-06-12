@@ -14,7 +14,7 @@
     <div class="fk-ball"></div>
   </div>
   <div class="fk-hero-copy">
-    <h2>Sveiks!</h2>
+    <h2>{% if greeting_name %}Sveiks/-a, {{ greeting_name }}!{% else %}Sveiks!{% endif %}</h2>
     <p>Pārvaldi savu bērnu pieteikumus FK Cēsis viegli un ātri. Turpini iesākto vai sāc jaunu reģistrāciju.</p>
     <div class="fk-hero-actions">
       {% if primary_application %}<a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>{% endif %}

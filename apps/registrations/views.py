@@ -37,7 +37,7 @@ from apps.integrations.tasks import (
     enqueue_ocr_job,
     enqueue_sync_agreement_submission,
 )
-from apps.members.models import TrainingGroup
+from apps.members.models import Guardian, TrainingGroup
 from apps.members.services import assign_training_group
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
@@ -511,6 +511,14 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
         if app.approved_member_id is not None:
             agreement = get_current_agreement(app.approved_member)
         app.agreement_status = agreement_status_copy(agreement)
+    # Personalized hero greeting — the account's canonical Guardian name, if on
+    # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
+    greeting_name = (
+        Guardian.objects.filter(parent_account=account)
+        .values_list("full_name", flat=True)
+        .first()
+        or ""
+    )
     return render(
         request,
         "registrations/parent_portal.html",
@@ -519,6 +527,7 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "applications": applications,
             "has_draft": has_draft,
             "primary_application": _portal_primary_application(account),
+            "greeting_name": greeting_name,
         },
     )
 
