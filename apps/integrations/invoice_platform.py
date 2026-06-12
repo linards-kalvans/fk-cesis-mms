@@ -113,3 +113,14 @@ def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
 
         return invoice_ninja.fetch_invoice_payment(external_invoice_id)
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
+
+
+def email_invoice(external_invoice_id: str) -> None:
+    mode = _mode()
+    if mode == "stub":
+        return None
+    if mode == "invoiceninja":
+        from apps.integrations import invoice_ninja
+
+        return invoice_ninja.email_invoice(external_invoice_id)
+    raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")

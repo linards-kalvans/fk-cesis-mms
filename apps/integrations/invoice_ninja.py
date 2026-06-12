@@ -219,6 +219,24 @@ def create_invoice(record, billing_invoice) -> InvoiceResult:
     return InvoiceResult(external_id=str(data.get("id", "")))
 
 
+def email_invoice(external_invoice_id: str) -> None:
+    """Issue + email an invoice via the v5 bulk action. Emailing a Draft in
+    Invoice Ninja transitions it to Sent and sends the templated invoice email
+    (PDF + payment link). Idempotent at the IN side (re-emailing a sent invoice
+    just re-sends)."""
+    api_url, api_key = _require_config()
+    resp = _request(
+        "POST",
+        f"{api_url}/invoices/bulk",
+        api_key,
+        json={"action": "email", "ids": [external_invoice_id]},
+    )
+    if resp.status_code >= 400:
+        raise InvoicePlatformConfigError(
+            f"invoice email rejected: {resp.status_code} {resp.text}"
+        )
+
+
 def _to_decimal(value) -> Decimal:
     return Decimal(str(value if value not in (None, "") else "0"))
 
