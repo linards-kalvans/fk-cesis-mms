@@ -160,6 +160,7 @@ class BillingInvoice(TimeStampedModel):
     )
     last_payment_date = models.DateField(null=True, blank=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
