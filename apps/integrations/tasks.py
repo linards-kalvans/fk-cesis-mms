@@ -498,6 +498,60 @@ def sync_billing_payments() -> None:
         roll_up_payment_status(record)
 
 
+def send_due_invoices() -> None:
+    """Scheduled nightly sweep: issue + email each Draft installment invoice
+    on/after the 1st of its due month. Gated by BILLING_AUTOSEND_ENABLED.
+
+    Emailing a Draft in Invoice Ninja flips it to Sent and delivers the
+    invoice email. Per-row errors are recorded on the invoice and logged so one
+    bad row never aborts the run; the row stays 'created' and is retried on the
+    next nightly run (the cadence is the retry loop)."""
+    from django.conf import settings
+
+    if not getattr(settings, "BILLING_AUTOSEND_ENABLED", False):
+        logger.info("send_due_invoices: BILLING_AUTOSEND_ENABLED is off; skipping")
+        return
+
+    from apps.billing.models import BillingInvoice
+    from apps.billing.services import is_invoice_due_to_send
+
+    today = timezone.localdate()
+    invoices = (
+        BillingInvoice.objects.filter(external_status="created")
+        .exclude(external_invoice_id="")
+        .select_related("billing_record__member__guardian")
+    )
+    for billing_invoice in invoices:
+        if not is_invoice_due_to_send(billing_invoice, today):
+            continue
+        guardian = billing_invoice.billing_record.member.guardian
+        if not guardian.email:
+            logger.warning(
+                "send_due_invoices: invoice %s skipped — guardian %s has no email",
+                billing_invoice.pk,
+                guardian.pk,
+            )
+            continue
+        try:
+            invoice_platform.email_invoice(billing_invoice.external_invoice_id)
+        except Exception as exc:  # noqa: BLE001 - batch sweep isolates per-row failures
+            code, _retry = _classify_invoice_error(exc)
+            billing_invoice.external_error_code = code
+            billing_invoice.save(update_fields=["external_error_code", "updated_at"])
+            logger.warning(
+                "send_due_invoices: email failed for invoice %s: %s",
+                billing_invoice.pk,
+                exc,
+            )
+            continue
+        billing_invoice.external_status = "sent"
+        billing_invoice.sent_at = timezone.now()
+        billing_invoice.external_error_code = ""
+        billing_invoice.save(
+            update_fields=["external_status", "sent_at", "external_error_code", "updated_at"]
+        )
+
+
 def enqueue_sync_billing_record_payments(record_id: int) -> None:
     try:
         async_task(
