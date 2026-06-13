@@ -67,7 +67,7 @@ def record_audit_event(
         ua = _user_agent(request) if request is not None else ""
 
         return AuditEvent.objects.create(
-            action=str(action),
+            action=str(action)[:64],
             actor=actor,
             actor_label=actor_label[:255],
             target_type=target_type[:64],

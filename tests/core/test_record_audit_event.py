@@ -48,6 +48,18 @@ def test_uses_request_user_when_actor_unset():
     req.user = user
     e = record_audit_event(action=AuditEvent.Action.DOCUMENT_PREVIEWED, request=req)
     assert e.actor == user
+    assert e.actor_label == "s2@example.com"
+
+
+def test_anonymous_request_user_leaves_actor_none():
+    from django.contrib.auth.models import AnonymousUser
+
+    rf = RequestFactory()
+    req = rf.get("/x")
+    req.user = AnonymousUser()
+    e = record_audit_event(action=AuditEvent.Action.DOCUMENT_PREVIEWED, request=req)
+    assert e.actor is None
+    assert e.actor_label == ""
 
 
 def test_never_raises_on_write_error(monkeypatch):
