@@ -46,9 +46,12 @@ def test_safe_row_excludes_sensitive():
     a = _application()
     assert len(application_row(a, sensitive=False)) == len(application_columns(sensitive=False))
     flat = " ".join(str(c) for c in application_row(a, sensitive=False))
-    assert "010110-22222" not in flat
-    assert "parent@example.com" not in flat
-    assert "Cēsis" not in flat
+    assert "010110-22222" not in flat  # member personal_id
+    assert "parent@example.com" not in flat  # guardian_contact_email
+    assert "Cēsis" not in flat  # member_actual_address
+    assert "010180-12345" not in flat  # guardian_pid
+    assert "+37129999999" not in flat  # guardian_contact_phone
+    assert "Rīga" not in flat  # guardian_address
 
 
 def test_sensitive_row_includes_sensitive():
