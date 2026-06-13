@@ -59,3 +59,7 @@ def test_default_ordering_newest_first():
 def test_no_updated_at_field():
     field_names = {f.name for f in AuditEvent._meta.get_fields()}
     assert "updated_at" not in field_names
+
+
+def test_data_exported_action_exists():
+    assert "data_exported" in set(AuditEvent.Action.values)

@@ -39,6 +39,7 @@ class AuditEvent(models.Model):
         INVOICE_PUSH_FAILED = "invoice_push_failed", "Invoice push failed"
         INVOICE_SEND_FAILED = "invoice_send_failed", "Invoice send failed"
         PAYMENT_SYNC_FAILED = "payment_sync_failed", "Payment sync failed"
+        DATA_EXPORTED = "data_exported", "Data exported"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
