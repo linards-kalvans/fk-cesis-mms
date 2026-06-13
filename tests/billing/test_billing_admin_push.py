@@ -26,7 +26,7 @@ def test_action_enqueues_only_confirmed(active_plan, guardian):
     draft = _record(active_plan, guardian, BillingRecord.Status.DRAFT)
 
     admin = BillingRecordAdmin(BillingRecord, AdminSite())
-    request = type("R", (), {})()
+    request = type("R", (), {"user": None, "META": {}})()
     with patch("apps.integrations.tasks.enqueue_push_billing_record") as enqueue, \
          patch.object(admin, "message_user"):
         admin.push_to_invoice_ninja(request, BillingRecord.objects.all())
@@ -46,7 +46,7 @@ def test_action_skips_already_synced(active_plan, guardian):
     failed = _record(active_plan, guardian, BillingRecord.Status.CONFIRMED, external_status="failed")
 
     admin = BillingRecordAdmin(BillingRecord, AdminSite())
-    request = type("R", (), {})()
+    request = type("R", (), {"user": None, "META": {}})()
     with patch("apps.integrations.tasks.enqueue_push_billing_record") as enqueue, \
          patch.object(admin, "message_user"):
         admin.push_to_invoice_ninja(request, BillingRecord.objects.all())

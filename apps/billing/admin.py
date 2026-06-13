@@ -4,6 +4,8 @@ from django.contrib import admin, messages
 
 from apps.billing.models import BillingInvoice, BillingRecord, MembershipPlan
 from apps.billing.services import recompute_billing_record
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 
 
 @admin.register(MembershipPlan)
@@ -82,6 +84,10 @@ class BillingRecordAdmin(admin.ModelAdmin):
                 already += 1
                 continue
             enqueue_push_billing_record(record.pk)
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+                actor=request.user, request=request, target=record,
+            )
             pushed += 1
         parts = [f"Izrakstīti {pushed} rēķini."]
         if already:
@@ -102,6 +108,10 @@ class BillingRecordAdmin(admin.ModelAdmin):
                 unconfirmed += 1
                 continue
             enqueue_sync_billing_record_payments(record.pk)
+            record_audit_event(
+                action=str(AuditEvent.Action.PAYMENT_SYNC_TRIGGERED),
+                actor=request.user, request=request, target=record,
+            )
             synced += 1
         parts = [f"Pieprasīta maksājumu pārbaude: {synced}."]
         if unconfirmed:

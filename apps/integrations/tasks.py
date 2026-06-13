@@ -404,6 +404,11 @@ def push_billing_record(record_id: int) -> None:
         record.external_status = "failed"
         record.external_error_code = code
         record.save(update_fields=["external_status", "external_error_code", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.INVOICE_PUSH_FAILED),
+            actor_label="system: push_billing_record",
+            target=record, metadata={"error_code": code},
+        )
         if retry:
             raise RetryableInvoiceError(code) from exc
         return
@@ -424,6 +429,11 @@ def push_billing_record(record_id: int) -> None:
             billing_invoice.external_error_code = code
             billing_invoice.save(
                 update_fields=["external_status", "external_error_code", "updated_at"]
+            )
+            record_audit_event(
+                action=str(AuditEvent.Action.INVOICE_PUSH_FAILED),
+                actor_label="system: push_billing_record",
+                target=record, metadata={"error_code": code},
             )
             if retry:
                 record.external_status = "failed"
@@ -546,6 +556,12 @@ def send_due_invoices() -> None:
             code, _retry = _classify_invoice_error(exc)
             billing_invoice.external_error_code = code
             billing_invoice.save(update_fields=["external_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.INVOICE_SEND_FAILED),
+                actor_label="system: send_due_invoices",
+                target=billing_invoice.billing_record,
+                metadata={"error_code": code},
+            )
             logger.warning(
                 "send_due_invoices: email failed for invoice %s: %s",
                 billing_invoice.pk,
@@ -588,6 +604,11 @@ def sync_billing_record_payments(record_id: int) -> None:
             code, retry = _classify_invoice_error(exc)
             record.payment_error_code = code
             record.save(update_fields=["payment_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.PAYMENT_SYNC_FAILED),
+                actor_label="system: sync_billing_record_payments",
+                target=record, metadata={"error_code": code},
+            )
             if retry:
                 raise RetryableInvoiceError(code) from exc
             return
