@@ -301,6 +301,7 @@ Target Django monolith with domain apps:
   - **Read-only admin viewer** (`AuditEventAdmin`): add/change/delete all denied; list_filter (action/target_type/date), search, `date_hierarchy`. Append-only even for superusers via admin.
   - **Retention:** `AUDIT_RETENTION_DAYS` (env, default **730**) + `AUDIT_PRUNE_HOUR` (default 2); `apps.core.tasks.prune_audit_events()` deletes events older than the cutoff; registered as the daily django-q `Schedule` `audit-retention-prune` (`core/0002`, mirrors `billing/0005`). `.env.example` updated.
   - **Redaction:** `metadata`/`target_repr` carry only statuses, error codes, kinds, group names, PKs — never personal IDs, document contents, email bodies, or tokens. `actor_label` stores the actor's identifying email (staff and parent) by design (the durable identity snapshot, per spec §4) + `ip_address` for forensic value; both bounded by the retention prune.
+  - **Operator guide:** `docs/audit-log.md` — how staff read the trail (Django admin → Core → Audit events), filter/search, the event catalog, what is/isn't stored, retention, and shell queries.
   - Full-repo gate: `uv run pytest -q` → **1231 passed**, `uv run ruff check .` → clean, `uv run mypy .` → clean (275 source files). No LAN acceptance needed (internal admin/log feature; covered by the suite).
 
 - **P6 Slice A delivered — local billing domain + sibling-discount engine (2026-06-07)**
