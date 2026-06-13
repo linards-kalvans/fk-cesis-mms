@@ -69,6 +69,8 @@ def test_sensitive_action_hidden_from_non_superuser():
     admin_obj = MemberAdmin(Member, AdminSite())
     staff = User.objects.create_user(username="staff2", email="s2@example.com", is_staff=True)
     assert "export_csv_with_sensitive" not in admin_obj.get_actions(_request(staff))
+    su = User.objects.create_superuser(username="su0", email="su0@example.com", password="pw")
+    assert "export_csv_with_sensitive" in admin_obj.get_actions(_request(su))
 
 
 def test_sensitive_action_refuses_non_superuser_and_no_audit():
@@ -88,3 +90,5 @@ def test_sensitive_action_for_superuser_exports_and_audits():
     assert "010110-22222" in resp.content.decode("utf-8")
     e = AuditEvent.objects.get(action=str(AuditEvent.Action.DATA_EXPORTED))
     assert e.metadata["sensitive"] is True
+    assert e.metadata["count"] == 1
+    assert e.metadata["format"] == "csv"
