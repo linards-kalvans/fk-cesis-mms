@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from django.conf import settings
 
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.members.models import Guardian, Member, TrainingGroup
 
 
 def assign_training_group(
     member: Member,
     group: TrainingGroup | None,
-    actor: settings.AUTH_USER_MODEL,  # noqa: ARG001 — plumbed for future P7 audit hook
+    actor: settings.AUTH_USER_MODEL,
 ) -> Member:
     """Set or clear a member's training group. Idempotent.
 
@@ -25,6 +27,16 @@ def assign_training_group(
         return member
     member.training_group = group
     member.save(update_fields=["training_group"])
+    record_audit_event(
+        action=str(
+            AuditEvent.Action.TRAINING_GROUP_ASSIGNED
+            if group is not None
+            else AuditEvent.Action.TRAINING_GROUP_CLEARED
+        ),
+        actor=actor,
+        target=member,
+        metadata={"group": group.name if group is not None else None},
+    )
     return member
 
 

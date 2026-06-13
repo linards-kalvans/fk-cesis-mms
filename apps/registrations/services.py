@@ -13,6 +13,8 @@ from django.utils import timezone
 from apps.accounts.models import ParentAccount
 from apps.agreements.models import Agreement
 from apps.agreements.services import create_agreement_for_member
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.documents.models import Document, DocumentExtraction
 from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
@@ -682,6 +684,13 @@ def request_application_fix(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
 
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_FIX_REQUESTED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "has_message": bool(message)},
+    )
+
     _render_and_send_notification(
         application,
         template_name="request_fix",
@@ -707,6 +716,13 @@ def reject_application(
     application.reviewed_by = reviewer
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
+
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_REJECTED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "has_message": bool(message)},
+    )
 
     _render_and_send_notification(
         application,
@@ -774,6 +790,13 @@ def approve_application(
     application.reviewed_by = reviewer
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "approved_member_id", "guardian", "reviewed_by_id", "reviewed_at", "updated_at"])
+
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_APPROVED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "member_id": application.approved_member_id},
+    )
 
     _render_and_send_notification(
         application,
