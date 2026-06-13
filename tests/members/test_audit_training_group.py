@@ -17,11 +17,14 @@ def test_assign_and_clear_emit_events():
     grp = TrainingGroup.objects.create(name="U-12", is_active=True)
 
     assign_training_group(m, grp, actor)
-    assert AuditEvent.objects.filter(
+    assigned = AuditEvent.objects.get(
         action=AuditEvent.Action.TRAINING_GROUP_ASSIGNED, target_id=str(m.pk)
-    ).exists()
+    )
+    assert assigned.actor == actor
+    assert assigned.metadata == {"group": "U-12"}
 
     assign_training_group(m, None, actor)
-    assert AuditEvent.objects.filter(
+    cleared = AuditEvent.objects.get(
         action=AuditEvent.Action.TRAINING_GROUP_CLEARED, target_id=str(m.pk)
-    ).exists()
+    )
+    assert cleared.actor == actor
