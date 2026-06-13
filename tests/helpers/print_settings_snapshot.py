@@ -42,6 +42,8 @@ _ENV_ISOLATION_KEYS = frozenset((
     "OCR_ENCRYPTION_KEY",
     "BILLING_AUTOSEND_ENABLED",
     "BILLING_SEND_DUE_HOUR",
+    "AUDIT_RETENTION_DAYS",
+    "AUDIT_PRUNE_HOUR",
 ))
 
 # Ensure the project root is on sys.path so the subprocess can import
@@ -106,6 +108,8 @@ def main():
         "ocr_encryption_key": getattr(settings, "OCR_ENCRYPTION_KEY", "__MISSING__"),
         "billing_autosend_enabled": getattr(settings, "BILLING_AUTOSEND_ENABLED", "__MISSING__"),
         "billing_send_due_hour": getattr(settings, "BILLING_SEND_DUE_HOUR", "__MISSING__"),
+        "audit_retention_days": getattr(settings, "AUDIT_RETENTION_DAYS", "__MISSING__"),
+        "audit_prune_hour": getattr(settings, "AUDIT_PRUNE_HOUR", "__MISSING__"),
     }
 
     print(json.dumps(snapshot))

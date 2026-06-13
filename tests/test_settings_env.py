@@ -441,3 +441,28 @@ class TestBillingAutosendSettingsExposed:
     def test_send_due_hour_from_env(self, tmp_path):
         snapshot = self._billing_env(tmp_path, "BILLING_SEND_DUE_HOUR=6\n")
         assert snapshot["billing_send_due_hour"] == 6
+
+
+class TestAuditRetentionSettingsExposed:
+    """AUDIT_RETENTION_DAYS / AUDIT_PRUNE_HOUR exposed as settings, asserted via
+    the subprocess-isolation snapshot so defaults aren't polluted by ambient env."""
+
+    def _audit_env(self, tmp_path, extra: str = "") -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://audit-test.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n" + extra
+        )
+        return _run_helper(tmp_path)
+
+    def test_retention_days_default(self, tmp_path):
+        snapshot = self._audit_env(tmp_path)
+        assert snapshot["audit_retention_days"] == 730
+
+    def test_retention_days_from_env(self, tmp_path):
+        snapshot = self._audit_env(tmp_path, "AUDIT_RETENTION_DAYS=365\n")
+        assert snapshot["audit_retention_days"] == 365
+
+    def test_prune_hour_default(self, tmp_path):
+        snapshot = self._audit_env(tmp_path)
+        assert snapshot["audit_prune_hour"] == 2

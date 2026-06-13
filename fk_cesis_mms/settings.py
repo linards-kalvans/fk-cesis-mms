@@ -197,6 +197,11 @@ USE_TZ = True
 # apps/billing/migrations/0005 reads this for its initial next_run.
 BILLING_PAYMENT_SYNC_HOUR = int(os.environ.get("BILLING_PAYMENT_SYNC_HOUR", "3"))
 
+# Audit log retention (P7). Nightly prune deletes events older than this many days.
+AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "730"))
+# Local-time hour for the nightly audit prune (offset from billing 3/4).
+AUDIT_PRUNE_HOUR = int(os.environ.get("AUDIT_PRUNE_HOUR", "2"))
+
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
     os.environ.get("DOCUMENT_UPLOAD_MAX_BYTES", str(8 * 1024 * 1024))  # 8 MiB
