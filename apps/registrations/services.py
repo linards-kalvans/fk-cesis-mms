@@ -231,6 +231,12 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
     if existing is not None:
         existing.deleted_at = timezone.now()
         existing.save(update_fields=["deleted_at", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.DOCUMENT_DELETED),
+            actor_label=f"parent: {application.guardian_contact_email or application.claimed_email}",
+            target=existing,
+            metadata={"kind": kind, "reason": "replaced"},
+        )
 
     from django.core.files.base import ContentFile
 

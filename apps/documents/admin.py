@@ -6,6 +6,8 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.documents.models import Document
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
@@ -49,6 +51,27 @@ class DocumentAdmin(admin.ModelAdmin):
         )
 
     access_links.short_description = "Access"  # type: ignore[attr-defined]
+
+    def delete_model(self, request: Any, obj: Document) -> None:
+        record_audit_event(
+            action=str(AuditEvent.Action.DOCUMENT_DELETED),
+            actor=request.user,
+            target=obj,
+            request=request,
+            metadata={"kind": obj.kind, "reason": "admin_delete"},
+        )
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: Any, queryset: Any) -> None:
+        for obj in queryset:
+            record_audit_event(
+                action=str(AuditEvent.Action.DOCUMENT_DELETED),
+                actor=request.user,
+                target=obj,
+                request=request,
+                metadata={"kind": obj.kind, "reason": "admin_delete"},
+            )
+        super().delete_queryset(request, queryset)
 
     @admin.action(description="Re-run OCR on selected documents")
     def re_run_ocr(self, request: Any, queryset: Any) -> None:
