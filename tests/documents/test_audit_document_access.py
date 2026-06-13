@@ -125,11 +125,12 @@ class TestAdminHardDeleteAudit:
         req = RequestFactory().post("/admin/")
         req.user = staff
 
+        doc_pk = document.pk  # capture before delete (delete_model nulls .pk)
         admin_obj.delete_model(req, document)
 
         events = AuditEvent.objects.filter(
             action=str(AuditEvent.Action.DOCUMENT_DELETED),
-            target_id=str(document.pk),
+            target_id=str(doc_pk),
         )
         assert events.count() == 1
         event = events.first()
