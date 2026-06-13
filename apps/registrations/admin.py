@@ -1,10 +1,15 @@
 """Django admin for registrations app."""
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from apps.agreements.services import sync_application_signing_path_to_agreement
+from apps.core.audit import record_audit_event
+from apps.core.export import csv_response
+from apps.core.models import AuditEvent
+from apps.registrations.exports import application_columns, application_row
 from apps.registrations.models import RegistrationApplication
 
 
@@ -33,10 +38,45 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "updated_at",
     )
 
+    actions = ["export_csv", "export_csv_with_sensitive"]
+
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and
         # guardian__full_name is searched — select_related avoids a changelist N+1.
         return super().get_queryset(request).select_related("guardian", "parent_account")
+
+    def _export_applications(self, request, queryset, *, sensitive: bool):
+        rows = [application_row(a, sensitive=sensitive) for a in queryset]
+        record_audit_event(
+            action=str(AuditEvent.Action.DATA_EXPORTED),
+            actor=request.user, request=request,
+            target_type="registrationapplication",
+            target_repr=f"registration export ({len(rows)} rows)",
+            metadata={"count": len(rows), "sensitive": sensitive, "format": "csv"},
+        )
+        ts = timezone.localtime().strftime("%Y%m%d-%H%M")
+        return csv_response(
+            filename=f"registrations-{ts}.csv",
+            columns=application_columns(sensitive=sensitive),
+            rows=rows,
+        )
+
+    @admin.action(description="Eksportēt CSV (bez sensitīviem datiem)")
+    def export_csv(self, request, queryset):
+        return self._export_applications(request, queryset, sensitive=False)
+
+    @admin.action(description="Eksportēt CSV ar sensitīviem datiem")
+    def export_csv_with_sensitive(self, request, queryset):
+        if not request.user.is_superuser:
+            self.message_user(request, "Nepieciešamas superlietotāja tiesības.", level=messages.ERROR)
+            return None
+        return self._export_applications(request, queryset, sensitive=True)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.is_superuser:
+            actions.pop("export_csv_with_sensitive", None)
+        return actions
 
     def review_link(self, obj) -> str:  # type: ignore[override]
         """Link to the custom review detail page."""
