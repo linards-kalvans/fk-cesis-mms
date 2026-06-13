@@ -46,6 +46,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related("guardian", "parent_account")
 
     def _export_applications(self, request, queryset, *, sensitive: bool):
+        # Self-sufficient: the guardian accessors traverse guardian + parent_account,
+        # so apply select_related here (don't rely on the admin's get_queryset — the
+        # method may be called with a bare queryset).
+        queryset = queryset.select_related("guardian", "parent_account")
         rows = [application_row(a, sensitive=sensitive) for a in queryset]
         record_audit_event(
             action=str(AuditEvent.Action.DATA_EXPORTED),
