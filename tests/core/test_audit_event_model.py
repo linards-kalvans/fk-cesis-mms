@@ -42,8 +42,17 @@ def test_action_choices_include_catalog():
 
 
 def test_default_ordering_newest_first():
+    import datetime
+
+    from django.utils import timezone
+
     a = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_DOWNLOADED)
     b = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_PREVIEWED)
+    # Force distinct timestamps so ordering is deterministic (auto_now_add can tie
+    # on fast SQLite runs, leaving -created_at order undefined).
+    now = timezone.now()
+    AuditEvent.objects.filter(pk=a.pk).update(created_at=now - datetime.timedelta(minutes=1))
+    AuditEvent.objects.filter(pk=b.pk).update(created_at=now)
     assert list(AuditEvent.objects.all()) == [b, a]
 
 

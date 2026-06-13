@@ -65,4 +65,5 @@ class AuditEvent(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.created_at:%Y-%m-%d %H:%M} {self.action} {self.target_repr}".strip()
+        ts = self.created_at.strftime("%Y-%m-%d %H:%M") if self.created_at else "unsaved"
+        return f"{ts} {self.action} {self.target_repr}".strip()
