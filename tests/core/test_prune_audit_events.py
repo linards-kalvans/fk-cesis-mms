@@ -13,7 +13,7 @@ pytestmark = pytest.mark.django_db
 
 
 def _event_aged(days: int) -> AuditEvent:
-    e = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_DOWNLOADED)
+    e: AuditEvent = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_DOWNLOADED)
     # created_at is auto_now_add; rewrite it directly for the test.
     AuditEvent.objects.filter(pk=e.pk).update(
         created_at=timezone.now() - datetime.timedelta(days=days)
