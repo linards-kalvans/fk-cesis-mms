@@ -110,3 +110,28 @@ class TestSoftDeleteOnReplaceAudit:
         assert event.actor_id is None
         assert event.actor_label.startswith("parent:")
         assert event.metadata.get("reason") == "replaced"
+
+
+class TestAdminHardDeleteAudit:
+    def test_admin_delete_model_emits_document_deleted(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+
+        from apps.documents.admin import DocumentAdmin
+
+        staff = _make_admin_user()
+        document = _make_document()
+        admin_obj = DocumentAdmin(Document, AdminSite())
+        req = RequestFactory().post("/admin/")
+        req.user = staff
+
+        admin_obj.delete_model(req, document)
+
+        events = AuditEvent.objects.filter(
+            action=str(AuditEvent.Action.DOCUMENT_DELETED),
+            target_id=str(document.pk),
+        )
+        assert events.count() == 1
+        event = events.first()
+        assert event.actor == staff
+        assert event.metadata.get("reason") == "admin_delete"
