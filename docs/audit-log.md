@@ -56,6 +56,9 @@ Common questions:
 `system`), `agreement_voided`, `agreement_sync_failed`.
 **Billing**: `billing_push_triggered`, `payment_sync_triggered` (staff admin actions);
 `invoice_push_failed`, `invoice_send_failed`, `payment_sync_failed` (automated jobs).
+**Exports**: `data_exported` — a staff CSV export of members or registrations. Metadata records
+`count` (rows), `sensitive` (whether the gated full-PII export was used), and `format`; the
+exported rows themselves are **not** stored.
 
 **Deliberately NOT recorded:** routine *successful* automated runs (each nightly payment sync,
 each successful invoice send) — only state changes, staff-triggered actions, and failures are

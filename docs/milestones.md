@@ -93,7 +93,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 ### Business workflow gaps
 - agreement generation / manual-signing flow not implemented yet (P5 target)
 - billing / Invoice Ninja sync not implemented yet (P6 target)
-- admin export and operations polish still pending (P7 target)
+- admin **CSV export delivered (P7 Slice B, 2026-06-13)** — staff-only audited member + registration CSV export (safe default + superuser-gated sensitive; UTF-8 BOM + `;` for Latvian Excel; formula-injection guard). Remaining operations polish (search/filter, document active-vs-replaced UX, sync-health visibility) is P7 Slice C.
 
 ### Billing gaps (P6 follow-ups, deferred during Slice C live validation 2026-06-09)
 - **Invoice issue/send policy** — **delivered (2026-06-12).** Decision: *scheduled per-installment send*. Push still creates invoices as Draft; a nightly `send_due_invoices` job issues + emails each installment on/after the 1st of its due month (IN bulk `email` action flips Draft→Sent). Gated by `BILLING_AUTOSEND_ENABLED` (**default off** — set true in prod to activate). `BillingInvoice.sent_at` added; daily `billing-send-due-invoices` Schedule registered; per-row error isolation; no-email guardians skipped+logged. **LAN acceptance signed off 2026-06-12** (real IN `in.mplytics.eu`: push→Draft, flag-off no-op, due installment→Sent + parent emailed, idempotent, no-email skip — all pass; test data cleaned up). Before prod activation, disable IN's admin "Invoice Sent" notification, then set `BILLING_AUTOSEND_ENABLED=true`. Spec/plan under `docs/superpowers/`.
