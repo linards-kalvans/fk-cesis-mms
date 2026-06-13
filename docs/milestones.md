@@ -73,7 +73,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 4. Open gaps and debt
 
 ### Security and architecture gaps
-- audit/event baseline still incomplete (P7 target)
+- audit/event baseline **delivered (P7 Slice A, 2026-06-13)** — `apps.core.AuditEvent` append-only model + fail-safe `record_audit_event` helper + read-only admin viewer + configurable retention prune (`AUDIT_RETENTION_DAYS`=730, daily `audit-retention-prune` Schedule). Wired: review actions, training-group assign/clear, document preview/download/delete, agreement sent/signed/voided/sync-failed, billing push/sync-triggered + push/send/payment-sync failures. Routine automated sync successes deliberately not audited. Spec/plan under `docs/superpowers/`. (P7 Slices B export + C admin-polish still pending.)
 
 ### Registration UX gaps
 - step-gated wizard validation with background draft auto-save — delivered in P4 Slice C
@@ -88,7 +88,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - admin review should show inline identity-document previews beside applicant data (P5 target)
 - admin document UX should better distinguish active vs replaced documents (P7 target)
 - training-group assignment flow still incomplete (P5 target)
-- review-action audit entries still incomplete (P7 target)
+- review-action audit entries **delivered (P7 Slice A, 2026-06-13)** — approve/reject/request-fix now recorded as `AuditEvent`s with actor + target
 
 ### Business workflow gaps
 - agreement generation / manual-signing flow not implemented yet (P5 target)
