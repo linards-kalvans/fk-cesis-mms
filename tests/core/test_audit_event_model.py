@@ -1,0 +1,52 @@
+"""AuditEvent model — append-only audit row."""
+
+import pytest
+
+from apps.core.models import AuditEvent
+
+pytestmark = pytest.mark.django_db
+
+
+def test_minimal_event_defaults():
+    e = AuditEvent.objects.create(action=AuditEvent.Action.APPLICATION_APPROVED)
+    e.refresh_from_db()
+    assert e.actor is None
+    assert e.actor_label == ""
+    assert e.metadata == {}
+    assert e.ip_address is None
+    assert e.user_agent == ""
+    assert e.created_at is not None
+
+
+def test_action_choices_include_catalog():
+    values = set(AuditEvent.Action.values)
+    assert {
+        "application_approved",
+        "application_rejected",
+        "application_fix_requested",
+        "training_group_assigned",
+        "training_group_cleared",
+        "document_previewed",
+        "document_downloaded",
+        "document_deleted",
+        "agreement_sent",
+        "agreement_signed",
+        "agreement_voided",
+        "agreement_sync_failed",
+        "billing_push_triggered",
+        "payment_sync_triggered",
+        "invoice_push_failed",
+        "invoice_send_failed",
+        "payment_sync_failed",
+    } <= values
+
+
+def test_default_ordering_newest_first():
+    a = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_DOWNLOADED)
+    b = AuditEvent.objects.create(action=AuditEvent.Action.DOCUMENT_PREVIEWED)
+    assert list(AuditEvent.objects.all()) == [b, a]
+
+
+def test_no_updated_at_field():
+    field_names = {f.name for f in AuditEvent._meta.get_fields()}
+    assert "updated_at" not in field_names
