@@ -32,6 +32,15 @@ def test_value_formatting():
     assert _parse(resp)[1] == ["", "jā", "nē", "2026-09-20"]
 
 
+def test_datetime_formatting():
+    resp = csv_response(
+        filename="x.csv",
+        columns=["ts"],
+        rows=[[datetime.datetime(2026, 9, 20, 14, 30, 5)]],
+    )
+    assert _parse(resp)[1] == ["2026-09-20 14:30"]
+
+
 def test_formula_injection_guard():
     resp = csv_response(filename="x.csv", columns=["a"], rows=[["=SUM(A1:A2)"], ["+1"], ["@x"], ["-3"], ["safe"]])
     data = _parse(resp)
