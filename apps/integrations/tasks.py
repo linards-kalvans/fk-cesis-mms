@@ -20,6 +20,8 @@ from django_q.tasks import async_task
 
 from apps.agreements.models import Agreement
 from apps.agreements.services import mark_agreement_signed
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
 from apps.integrations import agreement_platform
@@ -196,6 +198,12 @@ def _mark_agreement_failed(agreement: Agreement, code: str) -> None:
     agreement.external_error_code = code
     agreement.save(
         update_fields=["external_state", "external_error_code", "updated_at"]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.AGREEMENT_SYNC_FAILED),
+        actor_label="system: docuseal_sync",
+        target=agreement,
+        metadata={"error_code": code},
     )
 
 

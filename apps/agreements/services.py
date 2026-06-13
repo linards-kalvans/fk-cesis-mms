@@ -11,6 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.agreements.models import Agreement
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.members.models import Member
 
 
@@ -63,6 +65,12 @@ def mark_agreement_sent(
     agreement.state = Agreement.State.SENT
     agreement.sent_at = timezone.now()
     agreement.save(update_fields=["state", "sent_at"])
+    record_audit_event(
+        action=str(AuditEvent.Action.AGREEMENT_SENT),
+        actor=actor,
+        target=agreement,
+        metadata={"signing_path": agreement.signing_path},
+    )
     _render_and_send_agreement_email(agreement, template_name="sent")
 
     if agreement.signing_path == Agreement.SigningPath.ELECTRONIC:
@@ -74,7 +82,7 @@ def mark_agreement_sent(
 
 def mark_agreement_signed(
     agreement: Agreement,
-    actor,  # noqa: ARG001
+    actor,
 ) -> Agreement:
     """{generated, sent} → signed. Sets signed_at, sends Latvian email, emits
     the agreement_signed signal (billing listens)."""
@@ -85,6 +93,12 @@ def mark_agreement_signed(
     agreement.state = Agreement.State.SIGNED
     agreement.signed_at = timezone.now()
     agreement.save(update_fields=["state", "signed_at"])
+    record_audit_event(
+        action=str(AuditEvent.Action.AGREEMENT_SIGNED),
+        actor=actor,
+        target=agreement,
+        actor_label="" if actor else "system: docuseal_webhook",
+    )
     _render_and_send_agreement_email(agreement, template_name="signed")
 
     from apps.agreements.signals import agreement_signed
@@ -95,7 +109,7 @@ def mark_agreement_signed(
 
 def void_agreement(
     agreement: Agreement,
-    actor,  # noqa: ARG001
+    actor,
     reason: str,
 ) -> Agreement:
     """Any non-void state → void. Keeps is_current=True. Sends a Latvian
@@ -108,6 +122,11 @@ def void_agreement(
     agreement.voided_at = timezone.now()
     agreement.void_reason = reason
     agreement.save(update_fields=["state", "voided_at", "void_reason"])
+    record_audit_event(
+        action=str(AuditEvent.Action.AGREEMENT_VOIDED),
+        actor=actor,
+        target=agreement,
+    )
     _render_and_send_agreement_email(agreement, template_name="void")
 
     if (
