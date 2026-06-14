@@ -38,7 +38,7 @@ if _extra_allowed:
     )
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.core.apps.FkAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
