@@ -2,6 +2,7 @@
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -319,6 +320,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         # approved_member is select_related so the quick_actions agreement lookup
         # doesn't re-fetch the member per row; the per-row get_current_agreement
         # query itself is acceptable for the modest review-queue size.
+        self._request = request  # quick_actions needs it to mint a per-row CSRF token
         return (
             super()
             .get_queryset(request)
@@ -365,9 +367,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     def quick_actions(self, obj) -> str:  # type: ignore[override]
         """Status-aware per-row quick actions on the changelist.
 
-        The agreement actions are LINKS to the change page (where the real
-        CSRF-protected POST forms live) — a list_display method cannot emit a
-        CSRF token, so an inline POST form here would be unsafe.
+        The safe agreement transitions are real one-click POSTs to the
+        review-action endpoint (CSRF token minted from the stored request),
+        plus an always-present open link.
         """
         if not obj.pk:
             return "-"
@@ -377,19 +379,33 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         agreement_action = ""
         if obj.approved_member_id:
             agreement = get_current_agreement(obj.approved_member)
+            label = action = ""
             if agreement and agreement.state == Agreement.State.GENERATED:
-                agreement_action = format_html(
-                    '<a class="button" href="{}">Atzīmēt nosūtītu →</a> ', change_url
-                )
+                label, action = "Atzīmēt nosūtītu", "mark_agreement_sent"
             elif agreement and agreement.state == Agreement.State.SENT:
+                label, action = "Atzīmēt parakstītu", "mark_agreement_signed"
+            if label:
+                action_url = reverse(
+                    "admin:registrations_registrationapplication_review-action",
+                    args=[obj.pk],
+                )
                 agreement_action = format_html(
-                    '<a class="button" href="{}">Atzīmēt parakstītu →</a> ', change_url
+                    '<form method="post" action="{}" style="display:inline">'
+                    '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+                    '<input type="hidden" name="action" value="{}">'
+                    '<button type="submit" class="button">{} →</button>'
+                    "</form> ",
+                    action_url,
+                    get_token(self._request),
+                    action,
+                    label,
                 )
         return format_html(  # type: ignore[return-value,no-any-return]
             '{}<a href="{}">Atvērt →</a>', agreement_action, change_url
         )
 
     quick_actions.short_description = "Darbības"  # type: ignore[assignment,attr-defined]
+    quick_actions.admin_order_field = "pk"  # type: ignore[assignment,attr-defined]
 
     def save_model(self, request, obj, form, change):
         """Persist the application, then sync preferred_agreement_signing to

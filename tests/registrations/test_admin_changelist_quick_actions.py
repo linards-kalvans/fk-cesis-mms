@@ -33,6 +33,28 @@ def test_changelist_renders_open_link_and_agreement_quick_action():
     html = c.get(reverse("admin:registrations_registrationapplication_changelist")).content.decode()
     assert "Atvērt" in html
     assert "Atzīmēt nosūtītu" in html  # generated -> mark-sent quick action
+    # It must be a real one-click POST to the review-action endpoint, not a link.
+    action_url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    assert f'<form method="post" action="{action_url}"' in html
+    assert 'name="action" value="mark_agreement_sent"' in html
+    assert "csrfmiddlewaretoken" in html
+
+
+def test_changelist_quick_action_post_executes_transition():
+    g = Guardian.objects.create(full_name="V")
+    m = Member.objects.create(full_name="B", guardian=g)
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.APPROVED, member_full_name="B", approved_member=m
+    )
+    agreement = Agreement.objects.create(
+        member=m, is_current=True, state=Agreement.State.GENERATED, generated_at=timezone.now()
+    )
+    c = _staff_client()
+    action_url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    resp = c.post(action_url, {"action": "mark_agreement_sent"})
+    assert resp.status_code == 302
+    agreement.refresh_from_db()
+    assert agreement.state == Agreement.State.SENT
 
 
 def test_changelist_open_link_without_agreement():
