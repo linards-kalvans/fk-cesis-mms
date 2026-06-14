@@ -611,18 +611,22 @@ class TestReviewActionsFromSubmittedOnly:
 
 
 class TestDjangoAdminIntegration:
-    """Admin changelist must show link to custom review detail page."""
+    """Admin changelist must show a quick-action link to the change page."""
 
-    def test_admin_changelist_has_review_link(self, staff_client, submitted_application):
-        """Admin RegistrationApplication changelist must link to review detail."""
+    def test_admin_changelist_has_open_link(self, staff_client, submitted_application):
+        """Admin RegistrationApplication changelist must link to the change page."""
         resp = staff_client.get("/admin/registrations/registrationapplication/")
         assert resp.status_code == 200, (
             f"Expected 200 on admin changelist, got {resp.status_code}."
         )
         content = resp.content.decode()
-        assert f"/admin/review/applications/{submitted_application.pk}/" in content, (
-            "Admin changelist must link to custom review detail page."
+        change_url = (
+            f"/admin/registrations/registrationapplication/{submitted_application.pk}/change/"
         )
+        assert change_url in content, (
+            "Admin changelist quick action must link to the change page."
+        )
+        assert "Atvērt" in content
 
 
 # ---------------------------------------------------------------------------

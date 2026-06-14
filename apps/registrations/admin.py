@@ -42,7 +42,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "guardian_contact_email",
         "status",
         "submitted_at",
-        "review_link",
+        "quick_actions",
     )
     list_filter = ("status",)
     search_fields = ("member_full_name", "parent_account__email", "guardian__full_name")
@@ -316,7 +316,14 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and
         # guardian__full_name is searched — select_related avoids a changelist N+1.
-        return super().get_queryset(request).select_related("guardian", "parent_account")
+        # approved_member is select_related so the quick_actions agreement lookup
+        # doesn't re-fetch the member per row; the per-row get_current_agreement
+        # query itself is acceptable for the modest review-queue size.
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("guardian", "parent_account", "approved_member")
+        )
 
     def _export_applications(self, request, queryset, *, sensitive: bool):
         # Self-sufficient: the guardian accessors traverse guardian + parent_account,
@@ -355,15 +362,34 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             actions.pop("export_csv_with_sensitive", None)
         return actions
 
-    def review_link(self, obj) -> str:  # type: ignore[override]
-        """Link to the custom review detail page."""
-        if obj.pk:
-            url = reverse("registrations:admin-review-detail", args=[obj.pk])
-            return format_html('<a href="{}">Review</a>', url)  # type: ignore[return-value,no-any-return]
-        return "-"
+    def quick_actions(self, obj) -> str:  # type: ignore[override]
+        """Status-aware per-row quick actions on the changelist.
 
-    review_link.short_description = "Review"  # type: ignore[assignment,attr-defined]
-    review_link.admin_order_field = "pk"  # type: ignore[assignment,attr-defined]
+        The agreement actions are LINKS to the change page (where the real
+        CSRF-protected POST forms live) — a list_display method cannot emit a
+        CSRF token, so an inline POST form here would be unsafe.
+        """
+        if not obj.pk:
+            return "-"
+        change_url = reverse(
+            "admin:registrations_registrationapplication_change", args=[obj.pk]
+        )
+        agreement_action = ""
+        if obj.approved_member_id:
+            agreement = get_current_agreement(obj.approved_member)
+            if agreement and agreement.state == Agreement.State.GENERATED:
+                agreement_action = format_html(
+                    '<a class="button" href="{}">Atzīmēt nosūtītu →</a> ', change_url
+                )
+            elif agreement and agreement.state == Agreement.State.SENT:
+                agreement_action = format_html(
+                    '<a class="button" href="{}">Atzīmēt parakstītu →</a> ', change_url
+                )
+        return format_html(  # type: ignore[return-value,no-any-return]
+            '{}<a href="{}">Atvērt →</a>', agreement_action, change_url
+        )
+
+    quick_actions.short_description = "Darbības"  # type: ignore[assignment,attr-defined]
 
     def save_model(self, request, obj, form, change):
         """Persist the application, then sync preferred_agreement_signing to
