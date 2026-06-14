@@ -5,12 +5,16 @@ from django.contrib import admin
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 
+from apps.core.admin_site import FkAdminSite
+
 pytestmark = pytest.mark.django_db
 
 
 def test_registrations_app_listed_first():
     req = RequestFactory().get("/admin/")
     req.user = User.objects.create_superuser("staff", "s@example.com", "pw")
+    # Fails clearly if the INSTALLED_APPS swap regresses (plain AdminSite).
+    assert isinstance(admin.site, FkAdminSite), type(admin.site)
     app_list = admin.site.get_app_list(req)
     assert app_list, "admin app list is empty"
     assert app_list[0]["app_label"] == "registrations"
