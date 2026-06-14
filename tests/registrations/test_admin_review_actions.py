@@ -54,6 +54,20 @@ def test_action_endpoint_is_staff_only():
     assert app.status == RegistrationApplication.Status.SUBMITTED
 
 
+def test_review_action_blocked_for_view_only_staff():
+    # Staff (passes admin_view's is_staff gate) but without change permission
+    # must be rejected by has_change_permission.
+    app = _submitted()
+    User.objects.create_user("viewonly", "v@example.com", "pw", is_staff=True)
+    c = Client()
+    c.login(username="viewonly", password="pw")
+    url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    resp = c.post(url, {"action": "reject", "review_message": "x"})
+    assert resp.status_code == 403
+    app.refresh_from_db()
+    assert app.status == RegistrationApplication.Status.SUBMITTED
+
+
 def test_approve_confirm_then_commit():
     app = _submitted()
     c = _staff_client()

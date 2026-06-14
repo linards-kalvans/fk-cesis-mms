@@ -274,6 +274,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 TrainingGroup.objects.filter(is_active=True).order_by("name")
             )
             context = {
+                "title": "Apstiprināt pieteikumu",
                 "original": application,
                 "active_training_groups": active_training_groups,
                 "opts": self.model._meta,
