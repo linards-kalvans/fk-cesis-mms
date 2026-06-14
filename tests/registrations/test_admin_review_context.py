@@ -34,6 +34,8 @@ def test_build_review_context_keys():
 
 
 def test_build_review_context_approved_member_branches():
+    from django.utils import timezone
+
     from apps.agreements.models import Agreement
     from apps.members.models import Guardian, Member, TrainingGroup
 
@@ -49,6 +51,7 @@ def test_build_review_context_approved_member_branches():
         member=m,
         is_current=True,
         state=Agreement.State.GENERATED,
+        generated_at=timezone.now(),
         external_state="failed",
         external_error_code="provider_unavailable",
     )
