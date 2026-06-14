@@ -93,7 +93,9 @@ class BillingRecordAdmin(admin.ModelAdmin):
 
     def _safe_redirect(self, request, object_id):
         nxt = request.POST.get("next", "")
-        if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+        if nxt and url_has_allowed_host_and_scheme(
+            nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
             return redirect(nxt)
         return redirect("admin:billing_billingrecord_change", object_id)
 
@@ -104,7 +106,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
     @admin.display(description="Apstiprināt")
     def confirm_action(self, obj):
         if obj.status != BillingRecord.Status.DRAFT:
-            return format_html("<span>✓ {}</span>", BillingRecord.Status.CONFIRMED.label)
+            return format_html("<span>✓ {}</span>", obj.get_status_display())
         confirm_url = reverse("admin:billing_billingrecord_confirm", args=[obj.pk])
         changelist_url = reverse("admin:billing_billingrecord_changelist")
         return format_html(  # type: ignore[return-value,no-any-return]

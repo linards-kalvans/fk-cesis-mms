@@ -31,12 +31,15 @@ def _draft_record(active_plan, guardian):
 
 def test_confirm_endpoint_flips_draft_to_confirmed(active_plan, guardian):
     rec = _draft_record(active_plan, guardian)
+    original_updated_at = rec.updated_at
     c = _staff_client()
     url = reverse("admin:billing_billingrecord_confirm", args=[rec.pk])
     resp = c.post(url)
     assert resp.status_code == 302
     rec.refresh_from_db()
     assert rec.status == BillingRecord.Status.CONFIRMED
+    # update_fields includes updated_at, so auto_now must still bump it.
+    assert rec.updated_at > original_updated_at
 
 
 def test_confirm_is_noop_when_already_confirmed(active_plan, guardian):
@@ -56,6 +59,20 @@ def test_confirm_is_staff_permission_gated(active_plan, guardian):
     url = reverse("admin:billing_billingrecord_confirm", args=[rec.pk])
     resp = c.post(url)
     assert resp.status_code in (302, 403)
+    rec.refresh_from_db()
+    assert rec.status == BillingRecord.Status.DRAFT
+
+
+def test_confirm_rejected_for_staff_without_change_permission(active_plan, guardian):
+    # Authenticated staff (passes admin_view's is_staff gate) but lacking the
+    # billingrecord change permission must be rejected by has_change_permission.
+    rec = _draft_record(active_plan, guardian)
+    User.objects.create_user("viewonly", "v@example.com", "pw", is_staff=True)
+    c = Client()
+    c.login(username="viewonly", password="pw")
+    url = reverse("admin:billing_billingrecord_confirm", args=[rec.pk])
+    resp = c.post(url)
+    assert resp.status_code == 403
     rec.refresh_from_db()
     assert rec.status == BillingRecord.Status.DRAFT
 
