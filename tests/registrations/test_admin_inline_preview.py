@@ -33,7 +33,10 @@ from apps.registrations.admin_panels import doc_preview_kind as _doc_preview_kin
 pytestmark = pytest.mark.django_db
 
 
-_DETAIL_URL = "/admin/review/applications/{pk}/"
+# Ported to the admin change page (P7 C-i): the doc panels now render on the
+# Django admin application change page, which includes the same _doc_panel.html
+# partial the bespoke review detail used.
+_DETAIL_URL = "/admin/registrations/registrationapplication/{pk}/change/"
 _OCR_KEY = "SRsUd5lcWomTf9Bh9PwqxSp9zB7qq7PbyOwspQGZBrw="
 
 

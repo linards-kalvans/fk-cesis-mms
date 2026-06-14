@@ -97,13 +97,13 @@ class TestAdminDetailOcrDecryption:
         assert extraction.encrypted_summary != ""
 
         # Admin detail must show decrypted content
-        staff = User.objects.create_user(
-            username="staff", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff", email="staff@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -161,13 +161,13 @@ class TestAdminDetailOcrDecryption:
         assert member_extraction.encrypted_summary != ""
 
         # Admin detail must show decrypted member content
-        staff = User.objects.create_user(
-            username="staff2", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff2", email="staff2@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -209,13 +209,13 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff3", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff3", email="staff3@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -261,13 +261,13 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff3b", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff3b", email="staff3b@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -321,13 +321,13 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff4", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff4", email="staff4@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -396,7 +396,7 @@ class TestAdminDetailOcrDecryption:
         client = Client()
         client.force_login(staff_user)
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()

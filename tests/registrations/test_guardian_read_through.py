@@ -98,7 +98,9 @@ def test_editing_guardian_on_second_app_propagates_to_first():
     assert app1.guardian_name == "New Name"
 
 
-def test_admin_review_detail_renders_guardian_via_read_through(client, django_user_model):
+def test_admin_change_page_renders_guardian_via_read_through(client, django_user_model):
+    from django.urls import reverse
+
     from apps.registrations.services import create_or_update_draft
 
     account = ParentAccount.objects.create(email="render@example.com")
@@ -117,7 +119,9 @@ def test_admin_review_detail_renders_guardian_via_read_through(client, django_us
         username="staff-rt", password="pw", is_staff=True, is_superuser=True
     )
     client.force_login(staff)
-    resp = client.get(f"/admin/review/applications/{app.id}/")
+    resp = client.get(
+        reverse("admin:registrations_registrationapplication_change", args=[app.id])
+    )
     assert resp.status_code == 200
     body = resp.content.decode()
     assert "Edited Shared Name" in body          # read-through wins

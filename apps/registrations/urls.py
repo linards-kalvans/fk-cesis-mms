@@ -28,7 +28,4 @@ urlpatterns = [
         name="document-ocr-status",
     ),
     path("portal/", views.parent_portal, name="parent-portal"),
-    # Staff review
-    path("admin/review/applications/", views.admin_review_queue, name="admin-review-queue"),
-    path("admin/review/applications/<int:application_id>/", views.admin_review_detail, name="admin-review-detail"),
 ]

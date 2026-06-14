@@ -30,14 +30,15 @@ def reviewer(db):
 # --- Agreement.get_absolute_url ---
 
 
-def test_get_absolute_url_points_to_review_detail(submitted_application, reviewer):
+def test_get_absolute_url_points_to_admin_change_page(submitted_application, reviewer):
     from django.urls import reverse
 
     approve_application(submitted_application, reviewer)
     agreement = get_current_agreement(submitted_application.approved_member)
     assert agreement is not None
     expected = reverse(
-        "registrations:admin-review-detail", args=[submitted_application.id]
+        "admin:registrations_registrationapplication_change",
+        args=[submitted_application.id],
     )
     assert agreement.get_absolute_url() == expected
 

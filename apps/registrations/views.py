@@ -17,29 +17,18 @@ from django.views.decorators.http import require_POST
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
-from apps.agreements.messages import get_agreement_error_message
-from apps.agreements.models import Agreement
 from apps.agreements.presentation import agreement_status_copy
 from apps.agreements.services import (
     get_current_agreement,
-    mark_agreement_sent,
-    mark_agreement_signed,
-    regenerate_agreement,
-    set_signing_path,
-    void_agreement,
 )
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
 from apps.integrations.tasks import (
-    enqueue_create_agreement_submission,
     enqueue_ocr_job,
-    enqueue_sync_agreement_submission,
 )
-from apps.members.models import Guardian, TrainingGroup
-from apps.members.services import assign_training_group
-from apps.registrations.admin_panels import build_doc_panel
+from apps.members.models import Guardian
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
     CONSENT_REQUIRED,
@@ -65,12 +54,9 @@ from apps.registrations.presentation import (
     workspace_mode,
 )
 from apps.registrations.services import (
-    approve_application,
     can_edit_application,
     create_or_update_draft,
     get_application_prefill,
-    reject_application,
-    request_application_fix,
     submit_application,
 )
 
@@ -548,304 +534,6 @@ def view_registration_detail(request: HttpRequest, application_id: int) -> HttpR
     if not _parent_can_view_application(application, account):
         raise Http404
     return redirect("registrations:application-workspace", application_id=application.id)
-
-
-# ---------------------------------------------------------------------------
-# Staff review views
-# ---------------------------------------------------------------------------
-
-
-def _require_staff(request: HttpRequest) -> HttpResponse | None:
-    """Redirect anonymous to admin login; 404 non-staff."""
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-
-        return redirect_to_login(request.get_full_path(), "admin:login")
-    if not request.user.is_staff:
-        raise Http404
-    return None  # type: ignore[return-value]
-
-
-def admin_review_queue(request: HttpRequest) -> HttpResponse:
-    """Staff-only queue of submitted applications."""
-    result = _require_staff(request)
-    if result is not None:
-        return result
-    applications = RegistrationApplication.objects.select_related("guardian", "parent_account").filter(
-        status=RegistrationApplication.Status.SUBMITTED
-    ).order_by("-submitted_at")
-    return render(
-        request,
-        "registrations/admin_review_queue.html",
-        {"applications": applications},
-    )
-
-
-def admin_review_detail(request: HttpRequest, application_id: int) -> HttpResponse:
-    """Staff-only detail page with review actions."""
-    result = _require_staff(request)
-    if result is not None:
-        return result
-    application = get_object_or_404(RegistrationApplication, pk=application_id)
-
-    guardian_panel = build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY))
-    member_panel = build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
-    portrait_panel = build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT))
-
-    active_training_groups = list(
-        TrainingGroup.objects.filter(is_active=True).order_by("name")
-    )
-
-    current_inactive_group = None
-    if application.approved_member_id is not None:
-        assigned = application.approved_member.training_group
-        if assigned is not None and not assigned.is_active:
-            current_inactive_group = assigned
-
-    agreement = None
-    if application.approved_member_id is not None:
-        agreement = get_current_agreement(application.approved_member)
-
-    context: dict[str, object] = {
-        "application": application,
-        "guardian_panel": guardian_panel,
-        "member_panel": member_panel,
-        "portrait_panel": portrait_panel,
-        "active_training_groups": active_training_groups,
-        "current_inactive_group": current_inactive_group,
-        "agreement": agreement,
-    }
-
-    agreement_error_message = None
-    if agreement is not None and agreement.external_state == "failed":
-        agreement_error_message = get_agreement_error_message(
-            agreement.external_error_code
-        )
-    context["agreement_error_message"] = agreement_error_message
-
-    if request.method == "POST":
-        action = request.POST.get("action", "")
-
-        if action == "request_fix":
-            message = request.POST.get("review_message", "").strip()
-            try:
-                request_application_fix(application, request.user, message)
-            except ValueError:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Labojuma ziņojums ir obligāts."},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "reject":
-            message = request.POST.get("review_message", "").strip()
-            try:
-                reject_application(application, request.user, message)
-            except ValueError:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Noraidīšanas ziņojums ir obligāts."},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-queue")
-
-        elif action == "approve":
-            raw_group = request.POST.get("training_group", "").strip()
-            selected_group = None
-            if raw_group:
-                try:
-                    selected_group = TrainingGroup.objects.get(pk=int(raw_group))
-                except (TrainingGroup.DoesNotExist, ValueError):
-                    return render(
-                        request,
-                        "registrations/admin_review_detail.html",
-                        {**context, "error": "Nezināma treniņu grupa."},
-                        status=400,
-                    )
-            try:
-                approve_application(
-                    application, request.user, training_group=selected_group
-                )
-            except ValueError as exc:
-                message = str(exc)
-                if "inactive" in message:
-                    latvian = "Nevar piešķirt neaktīvu treniņu grupu apstiprināšanas brīdī."
-                elif "submitted" in message:
-                    latvian = "Var apstiprināt tikai iesniegtus pieteikumus."
-                else:
-                    latvian = "Pieteikumu nevarēja apstiprināt."
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": latvian},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-queue")
-
-        elif action == "assign_training_group":
-            if application.approved_member_id is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Var piešķirt grupu tikai apstiprinātam pieteikumam."},
-                    status=400,
-                )
-            raw_group = request.POST.get("training_group", "").strip()
-            selected_group = None
-            if raw_group:
-                try:
-                    selected_group = TrainingGroup.objects.get(pk=int(raw_group))
-                except (TrainingGroup.DoesNotExist, ValueError):
-                    return render(
-                        request,
-                        "registrations/admin_review_detail.html",
-                        {**context, "error": "Nezināma treniņu grupa."},
-                        status=400,
-                    )
-            assign_training_group(
-                application.approved_member, selected_group, request.user
-            )
-            return redirect(
-                "registrations:admin-review-detail", application_id=application.id
-            )
-
-        elif action == "mark_agreement_sent":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            try:
-                mark_agreement_sent(agreement, request.user)
-            except ValueError as exc:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": str(exc)},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "mark_agreement_signed":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            try:
-                mark_agreement_signed(agreement, request.user)
-            except ValueError as exc:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": str(exc)},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "set_signing_path":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            new_path = request.POST.get("signing_path", "").strip()
-            if new_path not in {value for value, _label in Agreement.SigningPath.choices}:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Nezināms parakstīšanas veids."},
-                    status=400,
-                )
-            set_signing_path(agreement, new_path, request.user)
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "void_agreement":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            reason = request.POST.get("void_reason", "").strip()
-            void_agreement(agreement, request.user, reason)
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "regenerate_agreement":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            try:
-                regenerate_agreement(
-                    application.approved_member,
-                    signing_path=agreement.signing_path,
-                    actor=request.user,
-                )
-            except ValueError as exc:
-                # Map only the expected "non-void current" case to Latvian copy.
-                # Other ValueError shapes are unexpected and should surface
-                # via str(exc) rather than be misattributed.
-                msg = str(exc)
-                if "active agreement cannot be replaced" in msg:
-                    latvian = "Aktīvo līgumu nedrīkst aizvietot."
-                else:
-                    latvian = msg
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": latvian},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "retry_docuseal":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            if agreement.external_state != "failed":
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Atkārtot var tikai neizdevušos sūtījumu."},
-                    status=400,
-                )
-            enqueue_create_agreement_submission(agreement.id)
-            return redirect(
-                "registrations:admin-review-detail", application_id=application.id
-            )
-
-        elif action == "sync_docuseal":
-            if agreement is None:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Līgums nav sagatavots."},
-                    status=400,
-                )
-            enqueue_sync_agreement_submission(agreement.id)
-            return redirect(
-                "registrations:admin-review-detail", application_id=application.id
-            )
-
-    return render(request, "registrations/admin_review_detail.html", context)
 
 
 # ---------------------------------------------------------------------------
