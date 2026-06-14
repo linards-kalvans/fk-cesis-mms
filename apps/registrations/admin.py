@@ -47,10 +47,12 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         js = ["admin/js/doc_lightbox.js"]
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
+        from django.contrib.admin.utils import unquote
+
         from apps.registrations.admin_panels import build_review_context
 
         extra_context = extra_context or {}
-        app = self.get_object(request, object_id)
+        app = self.get_object(request, unquote(object_id))
         if app is not None:
             extra_context.update(build_review_context(app))
         return super().change_view(request, object_id, form_url, extra_context)
