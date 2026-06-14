@@ -1,0 +1,17 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% block field_sets %}
+  <div class="mms-admin-review">
+    {% block mms_action_bar %}{% endblock %}
+    {% if original %}
+      {% include "registrations/admin/_doc_panel.html" with panel=guardian_panel %}
+      {% include "registrations/admin/_doc_panel.html" with panel=member_panel %}
+      {% include "registrations/admin/_doc_panel.html" with panel=portrait_panel %}
+      {% if agreement %}
+        {% include "registrations/admin/_agreement_module.html" %}
+      {% endif %}
+    {% endif %}
+  </div>
+  {{ block.super }}
+{% endblock %}

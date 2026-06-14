@@ -40,6 +40,21 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
     actions = ["export_csv", "export_csv_with_sensitive"]
 
+    change_form_template = "admin/registrations/registrationapplication/change_form.html"
+
+    class Media:
+        css = {"all": ["admin/css/review.css"]}
+        js = ["admin/js/doc_lightbox.js"]
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        from apps.registrations.admin_panels import build_review_context
+
+        extra_context = extra_context or {}
+        app = self.get_object(request, object_id)
+        if app is not None:
+            extra_context.update(build_review_context(app))
+        return super().change_view(request, object_id, form_url, extra_context)
+
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and
         # guardian__full_name is searched — select_related avoids a changelist N+1.
