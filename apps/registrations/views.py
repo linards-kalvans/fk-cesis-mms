@@ -39,6 +39,10 @@ from apps.integrations.tasks import (
 )
 from apps.members.models import Guardian, TrainingGroup
 from apps.members.services import assign_training_group
+from apps.registrations.admin_panels import (
+    build_doc_panel,
+    doc_preview_kind as _doc_preview_kind,  # noqa: F401  re-export for back-compat
+)
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
     CONSENT_REQUIRED,
@@ -57,7 +61,6 @@ from apps.registrations.presentation import (
     DOCUMENT_KIND_LABELS,
     FIELD_KIND_LABELS,
     FIELD_NAME_BY_KIND,
-    OCR_FIELD_LABELS,
     active_documents_by_kind,
     documents_by_field_name,
     parse_ocr_summary,
@@ -581,85 +584,6 @@ def admin_review_queue(request: HttpRequest) -> HttpResponse:
     )
 
 
-_IMAGE_PREVIEW_EXTENSIONS = frozenset({"jpg", "jpeg", "png", "webp", "heic"})
-_PDF_PREVIEW_EXTENSIONS = frozenset({"pdf"})
-
-
-def _doc_preview_kind(document: object) -> str:
-    """Classify a Document by file extension for inline-preview rendering.
-
-    Returns ``"image"`` for image extensions (jpg/jpeg/png/webp/heic),
-    ``"pdf"`` for PDF, and ``"other"`` for everything else (including missing
-    or empty filenames). Uses ``original_filename`` when present, else
-    ``document.file.name``. Comparison is case-insensitive.
-    """
-    filename = getattr(document, "original_filename", "") or ""
-    if not filename:
-        file_obj = getattr(document, "file", None)
-        filename = getattr(file_obj, "name", "") or ""
-    if "." not in filename:
-        return "other"
-    extension = filename.rsplit(".", 1)[1].lower()
-    if extension in _IMAGE_PREVIEW_EXTENSIONS:
-        return "image"
-    if extension in _PDF_PREVIEW_EXTENSIONS:
-        return "pdf"
-    return "other"
-
-
-def _build_doc_panel(
-    application: RegistrationApplication, kind: str
-) -> dict[str, object]:
-    """Build the per-kind panel context dict consumed by _doc_panel.html."""
-    documents = application.documents.filter(kind=kind)
-    active = (
-        documents.filter(deleted_at__isnull=True)
-        .select_related("extraction")
-        .first()
-    )
-    replaced = list(
-        documents.filter(deleted_at__isnull=False).order_by("-created_at")
-    )
-    for replaced_doc in replaced:
-        replaced_doc.preview_kind = _doc_preview_kind(replaced_doc)
-
-    ocr_summary: list[tuple[str, str]] = []
-    ocr_confidence_items: list[tuple[str, object]] = []
-    if active is not None and kind != Document.Kind.MEMBER_PORTRAIT:
-        extraction = getattr(active, "extraction", None)
-        if extraction is not None:
-            try:
-                summary_value = decrypt_json(extraction.encrypted_summary)
-                if isinstance(summary_value, str):
-                    ocr_summary = parse_ocr_summary(summary_value)
-                payload_value = decrypt_json(extraction.encrypted_payload)
-                if isinstance(payload_value, dict):
-                    confidence = payload_value.get("confidence")
-                    if isinstance(confidence, dict):
-                        ocr_confidence_items = [
-                            (
-                                OCR_FIELD_LABELS.get(
-                                    str(key), str(key).replace("_", " ").title()
-                                ),
-                                value,
-                            )
-                            for key, value in confidence.items()
-                        ]
-            except Exception:
-                ocr_summary = []
-                ocr_confidence_items = []
-
-    return {
-        "kind": kind,
-        "panel_title": DOCUMENT_KIND_LABELS.get(kind, kind),
-        "active": active,
-        "replaced": replaced,
-        "ocr_summary": ocr_summary,
-        "ocr_confidence_items": ocr_confidence_items,
-        "preview_kind": _doc_preview_kind(active) if active is not None else "",
-    }
-
-
 def admin_review_detail(request: HttpRequest, application_id: int) -> HttpResponse:
     """Staff-only detail page with review actions."""
     result = _require_staff(request)
@@ -667,9 +591,9 @@ def admin_review_detail(request: HttpRequest, application_id: int) -> HttpRespon
         return result
     application = get_object_or_404(RegistrationApplication, pk=application_id)
 
-    guardian_panel = _build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY))
-    member_panel = _build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
-    portrait_panel = _build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT))
+    guardian_panel = build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY))
+    member_panel = build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
+    portrait_panel = build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT))
 
     active_training_groups = list(
         TrainingGroup.objects.filter(is_active=True).order_by("name")
