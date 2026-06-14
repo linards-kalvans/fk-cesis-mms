@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h1>Apstiprināt pieteikumu — {{ original.member_full_name }}?</h1>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="approve_training_group">Treniņu grupa (neobligāti):</label>
+      <select name="training_group" id="approve_training_group">
+        <option value="">— Piešķirsim vēlāk —</option>
+        {% for grp in active_training_groups %}
+          <option value="{{ grp.id }}">{{ grp.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="submit-row">
+      <button type="submit" class="default">Apstiprināt</button>
+      <a href="{% url 'admin:registrations_registrationapplication_change' original.pk %}" class="closelink">Atcelt</a>
+    </div>
+  </form>
+{% endblock %}
