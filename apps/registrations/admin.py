@@ -43,6 +43,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "guardian_contact_email",
         "status",
         "submitted_at",
+        "agreement_status",
         "quick_actions",
     )
     list_filter = ("status",)
@@ -363,6 +364,14 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             actions.pop("export_csv_with_sensitive", None)
         return actions
+
+    @admin.display(description="Līguma statuss")
+    def agreement_status(self, obj):
+        if obj.approved_member_id:
+            agreement = get_current_agreement(obj.approved_member)
+            if agreement is not None:
+                return agreement.get_state_display()
+        return "—"
 
     def quick_actions(self, obj) -> str:  # type: ignore[override]
         """Status-aware per-row quick actions on the changelist.
