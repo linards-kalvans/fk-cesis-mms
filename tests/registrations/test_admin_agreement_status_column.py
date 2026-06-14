@@ -31,8 +31,8 @@ def test_changelist_shows_agreement_state_for_approved_app():
     )
     c = _staff_client()
     html = c.get(reverse("admin:registrations_registrationapplication_changelist")).content.decode()
-    assert "Līguma statuss" in html          # column header
-    assert Agreement.State.SENT.label in html  # "Nosūtīts"
+    assert "Līguma statuss" in html  # column header
+    assert Agreement.State.SENT.label in html  # the concise state label
 
 
 def test_changelist_dash_when_no_agreement():
@@ -42,3 +42,4 @@ def test_changelist_dash_when_no_agreement():
     c = _staff_client()
     html = c.get(reverse("admin:registrations_registrationapplication_changelist")).content.decode()
     assert "Līguma statuss" in html
+    assert "—" in html  # dash fallback for an application with no agreement
