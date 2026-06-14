@@ -77,3 +77,27 @@ def test_approve_confirm_then_commit():
     assert resp.status_code == 302
     app.refresh_from_db()
     assert app.status == RegistrationApplication.Status.APPROVED
+
+
+def test_reject_on_approved_application_is_blocked_by_guard():
+    # Invalid-state transition: reject_application raises (only SUBMITTED rejectable);
+    # the admin catches it and the status does not change.
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.APPROVED, member_full_name="X"
+    )
+    c = _staff_client()
+    url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    c.post(url, {"action": "reject", "review_message": "kaut kas"}, follow=True)
+    app.refresh_from_db()
+    assert app.status == RegistrationApplication.Status.APPROVED
+
+
+def test_request_fix_on_fix_requested_application_is_blocked_by_guard():
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.FIX_REQUESTED, member_full_name="X"
+    )
+    c = _staff_client()
+    url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    c.post(url, {"action": "request_fix", "review_message": "kaut kas"}, follow=True)
+    app.refresh_from_db()
+    assert app.status == RegistrationApplication.Status.FIX_REQUESTED
