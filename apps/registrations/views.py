@@ -39,10 +39,7 @@ from apps.integrations.tasks import (
 )
 from apps.members.models import Guardian, TrainingGroup
 from apps.members.services import assign_training_group
-from apps.registrations.admin_panels import (
-    build_doc_panel,
-    doc_preview_kind as _doc_preview_kind,  # noqa: F401  re-export for back-compat
-)
+from apps.registrations.admin_panels import build_doc_panel
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
     CONSENT_REQUIRED,

@@ -31,3 +31,28 @@ def test_build_review_context_keys():
     }
     assert ctx["agreement"] is None
     assert ctx["guardian_panel"]["kind"]
+
+
+def test_build_review_context_approved_member_branches():
+    from apps.agreements.models import Agreement
+    from apps.members.models import Guardian, Member, TrainingGroup
+
+    g = Guardian.objects.create(full_name="Vecāks")
+    inactive = TrainingGroup.objects.create(name="Vecā grupa", is_active=False)
+    m = Member.objects.create(full_name="Bērns", guardian=g, training_group=inactive)
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.APPROVED,
+        member_full_name="Bērns",
+        approved_member=m,
+    )
+    Agreement.objects.create(
+        member=m,
+        is_current=True,
+        state=Agreement.State.GENERATED,
+        external_state="failed",
+        external_error_code="provider_unavailable",
+    )
+    ctx = build_review_context(app)
+    assert ctx["current_inactive_group"] == inactive  # inactive assigned group surfaced
+    assert ctx["agreement"] is not None
+    assert ctx["agreement_error_message"]  # failed external_state -> Latvian message

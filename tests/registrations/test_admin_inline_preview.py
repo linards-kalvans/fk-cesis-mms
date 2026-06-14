@@ -28,7 +28,7 @@ from django.urls import reverse
 
 from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
-from apps.registrations.views import _doc_preview_kind
+from apps.registrations.admin_panels import doc_preview_kind as _doc_preview_kind
 
 pytestmark = pytest.mark.django_db
 
