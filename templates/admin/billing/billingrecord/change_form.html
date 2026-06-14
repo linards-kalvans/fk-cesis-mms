@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+
+{% block field_sets %}
+  {% if original and original.status == "draft" %}
+  <div class="module" style="margin-bottom:1rem">
+    <form method="post" action="{% url 'admin:billing_billingrecord_confirm' original.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'admin:billing_billingrecord_change' original.pk %}">
+      <button type="submit" class="button default">Apstiprināt ierakstu</button>
+    </form>
+  </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

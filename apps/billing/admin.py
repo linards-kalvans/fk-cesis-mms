@@ -1,6 +1,12 @@
 """Django admin for the billing app — plan config + draft-record review."""
 
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import path, reverse
+from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.billing.models import BillingInvoice, BillingRecord, MembershipPlan
 from apps.billing.services import recompute_billing_record
@@ -35,9 +41,10 @@ class BillingInvoiceInline(admin.TabularInline):
 class BillingRecordAdmin(admin.ModelAdmin):
     list_display = (
         "member", "guardian_name", "season", "final_amount",
-        "is_full_price", "payment_mode", "status", "external_status",
-        "payment_status", "payment_synced_at",
+        "is_full_price", "payment_mode", "status", "confirm_action",
+        "external_status", "payment_status", "payment_synced_at",
     )
+    change_form_template = "admin/billing/billingrecord/change_form.html"
     list_filter = (
         "season", "status", "payment_mode", "is_full_price",
         "external_status", "payment_status",
@@ -56,9 +63,58 @@ class BillingRecordAdmin(admin.ModelAdmin):
     inlines = (BillingInvoiceInline,)
     actions = ("recompute_from_plan", "push_to_invoice_ninja", "sync_payments")
 
+    def get_queryset(self, request):
+        self._request = request  # confirm_action needs it for a per-row CSRF token
+        return super().get_queryset(request)
+
+    def get_urls(self):
+        custom = [
+            path(
+                "<int:object_id>/confirm/",
+                self.admin_site.admin_view(self.confirm_view),
+                name="billing_billingrecord_confirm",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def confirm_view(self, request, object_id):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        record = get_object_or_404(BillingRecord, pk=object_id)
+        if request.method != "POST":
+            return self._safe_redirect(request, object_id)
+        if record.status == BillingRecord.Status.DRAFT:
+            record.status = BillingRecord.Status.CONFIRMED
+            record.save(update_fields=["status", "updated_at"])
+            self.message_user(request, "Ieraksts apstiprināts.")
+        else:
+            self.message_user(request, "Ieraksts jau ir apstiprināts.", level=messages.INFO)
+        return self._safe_redirect(request, object_id)
+
+    def _safe_redirect(self, request, object_id):
+        nxt = request.POST.get("next", "")
+        if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
+            return redirect(nxt)
+        return redirect("admin:billing_billingrecord_change", object_id)
+
     @admin.display(description="Vecāks")
     def guardian_name(self, obj):
         return obj.member.guardian.full_name
+
+    @admin.display(description="Apstiprināt")
+    def confirm_action(self, obj):
+        if obj.status != BillingRecord.Status.DRAFT:
+            return format_html("<span>✓ {}</span>", BillingRecord.Status.CONFIRMED.label)
+        confirm_url = reverse("admin:billing_billingrecord_confirm", args=[obj.pk])
+        changelist_url = reverse("admin:billing_billingrecord_changelist")
+        return format_html(  # type: ignore[return-value,no-any-return]
+            '<form method="post" action="{}" style="display:inline">'
+            '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+            '<input type="hidden" name="next" value="{}">'
+            '<button type="submit" class="button">Apstiprināt</button>'
+            "</form>",
+            confirm_url, get_token(self._request), changelist_url,
+        )
 
     @admin.action(description="Pārrēķināt no plāna")
     def recompute_from_plan(self, request, queryset):
