@@ -38,6 +38,7 @@ class GuardianAdmin(admin.ModelAdmin):
 class TrainingGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "is_active")
     list_filter = ("is_active",)
+    search_fields = ("name",)
 
 
 @admin.register(Member)

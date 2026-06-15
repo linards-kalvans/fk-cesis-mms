@@ -48,7 +48,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "agreement_status",
         "quick_actions",
     )
-    list_filter = ("status",)
+    list_filter = ("status", "preferred_agreement_signing")
+    date_hierarchy = "submitted_at"
+    ordering = ("-submitted_at",)
     search_fields = ("member_full_name", "parent_account__email", "guardian__full_name")
     readonly_fields = (
         "status",
