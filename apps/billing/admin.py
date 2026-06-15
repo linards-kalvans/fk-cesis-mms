@@ -10,6 +10,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.billing.models import BillingInvoice, BillingRecord, MembershipPlan
 from apps.billing.services import recompute_billing_record
+from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.models import AuditEvent
 
@@ -40,7 +41,7 @@ class BillingInvoiceInline(admin.TabularInline):
 @admin.register(BillingRecord)
 class BillingRecordAdmin(admin.ModelAdmin):
     list_display = (
-        "member", "guardian_name", "season", "final_amount",
+        "member", "guardian_link", "agreement_link", "season", "final_amount",
         "is_full_price", "payment_mode", "status", "confirm_action",
         "external_status", "payment_status", "payment_synced_at",
     )
@@ -51,6 +52,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
     )
     search_fields = ("member__full_name", "member__guardian__full_name")
     readonly_fields = (
+        "related_records",
         "member", "plan", "agreement", "season", "base_amount", "is_full_price",
         "sibling_discount_percent_applied", "discount_amount", "final_amount",
         "payment_mode", "full_price_opt_out", "external_status", "external_error_code",
@@ -100,8 +102,26 @@ class BillingRecordAdmin(admin.ModelAdmin):
         return redirect("admin:billing_billingrecord_change", object_id)
 
     @admin.display(description="Vecāks")
-    def guardian_name(self, obj):
-        return obj.member.guardian.full_name
+    def guardian_link(self, obj):
+        return admin_link(obj.member.guardian)
+
+    @admin.display(description="Līgums")
+    def agreement_link(self, obj):
+        return admin_link(obj.agreement)
+
+    @admin.display(description="Saistītie ieraksti")
+    def related_records(self, obj):
+        source_application = getattr(obj.member, "source_application", None)
+        return format_html(
+            "<strong>Biedrs:</strong> {}<br>"
+            "<strong>Vecāks:</strong> {}<br>"
+            "<strong>Pieteikums:</strong> {}<br>"
+            "<strong>Līgums:</strong> {}",
+            admin_link(obj.member),
+            admin_link(obj.member.guardian),
+            admin_link(source_application),
+            admin_link(obj.agreement),
+        )  # type: ignore[return-value,no-any-return]
 
     @admin.display(description="Apstiprināt")
     def confirm_action(self, obj):
