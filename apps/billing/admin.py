@@ -56,13 +56,13 @@ class SyncHealthFilter(admin.SimpleListFilter):
     def queryset(self, request, queryset):
         value = self.value()
         if value == "ok":
-            return queryset.filter(external_status="synced").exclude(external_error_code__gt="")
+            return queryset.filter(external_status="synced", external_error_code="")
         if value == "failed":
             return queryset.exclude(external_error_code="")
         if value == "pending":
             return queryset.exclude(external_status="").exclude(external_status="synced").filter(external_error_code="")
         if value == "none":
-            return queryset.filter(external_status="")
+            return queryset.filter(external_status="", external_error_code="")
         return queryset
 
 

@@ -61,3 +61,42 @@ def test_sync_health_filter_rendered_in_sidebar(active_plan, guardian):
     c = _staff_client()
     html = c.get(reverse("admin:billing_billingrecord_changelist")).content.decode()
     assert "sync_health" in html
+
+
+def test_sync_health_filter_ok_excludes_errored_synced(active_plan, guardian):
+    # A synced row that also carries an error code must NOT count as OK.
+    _record(active_plan, guardian, external_status="synced", name="Clean")
+    _record(active_plan, guardian, external_status="synced",
+            external_error_code="rate_limited", name="Tainted")
+    c = _staff_client()
+    url = reverse("admin:billing_billingrecord_changelist") + "?sync_health=ok"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Clean" in body
+    assert "Tainted" not in body
+
+
+def test_sync_health_filter_none_excludes_errored(active_plan, guardian):
+    # An empty-status row with an error code belongs to "failed", not "none".
+    _record(active_plan, guardian, external_status="", name="Untouched")
+    _record(active_plan, guardian, external_status="",
+            external_error_code="provider_unavailable", name="Errored")
+    c = _staff_client()
+    url = reverse("admin:billing_billingrecord_changelist") + "?sync_health=none"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Untouched" in body
+    assert "Errored" not in body
+
+
+def test_payment_status_badge_paid_shows_ok(active_plan, guardian):
+    _record(active_plan, guardian, payment_status="paid", name="Samaksāts")
+    c = _staff_client()
+    html = c.get(reverse("admin:billing_billingrecord_changelist")).content.decode()
+    assert "fk-badge--ok" in html
+
+
+def test_payment_error_shows_fail_badge_with_tooltip(active_plan, guardian):
+    _record(active_plan, guardian, payment_error_code="provider_unavailable", name="Kļūda")
+    c = _staff_client()
+    html = c.get(reverse("admin:billing_billingrecord_changelist")).content.decode()
+    assert "fk-badge--fail" in html
+    assert "title=" in html
