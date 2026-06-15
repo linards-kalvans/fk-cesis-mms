@@ -1,6 +1,8 @@
 """Member-domain models: Guardian, TrainingGroup, Member, KitSizeOption."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class KitSizeOption(models.Model):
@@ -47,6 +49,23 @@ class TrainingGroup(models.Model):
 
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"), name="uniq_training_group_name_ci"
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        clash = TrainingGroup.objects.filter(name__iexact=self.name)
+        if self.pk is not None:
+            clash = clash.exclude(pk=self.pk)
+        if clash.exists():
+            raise ValidationError(
+                {"name": "Treniņu grupa ar šādu nosaukumu jau pastāv."}
+            )
 
     def __str__(self):
         return self.name
