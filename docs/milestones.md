@@ -86,9 +86,16 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ### Admin UX gaps
 - admin review should show inline identity-document previews beside applicant data (P5 target)
-- admin document UX should better distinguish active vs replaced documents (P7 target)
+- admin document UX should better distinguish active vs replaced documents **delivered (P7 C-ii b2 Plan 2, 2026-06-15)** — `DocumentAdmin` Aktīvs/Vēsturisks badge + `state` filter
 - training-group assignment flow still incomplete (P5 target)
 - review-action audit entries **delivered (P7 Slice A, 2026-06-13)** — approve/reject/request-fix now recorded as `AuditEvent`s with actor + target
+
+#### P7 — remaining / deferred follow-ups (open as of 2026-06-15)
+All of P7 Slices A (audit), B (export), C (C-i + C-ii batch 1 + batch 2 Plans 1–3) and the Guardian/ParentAccount consolidation + admin menu re-order are **delivered** (gate 1321, pushed to `dev`). Open items:
+- **Audit gaps (deferred — each needs a new `AuditEvent.Action` choices value + migration):** the billing one-click **confirm** (`BillingRecordAdmin.confirm_view`) and the training-group **merge** (`TrainingGroupAdmin.merge_training_groups`) are **not** audited.
+- **Pending manual verification** of this session's admin work on dev data (analogous to prior slices' LAN sign-off): Admin → **Vecāki** — confirm the merged guardians look right, email/phone/is_active edit routes correctly (email via `change_parent_email`), the old "Parent accounts" menu entry is gone, and the new fixed menu order renders. Dev DB backed up to `db.sqlite3.pre-guardian-consolidation.bak` before the data migration.
+- **Accepted tradeoff (optional later enhancement):** parents who authenticated but never started a registration (a `ParentAccount` with no `Guardian`) are not in the admin menu — reachable only by direct URL.
+- **Deferred from P6 (related):** parent self-service email change with OTP re-verification of the new address.
 
 ### Business workflow gaps
 - agreement generation / manual-signing flow not implemented yet (P5 target)
