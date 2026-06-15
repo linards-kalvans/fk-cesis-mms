@@ -19,7 +19,7 @@ from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
 @admin.register(Guardian)
 class GuardianAdmin(admin.ModelAdmin):
     list_display = ("full_name", "email", "phone")
-    search_fields = ("full_name", "email", "personal_id")
+    search_fields = ("full_name", "parent_account__email", "personal_id")
     readonly_fields = ("related_records",)
 
     @admin.display(description="Saistītie ieraksti")
@@ -121,7 +121,7 @@ class MemberAdmin(admin.ModelAdmin):
         )  # type: ignore[return-value,no-any-return]
 
     def _export_members(self, request, queryset, *, sensitive: bool):
-        qs = queryset.select_related("guardian", "training_group")
+        qs = queryset.select_related("guardian__parent_account", "training_group")
         rows = [member_row(m, sensitive=sensitive) for m in qs]
         record_audit_event(
             action=str(AuditEvent.Action.DATA_EXPORTED),

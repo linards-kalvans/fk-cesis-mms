@@ -18,7 +18,12 @@ from apps.members.models import Member
 
 def get_current_agreement(member: Member) -> Agreement | None:
     """Return the member's current (non-archived) agreement, or None."""
-    return cast("Agreement | None", member.agreements.filter(is_current=True).first())
+    return cast(
+        "Agreement | None",
+        member.agreements.select_related("member__guardian__parent_account")
+        .filter(is_current=True)
+        .first(),
+    )
 
 
 def create_agreement_for_member(
