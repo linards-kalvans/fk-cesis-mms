@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
+from apps.core.admin_badges import status_badge
 from apps.core.audit import record_audit_event
 from apps.core.models import AuditEvent
 from apps.documents.models import Document
@@ -13,16 +14,40 @@ from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 
 
+class DocumentStateFilter(admin.SimpleListFilter):
+    title = "Stāvoklis"
+    parameter_name = "state"
+
+    def lookups(self, request, model_admin):
+        return [("active", "Aktīvs"), ("replaced", "Vēsturisks (aizstāts)")]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "active":
+            return queryset.filter(deleted_at__isnull=True)
+        if value == "replaced":
+            return queryset.filter(deleted_at__isnull=False)
+        return queryset
+
+
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
+    class Media:
+        css = {"all": ["admin/fk_badges.css"]}
+
     list_display = (
         "id",
         "application",
         "kind",
+        "state_badge",
         "ocr_status",
         "uploaded_by_parent_at",
         "access_links",
     )
+    search_fields = ("application__member_full_name", "kind")
+    list_filter = ("kind", "ocr_status", DocumentStateFilter)
+    date_hierarchy = "uploaded_by_parent_at"
+    ordering = ("-uploaded_by_parent_at",)
     readonly_fields = (
         "application",
         "kind",
@@ -37,6 +62,12 @@ class DocumentAdmin(admin.ModelAdmin):
     )
     fields = readonly_fields
     actions = ["re_run_ocr"]
+
+    @admin.display(description="Stāvoklis")
+    def state_badge(self, obj: Document) -> Any:
+        if obj.is_active:
+            return status_badge("Aktīvs", "ok")
+        return status_badge("Vēsturisks", "muted")
 
     def access_links(self, obj: Document) -> Any:
         if not obj.file:
