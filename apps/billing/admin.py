@@ -67,7 +67,10 @@ class BillingRecordAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         self._request = request  # confirm_action needs it for a per-row CSRF token
-        return super().get_queryset(request)
+        # select_related: the guardian_link/agreement_link columns touch these per row.
+        return super().get_queryset(request).select_related(
+            "member", "member__guardian", "agreement"
+        )
 
     def get_urls(self):
         custom = [

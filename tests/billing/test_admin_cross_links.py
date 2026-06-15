@@ -50,9 +50,19 @@ def test_changelist_links_to_guardian_and_agreement(active_plan, guardian):
 
 
 def test_change_page_shows_related_records_row(active_plan, guardian):
-    rec = _record(active_plan, guardian)
+    m = Member.objects.create(full_name="Bērns", guardian=guardian)
+    agreement = Agreement.objects.create(
+        member=m, is_current=True, state=Agreement.State.SENT, generated_at=timezone.now()
+    )
+    rec = BillingRecord.objects.create(
+        member=m, plan=active_plan, season="2026/2027",
+        base_amount=Decimal("300.00"), final_amount=Decimal("300.00"),
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+        status=BillingRecord.Status.DRAFT, agreement=agreement,
+    )
     c = _staff_client()
     html = c.get(reverse("admin:billing_billingrecord_change", args=[rec.pk])).content.decode()
     assert "Saistītie ieraksti" in html
-    assert f"/members/member/{rec.member.pk}/change/" in html
+    assert f"/members/member/{m.pk}/change/" in html
     assert f"/members/guardian/{guardian.pk}/change/" in html
+    assert f"/agreements/agreement/{agreement.pk}/change/" in html  # agreement branch
