@@ -2,7 +2,10 @@
 
 from django.contrib import admin, messages
 from django.utils import timezone
+from django.utils.html import format_html
 
+from apps.agreements.services import get_current_agreement
+from apps.core.admin_links import admin_link, admin_links
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
 from apps.core.models import AuditEvent
@@ -14,6 +17,21 @@ from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
 class GuardianAdmin(admin.ModelAdmin):
     list_display = ("full_name", "email", "phone")
     search_fields = ("full_name", "email", "personal_id")
+    readonly_fields = ("related_records",)
+
+    @admin.display(description="Saistītie ieraksti")
+    def related_records(self, obj):
+        members = list(obj.members.all()) if obj.pk else []
+        applications = list(obj.applications.all()) if obj.pk else []
+        billing_records = [br for m in members for br in m.billing_records.all()]
+        return format_html(
+            "<strong>Biedri:</strong> {}<br>"
+            "<strong>Pieteikumi:</strong> {}<br>"
+            "<strong>Rēķini:</strong> {}",
+            admin_links(members),
+            admin_links(applications),
+            admin_links(billing_records),
+        )  # type: ignore[return-value,no-any-return]
 
 
 @admin.register(TrainingGroup)
@@ -28,6 +46,23 @@ class MemberAdmin(admin.ModelAdmin):
     list_filter = ("training_group",)
     search_fields = ("full_name", "personal_id")
     actions = ["export_csv", "export_csv_with_sensitive"]
+    readonly_fields = ("related_records",)
+
+    @admin.display(description="Saistītie ieraksti")
+    def related_records(self, obj):
+        source_application = getattr(obj, "source_application", None)
+        agreement = get_current_agreement(obj) if obj.pk else None
+        billing_records = list(obj.billing_records.all()) if obj.pk else []
+        return format_html(
+            "<strong>Vecāks:</strong> {}<br>"
+            "<strong>Pieteikums:</strong> {}<br>"
+            "<strong>Līgums:</strong> {}<br>"
+            "<strong>Rēķini:</strong> {}",
+            admin_link(obj.guardian),
+            admin_link(source_application),
+            admin_link(agreement),
+            admin_links(billing_records),
+        )  # type: ignore[return-value,no-any-return]
 
     def _export_members(self, request, queryset, *, sensitive: bool):
         qs = queryset.select_related("guardian", "training_group")
