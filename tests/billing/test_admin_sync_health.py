@@ -66,6 +66,20 @@ def test_sync_health_filter_rendered_in_sidebar(active_plan, guardian):
     assert "sync_health" in html
 
 
+def test_sync_health_filter_pending_is_inflight_without_error(active_plan, guardian):
+    # pending = a non-empty, non-synced status with no error code.
+    _record(active_plan, guardian, external_status="queued", name="PendingSentinel")
+    _record(active_plan, guardian, external_status="synced", name="SyncedSentinel")
+    _record(active_plan, guardian, external_status="error",
+            external_error_code="provider_unavailable", name="FailSentinel")
+    c = _staff_client()
+    url = reverse("admin:billing_billingrecord_changelist") + "?sync_health=pending"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "PendingSentinel" in body
+    assert "SyncedSentinel" not in body
+    assert "FailSentinel" not in body
+
+
 def test_sync_health_filter_ok_excludes_errored_synced(active_plan, guardian):
     # A synced row that also carries an error code must NOT count as OK.
     _record(active_plan, guardian, external_status="synced", name="Clean")

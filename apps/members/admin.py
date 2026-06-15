@@ -89,8 +89,6 @@ class TrainingGroupAdmin(admin.ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Apvienot treniņu grupas",
             "groups": groups,
-            "action_name": "merge_training_groups",
-            "selected": [str(g.pk) for g in groups],
             "opts": self.model._meta,
         }
         return TemplateResponse(
