@@ -64,3 +64,45 @@ def test_merge_single_group_is_rejected():
     }, follow=True)
     assert TrainingGroup.objects.filter(pk=a.pk).exists()
     assert b"vismaz divas" in resp.content.lower()
+
+
+def test_merge_rejects_target_outside_selection():
+    # A target PK that is not among the selected groups must not delete anything.
+    a = TrainingGroup.objects.create(name="A")
+    b = TrainingGroup.objects.create(name="B")
+    outsider = TrainingGroup.objects.create(name="Outsider")
+    c = _staff_client()
+    url = reverse("admin:members_traininggroup_changelist")
+    resp = c.post(url, {
+        "action": "merge_training_groups",
+        "_selected_action": [str(a.pk), str(b.pk)],
+        "target": str(outsider.pk),
+        "apply": "1",
+    }, follow=True)
+    assert TrainingGroup.objects.filter(pk=a.pk).exists()
+    assert TrainingGroup.objects.filter(pk=b.pk).exists()
+    assert TrainingGroup.objects.filter(pk=outsider.pk).exists()
+    assert "derīgu mērķa grupu" in resp.content.decode().lower()
+
+
+def test_merge_requires_delete_permission():
+    from django.contrib.auth.models import Permission
+
+    a = TrainingGroup.objects.create(name="U10 A")
+    b = TrainingGroup.objects.create(name="Dublikāts")
+    user = User.objects.create_user("editor", "e@example.com", "pw", is_staff=True)
+    for codename in ("view_traininggroup", "change_traininggroup"):
+        user.user_permissions.add(Permission.objects.get(codename=codename))
+    c = Client()
+    c.login(username="editor", password="pw")
+    url = reverse("admin:members_traininggroup_changelist")
+    resp = c.post(url, {
+        "action": "merge_training_groups",
+        "_selected_action": [str(a.pk), str(b.pk)],
+        "target": str(a.pk),
+        "apply": "1",
+    }, follow=True)
+    # No delete permission → both groups survive.
+    assert TrainingGroup.objects.filter(pk=a.pk).exists()
+    assert TrainingGroup.objects.filter(pk=b.pk).exists()
+    assert "nav ties" in resp.content.decode().lower()

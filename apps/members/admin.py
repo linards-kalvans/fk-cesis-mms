@@ -46,6 +46,12 @@ class TrainingGroupAdmin(admin.ModelAdmin):
 
     @admin.action(description="Apvienot atlasītās grupas")
     def merge_training_groups(self, request, queryset):
+        # Destructive (deletes groups) — gate on delete permission, not just change.
+        if not self.has_delete_permission(request):
+            self.message_user(
+                request, "Nav tiesību dzēst grupas.", level=messages.ERROR
+            )
+            return None
         groups = list(queryset.order_by("name"))
         if len(groups) < 2:
             self.message_user(
@@ -55,15 +61,24 @@ class TrainingGroupAdmin(admin.ModelAdmin):
             )
             return None
         if request.POST.get("apply") == "1":
+            # The target must be one of the selected groups (the POST param is
+            # otherwise attacker-controlled and could reparent to an arbitrary group).
+            group_ids = {str(g.pk) for g in groups}
+            if request.POST.get("target") not in group_ids:
+                self.message_user(
+                    request, "Atlasiet derīgu mērķa grupu.", level=messages.ERROR
+                )
+                return None
             target = get_object_or_404(TrainingGroup, pk=request.POST.get("target"))
             others = [g for g in groups if g.pk != target.pk]
+            other_count = len(others)
             with transaction.atomic():
                 reparented = Member.objects.filter(
                     training_group__in=others
                 ).update(training_group=target)
-                other_count = len(others)
-                for g in others:
-                    g.delete()
+                TrainingGroup.objects.filter(
+                    pk__in=[g.pk for g in others]
+                ).delete()
             self.message_user(
                 request,
                 f"Apvienotas {other_count} grupas grupā “{target.name}”; "
