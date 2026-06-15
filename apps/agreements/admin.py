@@ -72,9 +72,11 @@ class AgreementAdmin(admin.ModelAdmin):
         billing_records = list(obj.billing_records.order_by("-created_at")) if obj.pk else []
         return format_html(
             "<strong>Biedrs:</strong> {}<br>"
+            "<strong>Vecāks:</strong> {}<br>"
             "<strong>Pieteikums:</strong> {}<br>"
             "<strong>Rēķini:</strong> {}",
             admin_link(member),
+            admin_link(member.guardian),
             admin_link(source_application),
             admin_links(billing_records),
         )  # type: ignore[return-value,no-any-return]

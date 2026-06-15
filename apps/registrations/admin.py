@@ -371,7 +371,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
     @admin.display(description="Biedrs")
     def member_link(self, obj):
-        return admin_link(obj.approved_member)
+        # Fixed label (not the name) — the name is already in the member_full_name column.
+        if obj.approved_member_id is None:
+            return "—"
+        return admin_link(obj.approved_member, label="Atvērt →")
 
     @admin.display(description="Līguma statuss")
     def agreement_status(self, obj):

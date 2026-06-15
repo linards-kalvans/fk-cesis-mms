@@ -34,4 +34,5 @@ def test_agreement_change_page_links_to_member_and_application():
     html = c.get(reverse("admin:agreements_agreement_change", args=[agreement.pk])).content.decode()
     assert "Saistītie ieraksti" in html
     assert f"/members/member/{m.pk}/change/" in html
+    assert f"/members/guardian/{g.pk}/change/" in html  # guardian link present
     assert f"/registrations/registrationapplication/{app.pk}/change/" in html

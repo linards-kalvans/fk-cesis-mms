@@ -133,9 +133,16 @@ def build_review_context(
     billing_records = (
         list(member.billing_records.order_by("-created_at")) if member is not None else []
     )
+    # The application's own guardian FK is often unset; resolve the canonical
+    # guardian from the most reliable source available.
+    guardian = application.guardian
+    if guardian is None and member is not None:
+        guardian = member.guardian
+    if guardian is None and application.parent_account_id:
+        guardian = getattr(application.parent_account, "guardian", None)
     related_links = {
         "Biedrs": admin_link(member),
-        "Vecāks": admin_link(application.guardian),
+        "Vecāks": admin_link(guardian),
         "Vecāka konts": admin_link(application.parent_account),
         "Līgums": admin_link(agreement),
         "Rēķini": admin_links(billing_records),
