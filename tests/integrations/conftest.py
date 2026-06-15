@@ -27,8 +27,6 @@ def guardian(db):
     from tests.support import make_guardian
 
     g = make_guardian(full_name="Anna Bērziņa", email="anna@example.com")
-    g.email = "anna@example.com"
-    g.save(update_fields=["email"])
     return g
 
 
@@ -43,9 +41,6 @@ def agreement_guardian(db):
         phone="+37120000000",
         address="Rīgas iela 1, Cēsis",
     )
-    g.email = "anna@example.test"
-    g.phone = "+37120000000"
-    g.save(update_fields=["email", "phone"])
     return g
 
 

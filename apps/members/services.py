@@ -46,14 +46,12 @@ def resolve_guardian_for_account(account) -> Guardian:
     if absent. One verified email maps to exactly one Guardian, forever.
 
     Called when a registration is initiated so every application carries its
-    parent's canonical guardian. The email is mirrored from the account on
-    create (the Invoice Ninja client contact reads Guardian.email).
+    parent's canonical guardian. Email/phone are read through the linked
+    account via the Guardian.email/phone proxies (the Invoice Ninja client
+    contact reads Guardian.email).
     """
     guardian: Guardian
-    guardian, _created = Guardian.objects.get_or_create(
-        parent_account=account,
-        defaults={"email": account.email},
-    )
+    guardian, _created = Guardian.objects.get_or_create(parent_account=account)
     return guardian
 
 

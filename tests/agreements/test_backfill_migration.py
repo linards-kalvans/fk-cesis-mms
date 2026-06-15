@@ -75,12 +75,13 @@ def test_backfill_honours_application_preferred_signing_path(db):
     from django.contrib.auth.models import User
 
     from apps.agreements.models import Agreement
-    from apps.members.models import Guardian, Member
+    from apps.members.models import Member
     from apps.registrations.models import RegistrationApplication
+    from tests.support import make_guardian
 
     # Build a pre-Slice-C scenario by hand: an approved member linked to an
     # application whose preferred_agreement_signing="paper", but no agreement.
-    guardian = Guardian.objects.create(full_name="Guardian X")
+    guardian = make_guardian(full_name="Guardian X")
     member = Member.objects.create(full_name="Member X", guardian=guardian)
     staff = User.objects.create_user(username="staff", is_staff=True)
     RegistrationApplication.objects.create(

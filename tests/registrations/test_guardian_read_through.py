@@ -12,12 +12,11 @@ pytestmark = pytest.mark.django_db
 
 
 def test_accessors_prefer_guardian_when_profile_populated():
-    account = ParentAccount.objects.create(email="acct@example.com")
+    account = ParentAccount.objects.create(email="acct@example.com", phone="+37120000000")
     guardian = Guardian.objects.create(
         parent_account=account,
         full_name="Guardian Row",
         personal_id="010101-22222",
-        phone="+37120000000",
         address="Guardian Address 1",
     )
     app = RegistrationApplication.objects.create(
@@ -42,7 +41,7 @@ def test_linked_guardian_is_source_even_when_field_empty():
     fall back to a stale column (so clearing a field propagates)."""
     account = ParentAccount.objects.create(email="empty@example.com")
     guardian = Guardian.objects.create(
-        parent_account=account, full_name="Has Name", personal_id="", phone="", address=""
+        parent_account=account, full_name="Has Name", personal_id="", address=""
     )
     app = RegistrationApplication.objects.create(
         parent_account=account, guardian=guardian,
@@ -71,8 +70,10 @@ def test_draft_save_populates_the_guardian_profile():
     guardian = Guardian.objects.get(parent_account=account)
     assert guardian.full_name == "Anna Bērziņa"
     assert guardian.personal_id == "010101-12345"
-    assert guardian.phone == "+37120000001"
     assert guardian.address == "Rīga, Brīvības 1"
+    # phone is written to the account; the proxy reads it back through.
+    assert guardian.parent_account.phone == "+37120000001"
+    assert guardian.phone == "+37120000001"
 
 
 def test_editing_guardian_on_second_app_propagates_to_first():
@@ -152,7 +153,7 @@ def test_make_guardian_helper_links_a_populated_guardian(make_guardian):
                              phone="+37120000000", address="Helper Addr")
     assert guardian.parent_account_id == account.id
     assert guardian.full_name == "Helper Name"
-    assert guardian.email == "helper@example.com"  # mirrored from the account
+    assert guardian.email == "helper@example.com"  # read through the account proxy
     app = RegistrationApplication.objects.create(parent_account=account, guardian=guardian)
     assert app.guardian_name == "Helper Name"
 
@@ -171,8 +172,10 @@ def test_draft_save_writes_guardian_not_columns(make_guardian):
     guardian = app.guardian
     assert guardian.full_name == "Form Name"
     assert guardian.personal_id == "010101-12345"
-    assert guardian.phone == "+37120000000"
     assert guardian.address == "Form Addr"
+    # phone is written to the account; the proxy reads it back through.
+    assert guardian.parent_account.phone == "+37120000000"
+    assert guardian.phone == "+37120000000"
 
 
 def test_str_uses_account_email_not_column():

@@ -25,7 +25,7 @@ def test_parent_account_can_have_only_one_guardian():
         Guardian.objects.create(parent_account=account)
 
 
-def test_resolve_guardian_is_idempotent_and_mirrors_email():
+def test_resolve_guardian_is_idempotent_and_reads_account_email():
     from apps.members.services import resolve_guardian_for_account
 
     account = ParentAccount.objects.create(email="resolve@example.com")
@@ -34,5 +34,5 @@ def test_resolve_guardian_is_idempotent_and_mirrors_email():
 
     assert first.pk == second.pk  # same row, not a duplicate
     assert first.parent_account_id == account.id
-    assert first.email == "resolve@example.com"  # email mirrored on create
+    assert first.email == "resolve@example.com"  # proxy reads through the account
     assert Guardian.objects.filter(parent_account=account).count() == 1

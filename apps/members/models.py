@@ -28,17 +28,22 @@ class Guardian(models.Model):
 
     full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")
-    email = models.EmailField(blank=True, default="")
-    phone = models.CharField(max_length=32, blank=True, default="")
     address = models.CharField(max_length=255, blank=True, default="")
     external_client_id = models.CharField(max_length=64, blank=True, default="")
     parent_account = models.OneToOneField(
         "accounts.ParentAccount",
         on_delete=models.PROTECT,
-        null=True,
         blank=True,
         related_name="guardian",
     )
+
+    @property
+    def email(self) -> str:
+        return self.parent_account.email if self.parent_account_id else ""
+
+    @property
+    def phone(self) -> str:
+        return self.parent_account.phone if self.parent_account_id else ""
 
     def __str__(self):
         return self.full_name or str(self.pk)

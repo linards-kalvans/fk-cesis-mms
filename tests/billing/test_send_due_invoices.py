@@ -66,6 +66,7 @@ def test_skips_future_installment(active_plan, guardian, monkeypatch):
 
 @override_settings(BILLING_AUTOSEND_ENABLED=True)
 def test_skips_guardian_without_email(active_plan, monkeypatch):
+    from apps.accounts.models import ParentAccount
     from apps.integrations import invoice_platform, tasks
 
     from tests.support import make_guardian
@@ -73,7 +74,10 @@ def test_skips_guardian_without_email(active_plan, monkeypatch):
     sent = []
     monkeypatch.setattr(invoice_platform, "email_invoice", lambda eid: sent.append(eid))
 
-    no_email_guardian = make_guardian(full_name="Bez Pasta", email="")
+    # email/phone live on the account; an account with an empty email yields a
+    # guardian whose email proxy is empty.
+    no_email_account = ParentAccount.objects.create(email="")
+    no_email_guardian = make_guardian(full_name="Bez Pasta", account=no_email_account)
     inv = _draft_invoice(active_plan, no_email_guardian, due_date=timezone.localdate(), external_id="inv-N")
     tasks.send_due_invoices()
 

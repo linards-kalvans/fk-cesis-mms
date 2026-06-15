@@ -24,7 +24,6 @@ def _application():
     g = resolve_guardian_for_account(acct)
     g.full_name = "Anna Ozola"
     g.personal_id = "010180-12345"
-    g.phone = "+37129999999"
     g.address = "Rīga"
     g.save()
     return RegistrationApplication.objects.create(

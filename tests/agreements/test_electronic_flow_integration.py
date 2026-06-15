@@ -45,8 +45,8 @@ def test_paper_mark_sent_does_not_enqueue(agreement_member, actor):
 
 
 def test_electronic_no_email_falls_back_to_paper(agreement_member, actor):
-    agreement_member.guardian.email = ""
-    agreement_member.guardian.save(update_fields=["email"])
+    agreement_member.guardian.parent_account.email = ""
+    agreement_member.guardian.parent_account.save(update_fields=["email"])
     with patch(
         "apps.integrations.tasks.enqueue_create_agreement_submission"
     ) as spy:

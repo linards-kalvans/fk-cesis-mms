@@ -20,13 +20,9 @@ pytestmark = pytest.mark.django_db
 
 
 def _member():
-    # email/phone live on the linked account; mirror them onto the Guardian
-    # columns too so today's column-reading export keeps working (post-proxy
-    # the column read becomes an account proxy and stays correct).
+    # email/phone live on the linked account; the Guardian.email/phone proxies
+    # read through to it, so the column-reading export stays correct.
     g = make_guardian(full_name="Anna Ozola", email="a@example.com", phone="+37120000000", address="Rīga", personal_id="010180-12345")
-    g.email = "a@example.com"
-    g.phone = "+37120000000"
-    g.save(update_fields=["email", "phone"])
     grp = TrainingGroup.objects.create(name="U-12", is_active=True)
     return Member.objects.create(full_name="Jānis Ozols", personal_id="010110-22222", guardian=g, training_group=grp)
 

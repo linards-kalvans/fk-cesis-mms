@@ -9,9 +9,9 @@ from apps.members.services import resolve_guardian_for_account
 pytestmark = pytest.mark.django_db
 
 
-def test_changes_email_and_syncs_guardian_mirror():
+def test_changes_email_and_guardian_proxy_reflects_it():
     account = ParentAccount.objects.create(email="old@example.com")
-    guardian = resolve_guardian_for_account(account)  # mirror == old@example.com
+    guardian = resolve_guardian_for_account(account)  # proxy reads old@example.com
     assert guardian.email == "old@example.com"
 
     change_parent_email(account, "new@example.com")
@@ -19,7 +19,7 @@ def test_changes_email_and_syncs_guardian_mirror():
     account.refresh_from_db()
     guardian.refresh_from_db()
     assert account.email == "new@example.com"
-    assert guardian.email == "new@example.com"
+    assert guardian.email == "new@example.com"  # proxy reads through the account
 
 
 def test_normalizes_new_email():

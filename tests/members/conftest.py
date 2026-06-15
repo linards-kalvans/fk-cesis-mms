@@ -21,9 +21,6 @@ def guardian(db):
         phone="+37120000000",
         address="Rīgas iela 1, Cēsis",
     )
-    g.email = "anna@example.test"
-    g.phone = "+37120000000"
-    g.save(update_fields=["email", "phone"])
     return g
 
 

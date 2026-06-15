@@ -132,17 +132,12 @@ def make_guardian(db):
     from tests.support import make_guardian as _support_make_guardian
 
     def _make(account, *, full_name="", personal_id="", phone="", address=""):
-        g = _support_make_guardian(
+        return _support_make_guardian(
             account=account,
             full_name=full_name,
             personal_id=personal_id,
             phone=phone,
             address=address,
         )
-        # Mirror the account email onto the Guardian column so column-reading
-        # accessors keep working today (becomes an account proxy post-change).
-        g.email = account.email
-        g.save(update_fields=["email"])
-        return g
 
     return _make

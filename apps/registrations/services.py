@@ -20,7 +20,7 @@ from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
-from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
+from apps.members.models import KitSizeOption, Member, TrainingGroup
 from apps.members.services import resolve_guardian_for_account
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
@@ -427,9 +427,13 @@ def create_or_update_draft(
         _guardian = application.guardian
         _guardian.full_name = str(data.get("guardian_full_name", "")).strip()
         _guardian.personal_id = str(data.get("guardian_personal_id", "")).strip()
-        _guardian.phone = str(data.get("guardian_phone", "")).strip()
         _guardian.address = str(data.get("guardian_declared_address", "")).strip()
-        _guardian.save(update_fields=["full_name", "personal_id", "phone", "address"])
+        _guardian.save(update_fields=["full_name", "personal_id", "address"])
+        account = _guardian.parent_account
+        new_phone = str(data.get("guardian_phone", "")).strip()
+        if account is not None and new_phone and account.phone != new_phone:
+            account.phone = new_phone
+            account.save(update_fields=["phone", "updated_at"])
     application.member_full_name = str(data.get("member_full_name", "")).strip()
     application.member_personal_id = str(data.get("member_personal_id", "")).strip()
     application.member_birth_date = data.get("member_birth_date") or None
@@ -638,15 +642,6 @@ def submit_application(
     application.reviewed_at = None
     application.save(update_fields=["status", "submitted_at", "updated_at", "review_message", "reviewed_by_id", "reviewed_at"])
 
-    # Sync the parent account's phone to the contact phone the parent entered
-    # in this application. account.phone is the source of truth for prefill;
-    # keeping it current means later new-app prefill suggests the right phone.
-    if application.parent_account_id is not None and application.guardian_contact_phone:
-        account = application.parent_account
-        if account.phone != application.guardian_contact_phone:
-            account.phone = application.guardian_contact_phone
-            account.save(update_fields=["phone", "updated_at"])
-
     return application
 
 
@@ -768,10 +763,9 @@ def approve_application(
     # covers ORM-built applications that never went through create_or_update_draft.
     guardian = application.guardian
     if guardian is None:
-        if application.parent_account_id is not None:
-            guardian = resolve_guardian_for_account(application.parent_account)
-        else:
-            guardian = Guardian.objects.create()
+        if application.parent_account_id is None:
+            raise ValueError("Cannot approve an application without a parent account.")
+        guardian = resolve_guardian_for_account(application.parent_account)
         application.guardian = guardian
 
     # Create Member linked to Guardian, optionally to a TrainingGroup

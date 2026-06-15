@@ -326,8 +326,7 @@ def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount
     """Change a parent's verified email (admin-initiated).
 
     Normalizes the new email, enforces the unique constraint (rejecting an
-    email already owned by another account, case-insensitive), persists it,
-    and updates the linked Guardian.email mirror in the same transaction.
+    email already owned by another account, case-insensitive), and persists it.
     No-op when the email is unchanged. Raises ValueError on collision.
     """
     normalized = new_email.strip().lower()
@@ -344,8 +343,6 @@ def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount
     if clash:
         raise ValueError("email already in use by another account")
 
-    from apps.members.models import Guardian
-
     try:
         with transaction.atomic():
             account.email = normalized
@@ -353,5 +350,4 @@ def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount
     except IntegrityError as exc:
         raise ValueError("email already in use by another account") from exc
 
-    Guardian.objects.filter(parent_account=account).update(email=normalized)
     return account

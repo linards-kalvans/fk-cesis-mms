@@ -18,8 +18,13 @@ def _staff_client():
 
 
 def _submitted():
+    from apps.accounts.models import ParentAccount
+
+    account = ParentAccount.objects.create(email="parent@example.com")
     return RegistrationApplication.objects.create(
-        status=RegistrationApplication.Status.SUBMITTED, member_full_name="Bērns"
+        status=RegistrationApplication.Status.SUBMITTED,
+        member_full_name="Bērns",
+        parent_account=account,
     )
 
 

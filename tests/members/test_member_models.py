@@ -1,7 +1,8 @@
 """Member-domain model shape tests — RED phase.
 
 Covers:
-- Guardian model fields: full_name, personal_id, email, phone, address
+- Guardian model fields: full_name, personal_id, address (email/phone are
+  read-only proxies onto the linked ParentAccount)
 - TrainingGroup model fields: name, is_active
 - Member model fields: full_name, personal_id, birth_date, guardian, training_group
 - Member.training_group is nullable (guardian is required per spec)
@@ -158,25 +159,29 @@ class TestGuardianModel:
         field_names = {f.name for f in Guardian._meta.get_fields()}
         assert "personal_id" in field_names, "Guardian must have personal_id field."
 
-    def test_guardian_has_email_field(self):
-        field_names = {f.name for f in Guardian._meta.get_fields()}
-        assert "email" in field_names, "Guardian must have email field."
+    def test_guardian_email_reads_through_account(self):
+        """Guardian.email is a read-only proxy onto the linked ParentAccount."""
+        acct = ParentAccount.objects.create(email="jane@example.com")
+        g = Guardian.objects.create(full_name="Jane Doe", parent_account=acct)
+        assert g.email == "jane@example.com"
 
-    def test_guardian_has_phone_field(self):
-        field_names = {f.name for f in Guardian._meta.get_fields()}
-        assert "phone" in field_names, "Guardian must have phone field."
+    def test_guardian_phone_reads_through_account(self):
+        """Guardian.phone is a read-only proxy onto the linked ParentAccount."""
+        acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
+        g = Guardian.objects.create(full_name="Jane Doe", parent_account=acct)
+        assert g.phone == "+37120000000"
 
     def test_guardian_has_address_field(self):
         field_names = {f.name for f in Guardian._meta.get_fields()}
         assert "address" in field_names, "Guardian must have address field."
 
     def test_guardian_can_be_created(self):
+        acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
             full_name="Jane Doe",
             personal_id="010101-12345",
-            email="jane@example.com",
-            phone="+37120000000",
             address="Riga, Brivibas 1",
+            parent_account=acct,
         )
         assert g.pk is not None
         assert g.full_name == "Jane Doe"
@@ -249,12 +254,12 @@ class TestMemberModel:
         Spec requires linked Guardian on approval; training_group is the
         nullable field (placeholder until admin assigns group).
         """
+        acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
             full_name="Jane Doe",
             personal_id="010101-12345",
-            email="jane@example.com",
-            phone="+37120000000",
             address="Riga, Brivibas 1",
+            parent_account=acct,
         )
         # Create Member with guardian but no training_group
         m = Member.objects.create(
@@ -266,12 +271,12 @@ class TestMemberModel:
         assert m.training_group is None, "Member.training_group must default to None."
 
     def test_member_can_be_created_with_guardian(self):
+        acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
             full_name="Jane Doe",
             personal_id="010101-12345",
-            email="jane@example.com",
-            phone="+37120000000",
             address="Riga, Brivibas 1",
+            parent_account=acct,
         )
         m = Member.objects.create(
             full_name="Little Jane",
