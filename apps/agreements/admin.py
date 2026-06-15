@@ -51,6 +51,7 @@ class AgreementAdmin(admin.ModelAdmin):
         "external_provider",
         "external_id",
         "external_state",
+        "external_error_code",
         "external_url",
         "created_at",
         "updated_at",

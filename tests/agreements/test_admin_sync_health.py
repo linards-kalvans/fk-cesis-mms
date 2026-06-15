@@ -29,11 +29,13 @@ def _agreement(**kw):
 
 
 def test_failed_sync_shows_fail_badge():
+    from apps.agreements.messages import get_agreement_error_message
+
     _agreement(external_state="failed", external_error_code="provider_error", name="Fail")
     c = _staff_client()
     html = c.get(reverse("admin:agreements_agreement_changelist")).content.decode()
     assert "fk-badge--fail" in html
-    assert "title=" in html
+    assert f'title="{get_agreement_error_message("provider_error")}"' in html
 
 
 def test_sync_health_filter_isolates_failed():
@@ -44,6 +46,26 @@ def test_sync_health_filter_isolates_failed():
     body = c.get(url).content.decode().split("</thead>")[-1]
     assert "Fail" in body
     assert "Clean" not in body
+
+
+def test_sync_health_filter_ok_excludes_errored():
+    _agreement(external_state="completed", name="Clean")
+    _agreement(external_state="completed", external_error_code="provider_error", name="Tainted")
+    c = _staff_client()
+    url = reverse("admin:agreements_agreement_changelist") + "?sync_health=ok"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Clean" in body
+    assert "Tainted" not in body
+
+
+def test_sync_health_filter_none_excludes_errored():
+    _agreement(external_state="", name="Untouched")
+    _agreement(external_state="", external_error_code="provider_error", name="Errored")
+    c = _staff_client()
+    url = reverse("admin:agreements_agreement_changelist") + "?sync_health=none"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Untouched" in body
+    assert "Errored" not in body
 
 
 def test_filter_rendered_in_sidebar():
