@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.db import transaction
 
 from apps.core.audit import record_audit_event
 from apps.core.models import AuditEvent
@@ -54,3 +55,105 @@ def resolve_guardian_for_account(account) -> Guardian:
         defaults={"email": account.email},
     )
     return guardian
+
+
+def _pick_survivor(guardians, member_model):
+    """Choose the canonical guardian from a group sharing one parent account.
+
+    Prefer the guardian with a non-empty external_client_id; else the one with
+    the most members; else the lowest pk.
+    """
+    with_external = [g for g in guardians if (g.external_client_id or "").strip()]
+    if with_external:
+        return min(with_external, key=lambda g: g.pk)
+
+    def member_count(g):
+        return member_model.objects.filter(guardian=g).count()
+
+    return max(guardians, key=lambda g: (member_count(g), -g.pk))
+
+
+def consolidate_guardians(
+    guardian_model=None,
+    account_model=None,
+    member_model=None,
+    application_model=None,
+):
+    """Link orphan guardians to parent accounts, backfill, and merge duplicates.
+
+    Idempotent. The injected ``*_model`` params let the data migration pass
+    historical models via ``apps.get_model``; defaults bind the live models.
+    Only basic manager methods (filter/create/update/delete/count) and field
+    access are used so the function works on historical models too.
+    """
+    if guardian_model is None:
+        guardian_model = Guardian
+    if account_model is None:
+        from apps.accounts.models import ParentAccount
+
+        account_model = ParentAccount
+    if member_model is None:
+        member_model = Member
+    if application_model is None:
+        from apps.registrations.models import RegistrationApplication
+
+        application_model = RegistrationApplication
+
+    with transaction.atomic():
+        # Step 1 — resolve every orphan guardian to a parent account, creating
+        # the account when none exists. Because parent_account is a unique
+        # OneToOne, guardians resolving to the same account must be merged here
+        # before assignment so the constraint is never violated.
+        orphans = list(
+            guardian_model.objects.filter(parent_account__isnull=True)
+        )
+        # Group orphans by the account they resolve to.
+        by_account: dict[int, list] = {}
+        for guardian in orphans:
+            email = (guardian.email or "").strip().lower()
+            account = None
+            if email:
+                account = account_model.objects.filter(email__iexact=email).first()
+            if account is None:
+                account = account_model.objects.create(
+                    email=email or f"guardian-{guardian.pk}@placeholder.invalid",
+                    phone=guardian.phone or "",
+                )
+            by_account.setdefault(account.pk, []).append(guardian)
+
+        for account_id, group in by_account.items():
+            account = account_model.objects.get(pk=account_id)
+            # An existing (non-orphan) guardian may already own this account.
+            existing = guardian_model.objects.filter(
+                parent_account_id=account_id
+            ).first()
+            if existing is not None:
+                group = group + [existing]
+            survivor = _pick_survivor(group, member_model)
+            for loser in group:
+                if loser.pk == survivor.pk:
+                    continue
+                _merge_into(loser, survivor, member_model, application_model)
+            survivor.parent_account = account
+            survivor.save()
+
+        # Step 2 — backfill account phone from the guardian when empty.
+        for guardian in guardian_model.objects.filter(parent_account__isnull=False):
+            account = guardian.parent_account
+            if not (account.phone or "").strip() and (guardian.phone or "").strip():
+                account.phone = guardian.phone
+                account.save()
+
+
+def _merge_into(loser, survivor, member_model, application_model):
+    """Reassign a loser guardian's members/applications to the survivor, copy
+    its external_client_id if the survivor lacks one, then delete the loser.
+    """
+    member_model.objects.filter(guardian=loser).update(guardian=survivor)
+    application_model.objects.filter(guardian=loser).update(guardian=survivor)
+    if not (survivor.external_client_id or "").strip() and (
+        loser.external_client_id or ""
+    ).strip():
+        survivor.external_client_id = loser.external_client_id
+        survivor.save()
+    loser.delete()
