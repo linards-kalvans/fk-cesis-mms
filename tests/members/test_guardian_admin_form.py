@@ -36,10 +36,11 @@ def test_change_page_shows_account_fields():
 def test_save_writes_phone_and_is_active_to_account():
     g = _guardian()
     c = _staff_client()
-    c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
+    resp = c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
         "full_name": "Vecāks", "personal_id": "", "address": "",
         "email": "old@example.com", "phone": "+37100099", "is_active": "",
     })
+    assert resp.status_code == 302  # saved + redirected (no form errors)
     g.refresh_from_db()
     assert g.parent_account.phone == "+37100099"
     assert g.parent_account.is_active is False

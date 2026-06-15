@@ -83,7 +83,7 @@ class GuardianAdmin(admin.ModelAdmin):
             account.is_active = new_active
             account.save(update_fields=["phone", "is_active", "updated_at"])
         new_email = form.cleaned_data.get("email", "")
-        if new_email and new_email != account.email:
+        if new_email and new_email != account.email.lower():
             change_parent_email(account, new_email)
 
 
