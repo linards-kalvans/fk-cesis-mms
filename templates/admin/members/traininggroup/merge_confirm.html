@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>Izvēlieties mērķa grupu. Pārējo atlasīto grupu biedri tiks pārvietoti uz mērķa grupu, un pārējās grupas tiks dzēstas.</p>
+<form method="post">
+  {% csrf_token %}
+  {% for g in groups %}
+    <input type="hidden" name="_selected_action" value="{{ g.pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="merge_training_groups">
+  <input type="hidden" name="apply" value="1">
+  <ul style="list-style:none">
+    {% for g in groups %}
+      <li>
+        <label>
+          <input type="radio" name="target" value="{{ g.pk }}" {% if forloop.first %}checked{% endif %}>
+          {{ g.name }} ({{ g.members.count }} biedri)
+        </label>
+      </li>
+    {% endfor %}
+  </ul>
+  <button type="submit" class="button default">Apvienot</button>
+  <a href="{% url 'admin:members_traininggroup_changelist' %}" class="button">Atcelt</a>
+</form>
+{% endblock %}

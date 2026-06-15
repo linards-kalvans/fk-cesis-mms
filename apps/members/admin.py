@@ -1,6 +1,9 @@
 """Django admin for members app."""
 
 from django.contrib import admin, messages
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -39,6 +42,45 @@ class TrainingGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "is_active")
     list_filter = ("is_active",)
     search_fields = ("name",)
+    actions = ["merge_training_groups"]
+
+    @admin.action(description="Apvienot atlasītās grupas")
+    def merge_training_groups(self, request, queryset):
+        groups = list(queryset.order_by("name"))
+        if len(groups) < 2:
+            self.message_user(
+                request,
+                "Apvienošanai atlasiet vismaz divas grupas.",
+                level=messages.WARNING,
+            )
+            return None
+        if request.POST.get("apply") == "1":
+            target = get_object_or_404(TrainingGroup, pk=request.POST.get("target"))
+            others = [g for g in groups if g.pk != target.pk]
+            with transaction.atomic():
+                reparented = Member.objects.filter(
+                    training_group__in=others
+                ).update(training_group=target)
+                other_count = len(others)
+                for g in others:
+                    g.delete()
+            self.message_user(
+                request,
+                f"Apvienotas {other_count} grupas grupā “{target.name}”; "
+                f"pārvietoti {reparented} biedri.",
+            )
+            return None
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Apvienot treniņu grupas",
+            "groups": groups,
+            "action_name": "merge_training_groups",
+            "selected": [str(g.pk) for g in groups],
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(
+            request, "admin/members/traininggroup/merge_confirm.html", context
+        )
 
 
 @admin.register(Member)
