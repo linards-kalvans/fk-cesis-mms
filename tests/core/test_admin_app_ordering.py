@@ -40,3 +40,18 @@ def test_parent_account_hidden_from_menu_but_registered():
     assert ("accounts", "ParentAccount") not in labels_models  # absent from menu
     # still registered → change/changelist URLs resolve
     assert reverse("admin:accounts_parentaccount_changelist")
+
+
+def test_menu_follows_the_fixed_order():
+    req = RequestFactory().get("/admin/")
+    req.user = User.objects.create_superuser("staff_ord", "sord@example.com", "pw")
+    labels = [app["app_label"] for app in admin.site.get_app_list(req)]
+    expected = [
+        "registrations", "agreements", "billing", "members",
+        "auth", "documents", "core", "django_q",
+    ]
+    # Every expected app present, in exactly this relative order (filtered to
+    # whatever is registered, so the assertion is robust to optional apps).
+    present_expected = [label for label in expected if label in labels]
+    assert [label for label in labels if label in expected] == present_expected
+    assert labels[0] == "registrations"

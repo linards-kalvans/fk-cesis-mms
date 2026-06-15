@@ -1,6 +1,18 @@
-"""Custom admin site — reorders the app list so the most-used app is first."""
+"""Custom admin site — fixed left-menu ordering for the staff workflow."""
 
 from django.contrib import admin
+
+# Explicit left-menu order; apps not listed sort last in Django's default order.
+_APP_ORDER = (
+    "registrations",
+    "agreements",
+    "billing",
+    "members",
+    "auth",  # Authentication and Authorization
+    "documents",
+    "core",
+    "django_q",
+)
 
 
 class FkAdminSite(admin.AdminSite):
@@ -14,6 +26,7 @@ class FkAdminSite(admin.AdminSite):
                     m for m in app["models"] if m["object_name"] != "ParentAccount"
                 ]
         app_list = [app for app in app_list if app["models"]]
-        # registrations first; the rest keep Django's default order.
-        app_list.sort(key=lambda app: app["app_label"] != "registrations")
+        index = {label: i for i, label in enumerate(_APP_ORDER)}
+        # Stable sort: listed apps in the fixed order, the rest keep their order.
+        app_list.sort(key=lambda app: index.get(app["app_label"], len(_APP_ORDER)))
         return app_list
