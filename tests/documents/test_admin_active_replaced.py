@@ -31,9 +31,10 @@ def test_active_doc_shows_active_badge():
     )
     _doc(app)
     c = _staff_client()
-    html = c.get(reverse("admin:documents_document_changelist")).content.decode()
-    assert "fk-badge--ok" in html
-    assert "Aktīvs" in html
+    # tbody only — "Aktīvs" also appears as a filter-sidebar label.
+    body = c.get(reverse("admin:documents_document_changelist")).content.decode().split("</thead>")[-1]
+    assert "fk-badge--ok" in body
+    assert "Aktīvs" in body
 
 
 def test_replaced_doc_shows_muted_badge():
@@ -42,9 +43,10 @@ def test_replaced_doc_shows_muted_badge():
     )
     _doc(app, deleted_at=timezone.now())
     c = _staff_client()
-    html = c.get(reverse("admin:documents_document_changelist")).content.decode()
-    assert "fk-badge--muted" in html
-    assert "Vēsturisks" in html
+    # tbody only — "Vēsturisks" also appears as a filter-sidebar label.
+    body = c.get(reverse("admin:documents_document_changelist")).content.decode().split("</thead>")[-1]
+    assert "fk-badge--muted" in body
+    assert "Vēsturisks" in body
 
 
 def test_state_filter_isolates_replaced():
