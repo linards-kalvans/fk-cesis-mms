@@ -47,13 +47,16 @@ def test_synced_record_shows_ok_badge(active_plan, guardian):
 
 
 def test_sync_health_filter_isolates_failed(active_plan, guardian):
-    _record(active_plan, guardian, external_status="error", external_error_code="provider_unavailable", name="Fail")
-    _record(active_plan, guardian, external_status="synced", name="OK")
+    # Distinctive member names that cannot collide with admin chrome or the
+    # SyncHealthFilter sidebar labels (e.g. the literal "OK" choice label).
+    _record(active_plan, guardian, external_status="error",
+            external_error_code="provider_unavailable", name="FailRowSentinel")
+    _record(active_plan, guardian, external_status="synced", name="SyncedRowSentinel")
     c = _staff_client()
     url = reverse("admin:billing_billingrecord_changelist") + "?sync_health=failed"
     body = c.get(url).content.decode().split("</thead>")[-1]
-    assert "Fail" in body
-    assert "OK" not in body
+    assert "FailRowSentinel" in body
+    assert "SyncedRowSentinel" not in body
 
 
 def test_sync_health_filter_rendered_in_sidebar(active_plan, guardian):
