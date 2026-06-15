@@ -1,6 +1,7 @@
 """Reusable admin cross-link helpers."""
 
 import pytest
+from django.urls import NoReverseMatch
 
 from apps.core.admin_links import admin_link, admin_links
 from apps.members.models import Guardian, Member
@@ -11,9 +12,23 @@ pytestmark = pytest.mark.django_db
 def test_admin_link_renders_anchor_to_change_page():
     g = Guardian.objects.create(full_name="Vecāks V")
     html = str(admin_link(g))
-    assert f"/members/guardian/{g.pk}/change/" in html
+    assert f'href="/admin/members/guardian/{g.pk}/change/"' in html
     assert "Vecāks V" in html
     assert html.startswith("<a ")
+
+
+def test_admin_link_escapes_fallback_label_when_unregistered(monkeypatch):
+    # Force the NoReverseMatch path and pass an unsafe label.
+    from apps.core import admin_links as mod
+
+    def _boom(*a, **k):
+        raise NoReverseMatch
+
+    monkeypatch.setattr(mod, "reverse", _boom)
+    g = Guardian.objects.create(full_name="V")
+    out = str(admin_link(g, label="<b>x</b>"))
+    assert "<b>" not in out
+    assert "&lt;b&gt;" in out
 
 
 def test_admin_link_custom_label():

@@ -6,7 +6,7 @@ to plain text when the target model is not registered in the admin.
 """
 
 from django.urls import NoReverseMatch, reverse
-from django.utils.html import format_html
+from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 
 
@@ -21,7 +21,8 @@ def admin_link(obj, label=None):
             args=[obj.pk],
         )
     except NoReverseMatch:
-        return text
+        # Plain-text fallback, escaped so the result is safe to join in admin_links.
+        return conditional_escape(text)
     return format_html('<a href="{}">{}</a>', url, text)  # type: ignore[return-value,no-any-return]
 
 
