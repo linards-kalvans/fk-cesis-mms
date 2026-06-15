@@ -233,7 +233,9 @@ def enqueue_archive_agreement_submission(external_id: str) -> None:
 
 def create_agreement_submission(agreement_id: int) -> None:
     try:
-        agreement = Agreement.objects.select_related("member__guardian").get(
+        agreement = Agreement.objects.select_related(
+            "member__guardian__parent_account"
+        ).get(
             pk=agreement_id
         )
     except Agreement.DoesNotExist:
@@ -360,7 +362,11 @@ def _ensure_client_id(guardian_id: int) -> str:
     from apps.members.models import Guardian
 
     with transaction.atomic():
-        guardian = Guardian.objects.select_for_update().get(pk=guardian_id)
+        guardian = (
+            Guardian.objects.select_related("parent_account")
+            .select_for_update()
+            .get(pk=guardian_id)
+        )
         if guardian.external_client_id:
             return str(guardian.external_client_id)
         external_id = invoice_platform.ensure_client(guardian).external_id
@@ -537,7 +543,7 @@ def send_due_invoices() -> None:
     invoices = (
         BillingInvoice.objects.filter(external_status="created")
         .exclude(external_invoice_id="")
-        .select_related("billing_record__member__guardian")
+        .select_related("billing_record__member__guardian__parent_account")
     )
     for billing_invoice in invoices:
         if not is_invoice_due_to_send(billing_invoice, today):
