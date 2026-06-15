@@ -378,6 +378,14 @@ git commit -m "feat(members): consolidate_guardians service + data migration (li
 
 ---
 
+> **CORRECTION (during execution):** Tasks 3 and 4 below were **merged into one atomic task**.
+> Moving the writers off the `Guardian.email`/`phone` columns (Task 3) while readers still read those
+> columns (`guardian_contact_phone` gates submission; `mark_agreement_sent` reads `guardian.email`)
+> breaks ~144 tests. The proxies (Task 4) must land **with** the writer collapse so readers
+> transparently read the account. The combined task = model proxies + `parent_account` NOT NULL +
+> schema migration `0007` + the writer changes below + cleanup of the temporary test-fixture
+> Guardian-column mirror writes. No extra reader files need editing (the proxies cover them).
+
 ### Task 3: Single-writer collapse (drop email mirror, phone → account, approval fix)
 
 **Files:**
