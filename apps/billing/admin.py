@@ -8,8 +8,10 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.billing.messages import get_invoice_error_message
 from apps.billing.models import BillingInvoice, BillingRecord, MembershipPlan
 from apps.billing.services import recompute_billing_record
+from apps.core.admin_badges import status_badge
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.models import AuditEvent
@@ -22,6 +24,7 @@ class MembershipPlanAdmin(admin.ModelAdmin):
         "installment_count", "first_installment_month", "payment_due_day", "is_active",
     )
     list_filter = ("season", "is_active")
+    search_fields = ("name", "season")
 
 
 class BillingInvoiceInline(admin.TabularInline):
@@ -38,19 +41,49 @@ class BillingInvoiceInline(admin.TabularInline):
         return False
 
 
+class SyncHealthFilter(admin.SimpleListFilter):
+    title = "Sinhronizācijas stāvoklis"
+    parameter_name = "sync_health"
+
+    def lookups(self, request, model_admin):
+        return [
+            ("ok", "OK"),
+            ("failed", "Neizdevās"),
+            ("pending", "Procesā"),
+            ("none", "Nav sinhronizēts"),
+        ]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "ok":
+            return queryset.filter(external_status="synced").exclude(external_error_code__gt="")
+        if value == "failed":
+            return queryset.exclude(external_error_code="")
+        if value == "pending":
+            return queryset.exclude(external_status="").exclude(external_status="synced").filter(external_error_code="")
+        if value == "none":
+            return queryset.filter(external_status="")
+        return queryset
+
+
 @admin.register(BillingRecord)
 class BillingRecordAdmin(admin.ModelAdmin):
     list_display = (
         "member", "guardian_link", "agreement_link", "season", "final_amount",
         "is_full_price", "payment_mode", "status", "confirm_action",
-        "external_status", "payment_status", "payment_synced_at",
+        "external_status_badge", "payment_status_badge", "payment_synced_at",
     )
     change_form_template = "admin/billing/billingrecord/change_form.html"
     list_filter = (
         "season", "status", "payment_mode", "is_full_price",
-        "external_status", "payment_status",
+        SyncHealthFilter, "payment_status", "plan",
     )
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
     search_fields = ("member__full_name", "member__guardian__full_name")
+
+    class Media:
+        css = {"all": ["admin/fk_badges.css"]}
     readonly_fields = (
         "related_records",
         "member", "plan", "agreement", "season", "base_amount", "is_full_price",
@@ -145,6 +178,28 @@ class BillingRecordAdmin(admin.ModelAdmin):
             "</form>",
             confirm_url, get_token(self._request), changelist_url,
         )
+
+    @admin.display(description="IN statuss")
+    def external_status_badge(self, obj):
+        if obj.external_error_code:
+            return status_badge("Neizdevās", "fail", tooltip=get_invoice_error_message(obj.external_error_code))
+        if obj.external_status == "synced":
+            return status_badge("Sinhronizēts", "ok")
+        if obj.external_status:
+            return status_badge(obj.external_status, "pending")
+        return status_badge("—", "muted")
+
+    @admin.display(description="Maksājums")
+    def payment_status_badge(self, obj):
+        if obj.payment_error_code:
+            return status_badge("Kļūda", "fail", tooltip=get_invoice_error_message(obj.payment_error_code))
+        if obj.payment_status == "paid":
+            return status_badge(obj.get_payment_status_display(), "ok")
+        if obj.payment_status == "partial":
+            return status_badge(obj.get_payment_status_display(), "pending")
+        if obj.payment_status:
+            return status_badge(obj.get_payment_status_display(), "muted")
+        return status_badge("—", "muted")
 
     @admin.action(description="Pārrēķināt no plāna")
     def recompute_from_plan(self, request, queryset):
