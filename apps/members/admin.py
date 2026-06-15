@@ -1,5 +1,6 @@
 """Django admin for members app."""
 
+from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -7,6 +8,8 @@ from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.accounts.models import ParentAccount
+from apps.accounts.services import change_parent_email
 from apps.agreements.services import get_current_agreement
 from apps.core.admin_links import admin_link, admin_links
 from apps.core.audit import record_audit_event
@@ -16,11 +19,45 @@ from apps.members.exports import member_columns, member_row
 from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
 
 
+class GuardianAdminForm(forms.ModelForm):
+    email = forms.EmailField(label="E-pasts (pieslēgšanās)", required=True)
+    phone = forms.CharField(label="Tālrunis", max_length=20, required=False)
+    is_active = forms.BooleanField(label="Konts aktīvs", required=False)
+
+    class Meta:
+        model = Guardian
+        fields = ("full_name", "personal_id", "address")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        account = getattr(self.instance, "parent_account", None)
+        if account is not None:
+            self.fields["email"].initial = account.email
+            self.fields["phone"].initial = account.phone
+            self.fields["is_active"].initial = account.is_active
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        account = getattr(self.instance, "parent_account", None)
+        clash = ParentAccount.objects.filter(email__iexact=email)
+        if account is not None:
+            clash = clash.exclude(pk=account.pk)
+        if clash.exists():
+            raise forms.ValidationError("E-pasts jau pieder citam kontam.")
+        return email
+
+
 @admin.register(Guardian)
 class GuardianAdmin(admin.ModelAdmin):
+    form = GuardianAdminForm
     list_display = ("full_name", "email", "phone")
     search_fields = ("full_name", "parent_account__email", "personal_id")
     readonly_fields = ("related_records",)
+    fields = ("related_records", "full_name", "personal_id", "address",
+              "email", "phone", "is_active")
+
+    def has_add_permission(self, request):
+        return False
 
     @admin.display(description="Saistītie ieraksti")
     def related_records(self, obj):
@@ -35,6 +72,19 @@ class GuardianAdmin(admin.ModelAdmin):
             admin_links(applications),
             admin_links(billing_records),
         )  # type: ignore[return-value,no-any-return]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        account = obj.parent_account
+        new_phone = form.cleaned_data.get("phone", "")
+        new_active = form.cleaned_data.get("is_active", False)
+        if account.phone != new_phone or account.is_active != new_active:
+            account.phone = new_phone
+            account.is_active = new_active
+            account.save(update_fields=["phone", "is_active", "updated_at"])
+        new_email = form.cleaned_data.get("email", "")
+        if new_email and new_email != account.email:
+            change_parent_email(account, new_email)
 
 
 @admin.register(TrainingGroup)

@@ -48,6 +48,10 @@ class Guardian(models.Model):
     def __str__(self):
         return self.full_name or str(self.pk)
 
+    class Meta:
+        verbose_name = "Vecāks"
+        verbose_name_plural = "Vecāki"
+
 
 class TrainingGroup(models.Model):
     """A training group (e.g. U10 A)."""
