@@ -135,14 +135,16 @@ def consolidate_guardians(
                     continue
                 _merge_into(loser, survivor, member_model, application_model)
             survivor.parent_account = account
-            survivor.save()
+            survivor.save(update_fields=["parent_account"])
 
         # Step 2 — backfill account phone from the guardian when empty.
-        for guardian in guardian_model.objects.filter(parent_account__isnull=False):
+        for guardian in guardian_model.objects.filter(
+            parent_account__isnull=False
+        ).select_related("parent_account"):
             account = guardian.parent_account
             if not (account.phone or "").strip() and (guardian.phone or "").strip():
                 account.phone = guardian.phone
-                account.save()
+                account.save(update_fields=["phone", "updated_at"])
 
 
 def _merge_into(loser, survivor, member_model, application_model):
@@ -155,5 +157,5 @@ def _merge_into(loser, survivor, member_model, application_model):
         loser.external_client_id or ""
     ).strip():
         survivor.external_client_id = loser.external_client_id
-        survivor.save()
+        survivor.save(update_fields=["external_client_id"])
     loser.delete()

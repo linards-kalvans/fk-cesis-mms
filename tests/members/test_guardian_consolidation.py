@@ -5,8 +5,25 @@ import pytest
 from apps.accounts.models import ParentAccount
 from apps.members.models import Guardian, Member
 from apps.members.services import consolidate_guardians
+from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
+
+
+def test_merge_repoints_applications_before_deleting_loser():
+    # RegistrationApplication.guardian is on_delete=PROTECT — the loser's
+    # applications must be repointed to the survivor before deletion, else
+    # consolidate would raise ProtectedError.
+    acc = ParentAccount.objects.create(email="ap@example.com")
+    keep = Guardian.objects.create(full_name="K", email="ap@example.com", external_client_id="IN-1")
+    drop = Guardian.objects.create(full_name="K dup", email="ap@example.com")
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.SUBMITTED, member_full_name="Bērns", guardian=drop
+    )
+    consolidate_guardians()
+    app.refresh_from_db()
+    assert app.guardian_id == keep.pk
+    assert not Guardian.objects.filter(pk=drop.pk).exists()
 
 
 def test_orphan_guardian_linked_to_existing_account_by_email():
