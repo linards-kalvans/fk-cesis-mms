@@ -18,6 +18,7 @@ from apps.agreements.services import (
     sync_application_signing_path_to_agreement,
     void_agreement,
 )
+from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
 from apps.core.models import AuditEvent
@@ -43,6 +44,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "guardian_contact_email",
         "status",
         "submitted_at",
+        "member_link",
         "agreement_status",
         "quick_actions",
     )
@@ -364,6 +366,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             actions.pop("export_csv_with_sensitive", None)
         return actions
+
+    @admin.display(description="Biedrs")
+    def member_link(self, obj):
+        return admin_link(obj.approved_member)
 
     @admin.display(description="Līguma statuss")
     def agreement_status(self, obj):

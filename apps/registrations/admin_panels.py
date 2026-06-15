@@ -6,6 +6,7 @@ which assembles the full panels + agreement + training-group context.
 """
 
 from apps.agreements.messages import get_agreement_error_message
+from apps.core.admin_links import admin_link, admin_links
 from apps.agreements.services import get_current_agreement
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
@@ -128,7 +129,18 @@ def build_review_context(
             agreement.external_error_code
         )
 
+    member = application.approved_member if application.approved_member_id else None
+    billing_records = list(member.billing_records.all()) if member is not None else []
+    related_links = {
+        "Biedrs": admin_link(member),
+        "Vecāks": admin_link(application.guardian),
+        "Vecāka konts": admin_link(application.parent_account),
+        "Līgums": admin_link(agreement),
+        "Rēķini": admin_links(billing_records),
+    }
+
     return {
+        "related_links": related_links,
         "guardian_panel": guardian_panel,
         "member_panel": member_panel,
         "portrait_panel": portrait_panel,

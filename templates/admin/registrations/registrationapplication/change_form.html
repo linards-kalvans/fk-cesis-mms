@@ -37,6 +37,15 @@
         </div>
         {% endif %}
 
+        <div class="module mms-related-records">
+          <h2>Saistītie ieraksti</h2>
+          <ul>
+            {% for label, link in related_links.items %}
+              <li><strong>{{ label }}:</strong> {{ link }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+
         {% if original.approved_member_id %}
         <div class="module mms-review-group-module">
           <h2>Treniņu grupa</h2>
