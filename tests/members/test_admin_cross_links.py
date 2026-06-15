@@ -27,7 +27,7 @@ def test_member_change_page_links_to_guardian_application_agreement():
         status=RegistrationApplication.Status.APPROVED, member_full_name="Bērns",
         approved_member=m, guardian=g,
     )
-    Agreement.objects.create(
+    agreement = Agreement.objects.create(
         member=m, is_current=True, state=Agreement.State.SENT, generated_at=timezone.now()
     )
     c = _staff_client()
@@ -35,7 +35,7 @@ def test_member_change_page_links_to_guardian_application_agreement():
     assert "Saistītie ieraksti" in html
     assert f"/members/guardian/{g.pk}/change/" in html
     assert f"/registrations/registrationapplication/{app.pk}/change/" in html
-    assert "/agreements/agreement/" in html
+    assert f"/agreements/agreement/{agreement.pk}/change/" in html
 
 
 def test_guardian_change_page_links_to_members_and_applications():

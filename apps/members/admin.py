@@ -21,7 +21,7 @@ class GuardianAdmin(admin.ModelAdmin):
 
     @admin.display(description="Saistītie ieraksti")
     def related_records(self, obj):
-        members = list(obj.members.all()) if obj.pk else []
+        members = list(obj.members.prefetch_related("billing_records")) if obj.pk else []
         applications = list(obj.applications.all()) if obj.pk else []
         billing_records = [br for m in members for br in m.billing_records.all()]
         return format_html(
