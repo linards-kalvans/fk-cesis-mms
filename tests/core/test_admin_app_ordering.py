@@ -26,3 +26,17 @@ def test_all_apps_still_present():
     labels = {app["app_label"] for app in admin.site.get_app_list(req)}
     # core (AuditEvent), billing, members, agreements all still registered.
     assert {"registrations", "billing", "members", "agreements", "core"} <= labels
+
+
+def test_parent_account_hidden_from_menu_but_registered():
+    from django.urls import reverse
+    req = RequestFactory().get("/admin/")
+    req.user = User.objects.create_superuser("staff_pa", "spa@example.com", "pw")
+    labels_models = {
+        (app["app_label"], m["object_name"])
+        for app in admin.site.get_app_list(req)
+        for m in app["models"]
+    }
+    assert ("accounts", "ParentAccount") not in labels_models  # absent from menu
+    # still registered → change/changelist URLs resolve
+    assert reverse("admin:accounts_parentaccount_changelist")

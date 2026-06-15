@@ -143,7 +143,6 @@ def build_review_context(
     related_links = {
         "Biedrs": admin_link(member),
         "Vecāks": admin_link(guardian),
-        "Vecāka konts": admin_link(application.parent_account),
         "Līgums": admin_link(agreement),
         "Rēķini": admin_links(billing_records),
     }
