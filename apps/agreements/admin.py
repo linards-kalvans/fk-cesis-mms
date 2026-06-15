@@ -35,7 +35,7 @@ class AgreementAdmin(admin.ModelAdmin):
     def related_records(self, obj):
         member = obj.member
         source_application = getattr(member, "source_application", None)
-        billing_records = list(obj.billing_records.all()) if obj.pk else []
+        billing_records = list(obj.billing_records.order_by("-created_at")) if obj.pk else []
         return format_html(
             "<strong>Biedrs:</strong> {}<br>"
             "<strong>Pieteikums:</strong> {}<br>"
