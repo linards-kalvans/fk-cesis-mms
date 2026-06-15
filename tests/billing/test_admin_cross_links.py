@@ -66,3 +66,11 @@ def test_change_page_shows_related_records_row(active_plan, guardian):
     assert f"/members/member/{m.pk}/change/" in html
     assert f"/members/guardian/{guardian.pk}/change/" in html
     assert f"/agreements/agreement/{agreement.pk}/change/" in html  # agreement branch
+
+
+def test_billing_record_admin_disallows_add():
+    # Records are created by the billing service; the admin add form is disabled
+    # (it would otherwise crash on obj.member in related_records).
+    c = _staff_client()
+    resp = c.get(reverse("admin:billing_billingrecord_add"))
+    assert resp.status_code == 403

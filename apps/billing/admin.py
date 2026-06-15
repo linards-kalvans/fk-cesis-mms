@@ -65,6 +65,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
     inlines = (BillingInvoiceInline,)
     actions = ("recompute_from_plan", "push_to_invoice_ninja", "sync_payments")
 
+    def has_add_permission(self, request):
+        # Billing records are created by the billing service, never hand-added in
+        # admin (all fields are readonly; the add form would crash on obj.member).
+        return False
+
     def get_queryset(self, request):
         self._request = request  # confirm_action needs it for a per-row CSRF token
         # select_related: the guardian_link/agreement_link columns touch these per row.

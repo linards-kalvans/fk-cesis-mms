@@ -52,7 +52,7 @@ class MemberAdmin(admin.ModelAdmin):
     def related_records(self, obj):
         source_application = getattr(obj, "source_application", None)
         agreement = get_current_agreement(obj) if obj.pk else None
-        billing_records = list(obj.billing_records.all()) if obj.pk else []
+        billing_records = list(obj.billing_records.order_by("-created_at")) if obj.pk else []
         return format_html(
             "<strong>Vecāks:</strong> {}<br>"
             "<strong>Pieteikums:</strong> {}<br>"
