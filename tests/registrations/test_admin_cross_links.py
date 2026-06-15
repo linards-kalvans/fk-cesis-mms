@@ -1,5 +1,7 @@
 """Cross-links on the registrations admin (changelist column + change page block)."""
 
+import re
+
 import pytest
 from django.contrib.auth.models import User
 from django.test import Client
@@ -37,6 +39,11 @@ def test_changelist_member_column_dash_when_unapproved():
     c = _staff_client()
     resp = c.get(reverse("admin:registrations_registrationapplication_changelist"))
     assert resp.status_code == 200
+    html = resp.content.decode()
+    assert "Biedrs" in html  # column header present
+    # no member *change* link for an unapproved app (the nav sidebar's
+    # /admin/members/member/ changelist link has no pk, so match the change URL).
+    assert not re.search(r"/members/member/\d+/change/", html)
 
 
 def test_change_page_shows_related_records_block():

@@ -130,7 +130,9 @@ def build_review_context(
         )
 
     member = application.approved_member if application.approved_member_id else None
-    billing_records = list(member.billing_records.all()) if member is not None else []
+    billing_records = (
+        list(member.billing_records.order_by("-created_at")) if member is not None else []
+    )
     related_links = {
         "Biedrs": admin_link(member),
         "Vecāks": admin_link(application.guardian),
