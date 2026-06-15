@@ -13,7 +13,7 @@ pytestmark = pytest.mark.django_db
 
 def test_guardian_links_one_to_one_to_parent_account():
     account = ParentAccount.objects.create(email="link@example.com")
-    guardian = Guardian.objects.create(parent_account=account, email=account.email)
+    guardian = Guardian.objects.create(parent_account=account)
     # Reverse accessor is singular (OneToOne).
     assert account.guardian == guardian
 

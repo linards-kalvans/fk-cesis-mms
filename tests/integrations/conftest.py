@@ -24,22 +24,29 @@ def active_plan(db):
 
 @pytest.fixture
 def guardian(db):
-    from apps.members.models import Guardian
+    from tests.support import make_guardian
 
-    return Guardian.objects.create(full_name="Anna Bērziņa", email="anna@example.com")
+    g = make_guardian(full_name="Anna Bērziņa", email="anna@example.com")
+    g.email = "anna@example.com"
+    g.save(update_fields=["email"])
+    return g
 
 
 @pytest.fixture
 def agreement_guardian(db):
-    from apps.members.models import Guardian
+    from tests.support import make_guardian
 
-    return Guardian.objects.create(
+    g = make_guardian(
         full_name="Anna Bērziņa",
         personal_id="111111-11111",
         email="anna@example.test",
         phone="+37120000000",
         address="Rīgas iela 1, Cēsis",
     )
+    g.email = "anna@example.test"
+    g.phone = "+37120000000"
+    g.save(update_fields=["email", "phone"])
+    return g
 
 
 @pytest.fixture

@@ -46,9 +46,11 @@ def test_get_absolute_url_points_to_admin_change_page(submitted_application, rev
 def test_get_absolute_url_empty_when_member_has_no_source_application(db):
     """Defensive: an Agreement attached to a Member without a source_application
     returns an empty string so the admin VIEW ON SITE button gracefully no-ops."""
-    from apps.members.models import Guardian, Member
+    from apps.members.models import Member
 
-    guardian = Guardian.objects.create(full_name="Detached Guardian")
+    from tests.support import make_guardian
+
+    guardian = make_guardian(full_name="Detached Guardian")
     orphan_member = Member.objects.create(
         full_name="Detached Member", guardian=guardian
     )

@@ -19,7 +19,6 @@ def test_accessors_prefer_guardian_when_profile_populated():
         personal_id="010101-22222",
         phone="+37120000000",
         address="Guardian Address 1",
-        email="acct@example.com",
     )
     app = RegistrationApplication.objects.create(
         parent_account=account,

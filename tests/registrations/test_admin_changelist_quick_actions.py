@@ -7,7 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.agreements.models import Agreement
-from apps.members.models import Guardian, Member
+from apps.members.models import Member
+
+from tests.support import make_guardian
 from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
@@ -21,7 +23,7 @@ def _staff_client():
 
 
 def test_changelist_renders_open_link_and_agreement_quick_action():
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name="B", guardian=g)
     app = RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="B", approved_member=m
@@ -41,7 +43,7 @@ def test_changelist_renders_open_link_and_agreement_quick_action():
 
 
 def test_changelist_quick_action_post_executes_transition():
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name="B", guardian=g)
     app = RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="B", approved_member=m

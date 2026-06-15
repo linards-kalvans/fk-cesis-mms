@@ -7,7 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.agreements.models import Agreement
-from apps.members.models import Guardian, Member
+from apps.members.models import Member
+
+from tests.support import make_guardian
 
 pytestmark = pytest.mark.django_db
 
@@ -20,7 +22,7 @@ def _staff_client():
 
 
 def _agreement(**kw):
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name=kw.pop("name", "Bērns"), guardian=g)
     return Agreement.objects.create(
         member=m, is_current=True, state=Agreement.State.SENT,

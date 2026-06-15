@@ -55,9 +55,10 @@ def test_opt_out_forces_full_price_on_second_child(active_plan, guardian):
 
 def test_other_guardian_members_excluded(active_plan, guardian):
     from apps.billing.services import compute_billing_amounts
-    from apps.members.models import Guardian
 
-    other = Guardian.objects.create(full_name="Cits Vecāks", email="c@example.com")
+    from tests.support import make_guardian
+
+    other = make_guardian(full_name="Cits Vecāks", email="c@example.com")
     _make_member(other, "Sveši bērns")  # earlier pk, different guardian
     only_child = _make_member(guardian, "Vienīgais")
     a = compute_billing_amounts(only_child, active_plan)

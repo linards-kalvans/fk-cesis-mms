@@ -5,7 +5,9 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-from apps.members.models import Guardian, Member, TrainingGroup
+from apps.members.models import Member, TrainingGroup
+
+from tests.support import make_guardian
 
 pytestmark = pytest.mark.django_db
 
@@ -32,7 +34,7 @@ def test_merge_confirmation_page_lists_selected_groups():
 
 
 def test_merge_reparents_members_and_deletes_others():
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     target = TrainingGroup.objects.create(name="U10 A")
     dup = TrainingGroup.objects.create(name="U10 A dublikāts")
     m1 = Member.objects.create(full_name="A", guardian=g, training_group=target)

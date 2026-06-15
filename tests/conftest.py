@@ -129,16 +129,20 @@ def make_guardian(db):
     Use in tests that previously set guardian_* columns on RegistrationApplication
     and assert guardian values through the read accessors.
     """
-    from apps.members.models import Guardian
+    from tests.support import make_guardian as _support_make_guardian
 
     def _make(account, *, full_name="", personal_id="", phone="", address=""):
-        return Guardian.objects.create(
-            parent_account=account,
-            email=account.email,
+        g = _support_make_guardian(
+            account=account,
             full_name=full_name,
             personal_id=personal_id,
             phone=phone,
             address=address,
         )
+        # Mirror the account email onto the Guardian column so column-reading
+        # accessors keep working today (becomes an account proxy post-change).
+        g.email = account.email
+        g.save(update_fields=["email"])
+        return g
 
     return _make

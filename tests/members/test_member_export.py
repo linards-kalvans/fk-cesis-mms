@@ -12,13 +12,21 @@ from django.test import RequestFactory
 from apps.core.models import AuditEvent
 from apps.members.admin import MemberAdmin
 from apps.members.exports import member_columns, member_row
-from apps.members.models import Guardian, Member, TrainingGroup
+from apps.members.models import Member, TrainingGroup
+
+from tests.support import make_guardian
 
 pytestmark = pytest.mark.django_db
 
 
 def _member():
-    g = Guardian.objects.create(full_name="Anna Ozola", email="a@example.com", phone="+37120000000", address="Rīga", personal_id="010180-12345")
+    # email/phone live on the linked account; mirror them onto the Guardian
+    # columns too so today's column-reading export keeps working (post-proxy
+    # the column read becomes an account proxy and stays correct).
+    g = make_guardian(full_name="Anna Ozola", email="a@example.com", phone="+37120000000", address="Rīga", personal_id="010180-12345")
+    g.email = "a@example.com"
+    g.phone = "+37120000000"
+    g.save(update_fields=["email", "phone"])
     grp = TrainingGroup.objects.create(name="U-12", is_active=True)
     return Member.objects.create(full_name="Jānis Ozols", personal_id="010110-22222", guardian=g, training_group=grp)
 

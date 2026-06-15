@@ -5,6 +5,8 @@ import pytest
 from apps.registrations.admin_panels import build_review_context, doc_preview_kind
 from apps.registrations.models import RegistrationApplication
 
+from tests.support import make_guardian
+
 pytestmark = pytest.mark.django_db
 
 
@@ -37,9 +39,9 @@ def test_build_review_context_approved_member_branches():
     from django.utils import timezone
 
     from apps.agreements.models import Agreement
-    from apps.members.models import Guardian, Member, TrainingGroup
+    from apps.members.models import Member, TrainingGroup
 
-    g = Guardian.objects.create(full_name="Vecāks")
+    g = make_guardian(full_name="Vecāks")
     inactive = TrainingGroup.objects.create(name="Vecā grupa", is_active=False)
     m = Member.objects.create(full_name="Bērns", guardian=g, training_group=inactive)
     app = RegistrationApplication.objects.create(

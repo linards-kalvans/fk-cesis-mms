@@ -19,9 +19,14 @@ def active_plan(db):
 
 @pytest.fixture
 def guardian(db):
-    from apps.members.models import Guardian
+    from tests.support import make_guardian
 
-    return Guardian.objects.create(full_name="Anna Bērziņa", email="anna@example.com")
+    g = make_guardian(full_name="Anna Bērziņa", email="anna@example.com")
+    # Mirror onto the Guardian column so today's column-reading code paths
+    # (e.g. send_due_invoices' guardian.email check) still see the address.
+    g.email = "anna@example.com"
+    g.save(update_fields=["email"])
+    return g
 
 
 @pytest.fixture

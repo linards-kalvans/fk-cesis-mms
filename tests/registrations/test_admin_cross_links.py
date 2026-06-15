@@ -7,7 +7,9 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-from apps.members.models import Guardian, Member
+from apps.members.models import Member
+
+from tests.support import make_guardian
 from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
@@ -21,7 +23,7 @@ def _staff_client():
 
 
 def test_changelist_links_to_approved_member():
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name="Bērns", guardian=g)
     RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="Bērns",
@@ -35,7 +37,7 @@ def test_changelist_links_to_approved_member():
 def test_changelist_member_link_uses_short_label_not_name():
     # The Biedrs column must NOT repeat the member name (already in
     # member_full_name) — it renders a fixed "Atvērt →" jump link.
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name="Unikāls Bērns", guardian=g)
     RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="Unikāls Bērns",
@@ -63,7 +65,7 @@ def test_changelist_member_column_dash_when_unapproved():
 
 
 def test_change_page_shows_related_records_block():
-    g = Guardian.objects.create(full_name="V")
+    g = make_guardian(full_name="V")
     m = Member.objects.create(full_name="Bērns", guardian=g)
     app = RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="Bērns",
@@ -79,7 +81,7 @@ def test_change_page_shows_related_records_block():
 def test_change_page_guardian_link_resolves_via_member_when_app_guardian_unset():
     # The application's own guardian FK is unset (common in real data); the
     # canonical guardian on the approved member must still surface as a link.
-    g = Guardian.objects.create(full_name="Vecāks no biedra")
+    g = make_guardian(full_name="Vecāks no biedra")
     m = Member.objects.create(full_name="Bērns", guardian=g)
     app = RegistrationApplication.objects.create(
         status=RegistrationApplication.Status.APPROVED, member_full_name="Bērns",
