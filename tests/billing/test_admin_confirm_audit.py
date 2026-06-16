@@ -37,7 +37,7 @@ def test_confirm_emits_audit_event(active_plan, guardian):
     e = AuditEvent.objects.get(action=AuditEvent.Action.BILLING_RECORD_CONFIRMED)
     assert e.target_type == "billingrecord"
     assert e.target_id == str(rec.pk)
-    assert e.actor is not None
+    assert e.actor is not None and e.actor.username == "staff"  # the acting staff user
 
 
 def test_already_confirmed_confirm_emits_no_audit(active_plan, guardian):
