@@ -122,13 +122,22 @@ class TrainingGroupAdmin(admin.ModelAdmin):
             target = get_object_or_404(TrainingGroup, pk=request.POST.get("target"))
             others = [g for g in groups if g.pk != target.pk]
             other_count = len(others)
+            merged_ids = [g.pk for g in others]
+            merged_names = [g.name for g in others]
             with transaction.atomic():
                 reparented = Member.objects.filter(
                     training_group__in=others
                 ).update(training_group=target)
-                TrainingGroup.objects.filter(
-                    pk__in=[g.pk for g in others]
-                ).delete()
+                TrainingGroup.objects.filter(pk__in=merged_ids).delete()
+            record_audit_event(
+                action=str(AuditEvent.Action.TRAINING_GROUPS_MERGED),
+                actor=request.user, request=request, target=target,
+                metadata={
+                    "merged_group_ids": merged_ids,
+                    "merged_names": merged_names,
+                    "members_reparented": reparented,
+                },
+            )
             self.message_user(
                 request,
                 f"Apvienotas {other_count} grupas grupā “{target.name}”; "
