@@ -40,6 +40,8 @@ class AuditEvent(models.Model):
         INVOICE_SEND_FAILED = "invoice_send_failed", "Invoice send failed"
         PAYMENT_SYNC_FAILED = "payment_sync_failed", "Payment sync failed"
         DATA_EXPORTED = "data_exported", "Data exported"
+        BILLING_RECORD_CONFIRMED = "billing_record_confirmed", "Billing record confirmed"
+        TRAINING_GROUPS_MERGED = "training_groups_merged", "Training groups merged"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

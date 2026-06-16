@@ -129,6 +129,10 @@ class BillingRecordAdmin(admin.ModelAdmin):
         if record.status == BillingRecord.Status.DRAFT:
             record.status = BillingRecord.Status.CONFIRMED
             record.save(update_fields=["status", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                actor=request.user, request=request, target=record,
+            )
             self.message_user(request, "Ieraksts apstiprināts.")
         else:
             self.message_user(request, "Ieraksts jau ir apstiprināts.", level=messages.INFO)
