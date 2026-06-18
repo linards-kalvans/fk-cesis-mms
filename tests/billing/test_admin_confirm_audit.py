@@ -3,10 +3,12 @@
 from decimal import Decimal
 
 import pytest
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import User
-from django.test import Client
+from django.test import Client, RequestFactory
 from django.urls import reverse
 
+from apps.billing.admin import BillingRecordAdmin
 from apps.billing.models import BillingRecord
 from apps.core.models import AuditEvent
 from apps.members.models import Member
@@ -46,6 +48,36 @@ def test_already_confirmed_confirm_emits_no_audit(active_plan, guardian):
     rec.save(update_fields=["status"])
     c = _staff_client()
     c.post(reverse("admin:billing_billingrecord_confirm", args=[rec.pk]))
+    assert not AuditEvent.objects.filter(
+        action=AuditEvent.Action.BILLING_RECORD_CONFIRMED
+    ).exists()
+
+
+def test_save_model_dropdown_confirm_emits_audit(active_plan, guardian):
+    # Confirming via the change-form status dropdown + Save (not the one-click
+    # button) is also audited, via save_model.
+    rec = _draft(active_plan, guardian)
+    staff = User.objects.create_superuser("staff", "s@example.com", "pw")
+    request = RequestFactory().post("/")
+    request.user = staff
+    admin_obj = BillingRecordAdmin(BillingRecord, AdminSite())
+    rec.status = BillingRecord.Status.CONFIRMED
+    admin_obj.save_model(request, rec, form=None, change=True)
+    e = AuditEvent.objects.get(action=AuditEvent.Action.BILLING_RECORD_CONFIRMED)
+    assert e.target_id == str(rec.pk)
+    assert e.actor == staff
+
+
+def test_save_model_no_audit_when_not_a_transition(active_plan, guardian):
+    # Saving an already-confirmed record (no DRAFT→CONFIRMED transition) audits nothing.
+    rec = _draft(active_plan, guardian)
+    rec.status = BillingRecord.Status.CONFIRMED
+    rec.save(update_fields=["status"])
+    staff = User.objects.create_superuser("staff", "s@example.com", "pw")
+    request = RequestFactory().post("/")
+    request.user = staff
+    admin_obj = BillingRecordAdmin(BillingRecord, AdminSite())
+    admin_obj.save_model(request, rec, form=None, change=True)
     assert not AuditEvent.objects.filter(
         action=AuditEvent.Action.BILLING_RECORD_CONFIRMED
     ).exists()

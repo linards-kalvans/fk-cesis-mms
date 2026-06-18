@@ -91,5 +91,9 @@ def test_changelist_shows_one_click_confirm_for_draft(active_plan, guardian):
     c = _staff_client()
     html = c.get(reverse("admin:billing_billingrecord_changelist")).content.decode()
     confirm_url = reverse("admin:billing_billingrecord_confirm", args=[rec.pk])
-    assert f'action="{confirm_url}"' in html
-    assert "csrfmiddlewaretoken" in html
+    # A bare formaction button (NOT a nested <form>, which the browser would drop):
+    # it rides the changelist's own POST form + CSRF.
+    assert f'formaction="{confirm_url}?next=' in html
+    assert 'formmethod="post"' in html
+    # the old per-row nested <form action="…confirm/"> must be gone
+    assert f'<form method="post" action="{confirm_url}"' not in html

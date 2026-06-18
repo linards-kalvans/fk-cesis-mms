@@ -1,8 +1,9 @@
 """Django admin for registrations app."""
 
+from urllib.parse import urlencode
+
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -122,7 +123,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         if application.approved_member_id is not None:
             agreement = get_current_agreement(application.approved_member)
 
-        action = request.POST.get("action", "")
+        # The disclosure forms POST `action` in the body; the changelist quick
+        # actions ride the changelist form and pass `action` via the formaction
+        # query string (the body's own `action` select is empty there).
+        action = request.POST.get("action") or request.GET.get("action", "")
 
         if action == "request_fix":
             message = request.POST.get("review_message", "").strip()
@@ -325,7 +329,6 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         # approved_member is select_related so the quick_actions agreement lookup
         # doesn't re-fetch the member per row; the per-row get_current_agreement
         # query itself is acceptable for the modest review-queue size.
-        self._request = request  # quick_actions needs it to mint a per-row CSRF token
         return (
             super()
             .get_queryset(request)
@@ -409,15 +412,15 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     "admin:registrations_registrationapplication_review-action",
                     args=[obj.pk],
                 )
+                formaction = f"{action_url}?{urlencode({'action': action})}"
+                # Bare button (no nested <form>, which the browser would drop): it
+                # rides the changelist's own POST form + CSRF. The action is passed
+                # via the formaction query string to avoid colliding with the
+                # changelist's own bulk-`action` <select>.
                 agreement_action = format_html(
-                    '<form method="post" action="{}" style="display:inline">'
-                    '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
-                    '<input type="hidden" name="action" value="{}">'
-                    '<button type="submit" class="button">{} →</button>'
-                    "</form> ",
-                    action_url,
-                    get_token(self._request),
-                    action,
+                    '<button type="submit" class="button" formaction="{}" '
+                    'formmethod="post">{} →</button> ',
+                    formaction,
                     label,
                 )
         return format_html(  # type: ignore[return-value,no-any-return]

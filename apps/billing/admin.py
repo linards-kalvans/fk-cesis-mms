@@ -1,8 +1,9 @@
 """Django admin for the billing app — plan config + draft-record review."""
 
+from urllib.parse import urlencode
+
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
-from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -104,11 +105,27 @@ class BillingRecordAdmin(admin.ModelAdmin):
         return False
 
     def get_queryset(self, request):
-        self._request = request  # confirm_action needs it for a per-row CSRF token
         # select_related: the guardian_link/agreement_link columns touch these per row.
         return super().get_queryset(request).select_related(
             "member", "member__guardian", "agreement"
         )
+
+    def save_model(self, request, obj, form, change):
+        # Audit a DRAFT→CONFIRMED transition made via the change form's status
+        # dropdown + Save (the one-click buttons go through confirm_view instead).
+        was_draft = bool(
+            change
+            and obj.pk
+            and BillingRecord.objects.filter(
+                pk=obj.pk, status=BillingRecord.Status.DRAFT
+            ).exists()
+        )
+        super().save_model(request, obj, form, change)
+        if was_draft and obj.status == BillingRecord.Status.CONFIRMED:
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                actor=request.user, request=request, target=obj,
+            )
 
     def get_urls(self):
         custom = [
@@ -139,7 +156,9 @@ class BillingRecordAdmin(admin.ModelAdmin):
         return self._safe_redirect(request, object_id)
 
     def _safe_redirect(self, request, object_id):
-        nxt = request.POST.get("next", "")
+        # The one-click buttons pass `next` in the formaction query string (GET);
+        # keep POST support for any direct callers.
+        nxt = request.POST.get("next") or request.GET.get("next", "")
         if nxt and url_has_allowed_host_and_scheme(
             nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
         ):
@@ -174,13 +193,14 @@ class BillingRecordAdmin(admin.ModelAdmin):
             return format_html("<span>✓ {}</span>", obj.get_status_display())
         confirm_url = reverse("admin:billing_billingrecord_confirm", args=[obj.pk])
         changelist_url = reverse("admin:billing_billingrecord_changelist")
+        formaction = f"{confirm_url}?{urlencode({'next': changelist_url})}"
+        # A bare button (NOT a nested <form>): it rides the changelist's own POST
+        # form + CSRF via formaction/formmethod. A nested <form> is invalid HTML —
+        # the browser drops it and the button would submit the outer form instead.
         return format_html(  # type: ignore[return-value,no-any-return]
-            '<form method="post" action="{}" style="display:inline">'
-            '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
-            '<input type="hidden" name="next" value="{}">'
-            '<button type="submit" class="button">Apstiprināt</button>'
-            "</form>",
-            confirm_url, get_token(self._request), changelist_url,
+            '<button type="submit" class="button" formaction="{}" formmethod="post">'
+            "Apstiprināt</button>",
+            formaction,
         )
 
     @admin.display(description="IN statuss")

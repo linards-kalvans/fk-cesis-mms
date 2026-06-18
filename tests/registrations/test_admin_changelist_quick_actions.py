@@ -35,11 +35,12 @@ def test_changelist_renders_open_link_and_agreement_quick_action():
     html = c.get(reverse("admin:registrations_registrationapplication_changelist")).content.decode()
     assert "Atvērt" in html
     assert "Atzīmēt nosūtītu" in html  # generated -> mark-sent quick action
-    # It must be a real one-click POST to the review-action endpoint, not a link.
+    # A bare formaction button (NOT a nested <form>, which the browser drops):
+    # rides the changelist's POST form + CSRF; the action rides the query string.
     action_url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
-    assert f'<form method="post" action="{action_url}"' in html
-    assert 'name="action" value="mark_agreement_sent"' in html
-    assert "csrfmiddlewaretoken" in html
+    assert f'formaction="{action_url}?action=mark_agreement_sent"' in html
+    assert 'formmethod="post"' in html
+    assert f'<form method="post" action="{action_url}"' not in html  # old nested form gone
 
 
 def test_changelist_quick_action_post_executes_transition():
@@ -54,6 +55,25 @@ def test_changelist_quick_action_post_executes_transition():
     c = _staff_client()
     action_url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
     resp = c.post(action_url, {"action": "mark_agreement_sent"})
+    assert resp.status_code == 302
+    agreement.refresh_from_db()
+    assert agreement.state == Agreement.State.SENT
+
+
+def test_changelist_quick_action_executes_via_query_string_action():
+    # The quick-action button rides the changelist form (empty body `action`
+    # from the bulk-action select) and passes the action via the query string.
+    g = make_guardian(full_name="V")
+    m = Member.objects.create(full_name="B", guardian=g)
+    app = RegistrationApplication.objects.create(
+        status=RegistrationApplication.Status.APPROVED, member_full_name="B", approved_member=m
+    )
+    agreement = Agreement.objects.create(
+        member=m, is_current=True, state=Agreement.State.GENERATED, generated_at=timezone.now()
+    )
+    c = _staff_client()
+    action_url = reverse("admin:registrations_registrationapplication_review-action", args=[app.pk])
+    resp = c.post(action_url + "?action=mark_agreement_sent", {"action": ""})  # empty body select
     assert resp.status_code == 302
     agreement.refresh_from_db()
     assert agreement.state == Agreement.State.SENT
