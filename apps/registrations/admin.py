@@ -391,8 +391,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         """Status-aware per-row quick actions on the changelist.
 
         The safe agreement transitions are real one-click POSTs to the
-        review-action endpoint (CSRF token minted from the stored request),
-        plus an always-present open link.
+        review-action endpoint via bare ``formaction`` buttons that ride the
+        changelist's own form + CSRF (the action rides the query string), plus
+        an always-present open link.
         """
         if not obj.pk:
             return "-"

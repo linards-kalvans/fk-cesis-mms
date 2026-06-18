@@ -61,6 +61,8 @@ def test_save_model_dropdown_confirm_emits_audit(active_plan, guardian):
     request = RequestFactory().post("/")
     request.user = staff
     admin_obj = BillingRecordAdmin(BillingRecord, AdminSite())
+    # NB: mutate status in memory only — save_model reads was_draft from the DB
+    # (still DRAFT) before saving. Do NOT rec.save() here, or the audit won't fire.
     rec.status = BillingRecord.Status.CONFIRMED
     admin_obj.save_model(request, rec, form=None, change=True)
     e = AuditEvent.objects.get(action=AuditEvent.Action.BILLING_RECORD_CONFIRMED)
