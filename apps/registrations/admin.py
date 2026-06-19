@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.agreements.models import Agreement
 from apps.agreements.services import (
@@ -111,6 +112,16 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     def _changelist_redirect(self):
         return redirect("admin:registrations_registrationapplication_changelist")
 
+    def _after_review_redirect(self, request, object_id):
+        """Honor a validated `next` (set by the changelist quick-action buttons so
+        a list-triggered action returns to the list), else the change page."""
+        nxt = request.GET.get("next") or request.POST.get("next", "")
+        if nxt and url_has_allowed_host_and_scheme(
+            nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
+            return redirect(nxt)
+        return self._change_redirect(object_id)
+
     def review_action_view(self, request, object_id):
         """Port of admin_review_detail's POST dispatch (every action except approve)."""
         if not self.has_change_permission(request):
@@ -178,26 +189,26 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 mark_agreement_sent(agreement, request.user)
             except ValueError as exc:
                 self.message_user(request, str(exc), level=messages.ERROR)
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "mark_agreement_signed":
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 mark_agreement_signed(agreement, request.user)
             except ValueError as exc:
                 self.message_user(request, str(exc), level=messages.ERROR)
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "set_signing_path":
             if agreement is None:
@@ -400,6 +411,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         change_url = reverse(
             "admin:registrations_registrationapplication_change", args=[obj.pk]
         )
+        changelist_url = reverse(
+            "admin:registrations_registrationapplication_changelist"
+        )
         agreement_action = ""
         if obj.approved_member_id:
             agreement = get_current_agreement(obj.approved_member)
@@ -413,11 +427,13 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     "admin:registrations_registrationapplication_review-action",
                     args=[obj.pk],
                 )
-                formaction = f"{action_url}?{urlencode({'action': action})}"
+                formaction = (
+                    f"{action_url}?{urlencode({'action': action, 'next': changelist_url})}"
+                )
                 # Bare button (no nested <form>, which the browser would drop): it
-                # rides the changelist's own POST form + CSRF. The action is passed
-                # via the formaction query string to avoid colliding with the
-                # changelist's own bulk-`action` <select>.
+                # rides the changelist's own POST form + CSRF. `action` rides the
+                # formaction query string to avoid colliding with the changelist's
+                # own bulk-`action` <select>; `next` returns staff to the list.
                 agreement_action = format_html(
                     '<button type="submit" class="button" formaction="{}" '
                     'formmethod="post">{} →</button> ',
