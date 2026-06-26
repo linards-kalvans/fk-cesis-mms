@@ -23,6 +23,7 @@ from apps.agreements.services import (
 )
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
+from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
 from apps.integrations.tasks import (
@@ -559,8 +560,8 @@ def _ocr_extracted_fields(document: Document) -> dict[str, str]:
     if not isinstance(person_fields, dict):
         return {}
 
-    first = str(person_fields.get("first_name", "")).strip()
-    last = str(person_fields.get("last_name", "")).strip()
+    first = normalize_latvian_name(person_fields.get("first_name", ""))
+    last = normalize_latvian_name(person_fields.get("last_name", ""))
     pid = str(person_fields.get("personal_id", "")).strip()
     full_name = " ".join(part for part in (first, last) if part)
 

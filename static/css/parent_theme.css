@@ -318,6 +318,15 @@ h1, h2, h3 {
   border-color: var(--fk-red);
 }
 
+/* Guardian-profile locked visual state (Slice C). The always-readonly
+   guardian email intentionally uses the same class for consistent appearance. */
+.fk-form-field input.fk-input--guardian-locked {
+  color: var(--fk-muted);
+  background: #f4f6fb;
+  border-color: #e0e4ef;
+  cursor: not-allowed;
+}
+
 .fk-form-help {
   color: var(--fk-muted);
   font-size: 13px;

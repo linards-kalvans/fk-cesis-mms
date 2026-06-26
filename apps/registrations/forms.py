@@ -177,7 +177,16 @@ class RegistrationApplicationForm(forms.Form):
 
         # Slice C — verified email is the OTP identity; never parent-editable.
         # Staff change it via Django admin (apps.accounts.services.change_parent_email).
-        self.fields["guardian_email"].widget.attrs["readonly"] = "readonly"
+        guardian_email_attrs = self.fields["guardian_email"].widget.attrs
+        guardian_email_attrs["readonly"] = "readonly"
+        guardian_email_attrs["class"] = " ".join(
+            part
+            for part in [
+                guardian_email_attrs.get("class", ""),
+                "fk-input--guardian-locked",
+            ]
+            if part
+        )
 
         # Slice C — returning parents see the guardian profile locked. readonly
         # (NOT disabled) keeps the values in the POST so a save round-trips them

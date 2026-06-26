@@ -86,22 +86,42 @@
           {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map document_bound_fields=document_bound_fields workspace_mode=workspace_mode %}
         {% endif %}
         {% if section_name == "guardian" and guardian_profile_locked %}
-          <div class="fk-guardian-lock" data-guardian-lock>
+          <div class="fk-guardian-lock" data-guardian-lock data-guardian-lock-state="locked">
             <p class="fk-guardian-lock__note">Vecāka dati ir aizpildīti no Jūsu profila. Lai labotu, nospiediet pogu.</p>
             <button type="button" class="fk-button fk-button--secondary" data-guardian-unlock>Rediģēt vecāka datus</button>
           </div>
           <script>
-// GuardianProfileUnlock — Slice C. Removes readonly from the four guardian
-// profile inputs on click so a returning parent can edit. Email stays readonly.
+// GuardianProfileLockToggle — Slice C. Four guardian profile inputs start
+// locked (readonly + gray). Clicking the button unlocks them; clicking again
+// re-locks. Guardian email is never in the lockable list and stays readonly.
 document.addEventListener('DOMContentLoaded', function () {
   var btn = document.querySelector('[data-guardian-unlock]');
-  if (!btn) return;
-  btn.addEventListener('click', function () {
-    ['id_guardian_full_name', 'id_guardian_personal_id', 'id_guardian_phone', 'id_guardian_declared_address'].forEach(function (id) {
+  var lockBlock = document.querySelector('[data-guardian-lock]');
+  if (!btn || !lockBlock) return;
+  var lockableIds = ["id_guardian_full_name", "id_guardian_personal_id", "id_guardian_phone", "id_guardian_declared_address"];
+  var LOCK_CLASS = "fk-input--guardian-locked";
+  var LABEL_UNLOCK = "Rediģēt vecāka datus";
+  var LABEL_LOCK = "Slēgt rediģēšanu";
+  function setLocked(locked) {
+    lockableIds.forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.removeAttribute('readonly');
+      if (!el) return;
+      if (locked) {
+        el.setAttribute("readonly", "readonly");
+        el.classList.add(LOCK_CLASS);
+      } else {
+        el.removeAttribute("readonly");
+        el.classList.remove(LOCK_CLASS);
+      }
     });
-    btn.setAttribute('hidden', 'hidden');
+    lockBlock.setAttribute("data-guardian-lock-state", locked ? "locked" : "unlocked");
+    btn.textContent = locked ? LABEL_UNLOCK : LABEL_LOCK;
+    btn.classList.toggle("fk-button--secondary", locked);
+    btn.classList.toggle("fk-button--primary", !locked);
+  }
+  setLocked(true);
+  btn.addEventListener("click", function () {
+    setLocked(lockBlock.getAttribute("data-guardian-lock-state") !== "locked");
   });
 });
           </script>
