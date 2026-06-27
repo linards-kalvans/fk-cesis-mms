@@ -123,6 +123,14 @@ class RegistrationApplicationForm(forms.Form):
 
         self.fields["preferred_agreement_signing"].choices = RegistrationApplication.AgreementSigning.choices
         self.fields["preferred_payment_mode"].choices = RegistrationApplication.PaymentMode.choices
+        defaults = {
+            "preferred_agreement_signing": RegistrationApplication.AgreementSigning.ELECTRONIC,
+            "preferred_payment_mode": RegistrationApplication.PaymentMode.INSTALLMENTS,
+        }
+        for field_name, default in defaults.items():
+            self.fields[field_name].initial = default
+            if not self.is_bound and not self.initial.get(field_name):
+                self.initial[field_name] = default
 
         self.fields["member_actual_address"].widget.attrs["data-sync-address-for"] = "id_member_same_address_as_guardian"
 

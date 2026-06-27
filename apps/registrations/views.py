@@ -270,6 +270,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 "member_kit_size_shorts": application.member_kit_size_shorts_id,
                 "preferred_agreement_signing": application.preferred_agreement_signing,
                 "support_club_instead_of_multi_child_discount": application.support_club_instead_of_multi_child_discount,
+                "preferred_payment_mode": application.preferred_payment_mode,
             },
             guardian_profile_locked=guardian_profile_locked,
         )

@@ -440,14 +440,17 @@ def create_or_update_draft(
     application.member_same_address_as_guardian = bool(data.get("member_same_address_as_guardian", False))
     preferred = str(data.get("preferred_agreement_signing", "")).strip()
     if not preferred:
-        preferred = "paper"
+        preferred = "electronic"
     application.preferred_agreement_signing = preferred
     if "support_club_instead_of_multi_child_discount" in data:
         raw = data["support_club_instead_of_multi_child_discount"]
         application.support_club_instead_of_multi_child_discount = bool(raw) if raw is not None else None
     else:
         application.support_club_instead_of_multi_child_discount = None
-    application.preferred_payment_mode = str(data.get("preferred_payment_mode", "")).strip()
+    payment_mode = str(data.get("preferred_payment_mode", "")).strip()
+    if not payment_mode:
+        payment_mode = "installments"
+    application.preferred_payment_mode = payment_mode
 
     # Kit sizes — FK to KitSizeOption
     shirt_id = data.get("member_kit_size_shirt")
