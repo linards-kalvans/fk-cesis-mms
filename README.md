@@ -167,7 +167,9 @@ Live tiny-IDP sample-document validation, agreement-handling first slice, and pr
 - Authoritative project guide: `AGENTS.md`
 - Canonical product spec: `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`
 - Milestones: `docs/milestones.md`
-- Deployment runbook: `docs/deployment.md`
+- Runtime contract: `docs/runtime-contract.md`
+- Local Docker smoke: `docs/local-docker-smoke.md`
+- Deployment ownership pointer: `docs/deployment.md` (deployed runtime lives in `https://github.com/linards-kalvans/fk-cesis`)
 - Audit log (operator guide): `docs/audit-log.md`
 - Historical plans archive: `docs/archive/plans/` *(read only when explicitly needed for history)*
 

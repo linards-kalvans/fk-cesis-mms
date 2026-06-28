@@ -1,9 +1,11 @@
 # Woodpecker CI for fk-cesis-mms
 #
-# Two-channel branch strategy:
-#   - dev  branch: development.    Push -> build :dev    -> notify dev server.
-#   - main branch: tested releases. Push -> build :main + :<major>.<minor>
-#                                          -> notify prod server.
+# Two-channel image strategy:
+#   - dev  branch: development.    Push -> build :dev.
+#   - main branch: tested releases. Push -> build :main + :<major>.<minor>.
+#
+# Deployment runtime is owned by the fk-cesis infrastructure repository. The
+# optional notify steps call infra-owned webhooks after image publication.
 #
 # Versioning on main:
 #   <major> comes from the top-level VERSION file (manually bumped).
@@ -21,10 +23,12 @@
 # Required Codeberg secrets (Repo Settings -> Secrets):
 #   CODEBERG_USER             registry user (deploy bot or your handle)
 #   CODEBERG_TOKEN            Codeberg Application Token w/ packages:write
-#   DEV_DEPLOY_WEBHOOK_URL    https://<dev-subdomain>/hooks/codeberg
-#   DEV_DEPLOY_WEBHOOK_SECRET shared with the dev server's listener
-#   PROD_DEPLOY_WEBHOOK_URL   https://<prod-subdomain>/hooks/codeberg
-#   PROD_DEPLOY_WEBHOOK_SECRET shared with the prod server's listener
+#
+# Optional handoff webhook secrets, owned by fk-cesis runtime automation:
+#   DEV_DEPLOY_WEBHOOK_URL
+#   DEV_DEPLOY_WEBHOOK_SECRET
+#   PROD_DEPLOY_WEBHOOK_URL
+#   PROD_DEPLOY_WEBHOOK_SECRET
 #
 # The prod webhook secrets can be added later. Until then the notify-prod
 # step is wired to `failure: ignore` so a missing secret won't fail the

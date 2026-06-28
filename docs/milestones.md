@@ -22,6 +22,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - `uv` workflow is in place
 - `.env` autoload works for local commands and app startup
 - acceptance-test baseline available on LAN at `http://192.168.3.245:8000`
+- deployment runtime ownership is split: this repo owns app image build/tagging and local smoke; `https://github.com/linards-kalvans/fk-cesis` owns deployed runtime configuration and rollout docs.
 
 ### Accounts and parent access
 - `ParentAccount` and `MagicLinkToken` exist

@@ -142,9 +142,10 @@ Target Django monolith with domain apps:
   - New deps: `gunicorn`, `whitenoise`, `dj-database-url`, `psycopg[binary]`.
   - **Two-channel CI** (`.woodpecker.yml`): lint + test on every push and PR. Push to `dev` → build `:dev` (floating) → notify dev server. Push to `main` → read `VERSION` (major), count commits since `VERSION` last changed (minor), build `:main` *and* `:<major>.<minor>` immutable → notify prod server. `notify-prod` is `failure: ignore` so it can be wired later. PRs build nothing.
   - **Versioning:** `VERSION` file at repo root holds `<major>` as an integer (currently `0`). `<minor>` resets to 1 the instant `VERSION` changes (commit count from the SHA where `VERSION` was last touched), then auto-increments on every commit/merge to `main`. Tags `:0.1`, `:0.2`, … are immutable in the registry; future `:1.1` arrives the moment `VERSION` is bumped to `1`.
-  - `docs/deployment.md` runbook: same host provisioning recipe for both dev and prod servers (`.env` differs only in `IMAGE_TAG` and `SITE_URL`/`DJANGO_ALLOWED_HOSTS`); `fkmms` unprivileged user (UID 10001, in `docker` group) owns `/opt/fk-cesis-mms`; hardened systemd unit for the Python deploy listener; Caddyfile patch; Codeberg secrets list (six entries: `CODEBERG_USER`, `CODEBERG_TOKEN`, `DEV_DEPLOY_WEBHOOK_URL` + secret, `PROD_DEPLOY_WEBHOOK_URL` + secret); rollback procedure (pin `IMAGE_TAG=<X.Y>` in prod `.env`); major-bump procedure.
+  - `docs/deployment.md` is now an ownership pointer: deployed runtime lives in `https://github.com/linards-kalvans/fk-cesis`; this repo keeps the Docker image build/tag contract and local smoke compose only.
   - Local docker compose smoke verified twice: with default port → `postgres` healthy → `web` healthy (migrations + gunicorn) → `qcluster` healthy with clean log, `/healthz` 200, `/register/` renders Latvian title with `fk-*` classes; with `WEB_HOST_PORT=18000` → bind on `127.0.0.1:18000` works and `:8000` is correctly refused.
   - Full repo verification after the landing: `uv run pytest -q` → `858 passed`, `uv run ruff check .` → passed, `uv run mypy .` → passed.
+  - Deployment runtime ownership moved to `https://github.com/linards-kalvans/fk-cesis` on 2026-06-27. This repo keeps the Docker image build/tag contract and local smoke compose only; server compose, Caddy, systemd, deploy listener, env templates, and rollout docs live in `fk-cesis`.
 
 - **P4.5 delivered — parent-flow quality-debt sweep (2026-05-25)**
   - Guardian full-name no longer doubled in new-app prefill: `_merge_ocr_extractions` removed model-value fallback; OCR wins unconditionally (`commit 58115e1` + `0a80b4e`).
@@ -483,7 +484,7 @@ uv run pytest                          # run test suite
 uv run ruff check .                    # lint
 uv run mypy .                          # type check
 
-# Container / deploy (see docs/deployment.md for the full runbook)
+# Container local smoke (deployed runtime lives in fk-cesis; see docs/local-docker-smoke.md)
 docker build -t fk-cesis-mms:dev .     # build the production image locally
 docker compose up -d                   # local smoke test (web + qcluster + postgres on 127.0.0.1:8000)
 docker compose logs -f web qcluster    # tail app + worker logs

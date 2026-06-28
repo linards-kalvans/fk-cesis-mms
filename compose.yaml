@@ -1,11 +1,11 @@
-# fk-cesis-mms — production compose stack
+# fk-cesis-mms — local Docker smoke stack
 #
-# Used both for local docker smoke testing and on the server at /opt/fk-cesis-mms.
-# On the server, the same .env supplies POSTGRES_*, DATABASE_URL, OCR_*, EMAIL_*,
-# SITE_URL, DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS, and IMAGE_TAG.
+# Deployed runtime configuration is owned by:
+#   https://github.com/linards-kalvans/fk-cesis
 #
-# All public ingress goes through Caddy on the host -> 127.0.0.1:8000.
-# Postgres and qcluster have no published ports.
+# This compose file is kept in the app repo so developers can smoke-test the
+# built image with Postgres, web, and qcluster locally. Do not treat this file
+# as the production server source-of-truth.
 
 name: fk-cesis-mms
 
