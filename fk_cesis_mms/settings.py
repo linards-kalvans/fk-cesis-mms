@@ -53,8 +53,16 @@ INSTALLED_APPS = [
     "apps.billing",
     "apps.documents",
     "apps.integrations",
+    "apps.addresses",
     # Background-job runner (P3.5)
     "django_q",
+]
+
+# VZD address autocomplete region/locality object codes, comma-separated.
+ADDRESS_AUTOCOMPLETE_REGION_CODES = [
+    code.strip()
+    for code in os.environ.get("ADDRESS_AUTOCOMPLETE_REGION_CODES", "").split(",")
+    if code.strip()
 ]
 
 MIDDLEWARE = [

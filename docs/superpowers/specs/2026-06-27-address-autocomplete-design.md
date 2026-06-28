@@ -26,6 +26,8 @@ Parents must type full Latvian addresses manually. This creates friction on mobi
 - Import is manual in the first slice. Scheduled refresh is deferred.
 - No-JS, empty-data, or failed-endpoint fallback is the current plain text field.
 - Grouped search is required: typing a street name should show street/locality groups before individual house numbers.
+- Follow-up refinement: villages and other non-city localities with building addresses must be searchable, not only cities/towns with streets. For example, typing `Priekuļi` should return relevant locality/group suggestions.
+- Follow-up refinement: building-number search must work in natural orders. For example, `Raiņa iela 12`, `12 Raiņa iela`, and typing `12` after selecting `Raiņa iela, Cēsis` should suggest `Raiņa iela 12, Cēsis` when that building exists.
 
 ## Out of Scope
 
@@ -47,7 +49,7 @@ Official dataset:
 - License: CC-BY-4.0
 - Update frequency: daily
 - Text data format: CSV
-- CSV encoding: `ISO-8859-1`
+- CSV encoding: current downloads are UTF-8 with BOM; metadata may report `ISO-8859-1`, so importer should support both
 - CSV delimiter: `,`
 
 Resources used by the first slice:
@@ -81,7 +83,7 @@ data.gov.lv VZD CSV files
 import_addresses management command
   ↓
 AddressImportRun
-AddressGroup        # e.g. "Raiņa iela, Cēsis"
+AddressGroup        # e.g. "Raiņa iela, Cēsis" or "Priekuļi, Priekuļu pag."
 AddressEntry        # e.g. "Raiņa iela 12, Cēsis, Cēsu nov."
   ↓
 GET /addresses/autocomplete/?q=Raiņa
@@ -176,14 +178,15 @@ uv run python manage.py import_addresses
 Expected behavior:
 
 1. Read or download the configured VZD CSV resources.
-2. Parse CSV with `ISO-8859-1` encoding and comma delimiter.
+2. Parse CSV with UTF-8 BOM support and `ISO-8859-1` fallback, using comma delimiter.
 3. Build the hierarchy needed to resolve street/locality/region labels.
 4. Filter to configured region codes.
 5. Import only active `AW_EKA` rows where `STATUSS = EKS`.
 6. Build `AddressGroup` rows for street/locality combinations.
-7. Build `AddressEntry` rows from full `AW_EKA.STD` labels.
-8. Record row counts and status in `AddressImportRun`.
-9. Avoid leaving the address search endpoint in a half-empty state after a failed import.
+7. Build locality-level `AddressGroup` rows for active `AW_EKA` rows whose parent is a locality rather than a street, so villages without street parents are still searchable.
+8. Build `AddressEntry` rows from full `AW_EKA.STD` labels.
+9. Record row counts and status in `AddressImportRun`.
+10. Avoid leaving the address search endpoint in a half-empty state after a failed import.
 
 The first implementation can use local file paths or stable official URLs. If official URL download is implemented, it must still support local files for deterministic tests and operator fallback.
 
@@ -215,6 +218,9 @@ Rules:
 - rank exact and prefix matches before substring matches;
 - when no `group` is selected, prefer `AddressGroup` results for street-like queries;
 - when `group` is selected, return building entries from that group;
+- when a query includes a building-number token, search `AddressEntry` rows as well as groups;
+- building-number search is order-insensitive: `Raiņa iela 12` and `12 Raiņa iela` should match the same building entry;
+- after a group is selected, a trailing number typed after the group label should narrow to matching buildings inside that group;
 - do not expose PII or non-public data;
 - if no data is imported, return an empty result list, not a server error.
 
@@ -231,6 +237,7 @@ Behavior:
 - dropdown supports mouse and keyboard selection;
 - selecting a `group` fills the input with the group label and keeps focus in the field;
 - after group selection, suggestions narrow to building addresses under that group;
+- if the user types a building number after a selected group label, the widget sends the selected group id and the typed suffix so the endpoint can return matching buildings in that group;
 - selecting an `address` fills the full address text;
 - user can keep typing manually at any time;
 - same-address checkbox continues copying the guardian field value to the member field;
@@ -267,12 +274,14 @@ Hard validation remains out of scope unless separately approved.
 
 Unit tests:
 
-- CSV parser handles `ISO-8859-1`, comma delimiter, and expected VZD columns.
+- CSV parser handles UTF-8 BOM, `ISO-8859-1` fallback, comma delimiter, and expected VZD columns.
 - Region filtering includes and excludes rows correctly.
 - `STATUSS != EKS` rows are excluded.
 - Group generation collapses street/locality matches and prevents house-number spam.
 - Search normalization handles case and Latvian diacritics where implemented.
 - Ranking prefers exact/prefix group matches before substring/building matches.
+- Import tests cover locality-level `AW_EKA` parents so villages such as `Priekuļi` are included even when the address has no street parent.
+- Search tests cover order-insensitive building-number queries such as `Raiņa iela 12` and `12 Raiņa iela`.
 
 View tests:
 
@@ -305,7 +314,11 @@ Static/JS contract tests:
 6. If address data is not imported or the endpoint fails, the registration form still works as it does today.
 7. No VZD object code is stored on registration, guardian, or member records in the first slice.
 8. Parent keystrokes are not sent to Google, OSM/Nominatim, or any other external autocomplete provider.
-9. Tests cover import parsing, filtering, grouping, endpoint shape, and registration template hooks.
+9. Typing `Priekuļi` returns locality/group suggestions when imported VZD data contains active building addresses under that village/locality.
+10. Typing `Raiņa iela 12` returns the matching building address before unrelated group-only results.
+11. Typing `12 Raiņa iela` returns the same matching building address.
+12. After selecting `Raiņa iela, Cēsis`, typing `12` narrows suggestions to matching building addresses in that selected group.
+13. Tests cover import parsing, filtering, grouping, endpoint shape, building-number search, locality-level groups, and registration template hooks.
 
 ## Open Implementation Notes
 

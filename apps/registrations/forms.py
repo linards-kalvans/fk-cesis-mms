@@ -134,6 +134,13 @@ class RegistrationApplicationForm(forms.Form):
 
         self.fields["member_actual_address"].widget.attrs["data-sync-address-for"] = "id_member_same_address_as_guardian"
 
+        # Address-autocomplete hooks (assist-only; no VZD codes persisted).
+        for _address_field in ("guardian_declared_address", "member_actual_address"):
+            attrs = self.fields[_address_field].widget.attrs
+            attrs["data-address-autocomplete"] = "1"
+            attrs["autocomplete"] = "street-address"
+            attrs["aria-autocomplete"] = "list"
+
         # P3.5: tag file inputs so static/js/async_upload.js can bind to them.
         # The progress slot id mirrors id_for_label so the template can render
         # an adjacent <span> with the same id + "_progress".
