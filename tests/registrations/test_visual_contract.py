@@ -117,6 +117,14 @@ class TestBaseTemplateAssets:
         assert "fonts.googleapis.com" in content
         assert "preconnect" in content
 
+    def test_base_template_links_favicon(self) -> None:
+        resp = Client().get("/register/")
+        assert resp.status_code == 200
+        content = resp.content.decode()
+        assert 'rel="icon"' in content
+        assert 'type="image/png"' in content
+        assert 'href="/static/img/favicon.png"' in content
+
 
 # ===========================================================================
 # Shell hooks present on parent-facing landing pages
@@ -188,6 +196,9 @@ class TestLogoPath:
             resp = c.get("/portal/")
         assert resp.status_code == 200
         assert "fk-cesis-logo.png" in resp.content.decode()
+
+    def test_favicon_file_exists(self) -> None:
+        assert (_STATIC / "img" / "favicon.png").exists()
 
 
 # ===========================================================================
