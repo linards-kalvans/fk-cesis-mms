@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import csv
+import logging
 import re
 import unicodedata
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Case, IntegerField, Q, Value, When
 from django.utils import timezone
 
-from apps.addresses.models import AddressEntry, AddressGroup, AddressImportRun
+from apps.addresses.models import AddressApartment, AddressEntry, AddressGroup, AddressImportRun
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_address_query(value: str) -> str:
@@ -101,6 +106,28 @@ class VzdAddressFiles:
     ciems: Path
     iela: Path
     eka: Path
+    dziv: Path | None = None
+
+
+def _download_file(url: str, target: Path) -> None:
+    with urllib.request.urlopen(url, timeout=settings.ADDRESS_IMPORT_DOWNLOAD_TIMEOUT_SECONDS) as response:
+        target.write_bytes(response.read())
+
+
+def download_vzd_address_files(destination: Path) -> VzdAddressFiles:
+    destination.mkdir(parents=True, exist_ok=True)
+    mapping = {
+        "novads": (settings.ADDRESS_IMPORT_AW_NOVADS_URL, destination / "AW_NOVADS.CSV"),
+        "pagasts": (settings.ADDRESS_IMPORT_AW_PAGASTS_URL, destination / "AW_PAGASTS.CSV"),
+        "pilseta": (settings.ADDRESS_IMPORT_AW_PILSETA_URL, destination / "AW_PILSETA.CSV"),
+        "ciems": (settings.ADDRESS_IMPORT_AW_CIEMS_URL, destination / "AW_CIEMS.CSV"),
+        "iela": (settings.ADDRESS_IMPORT_AW_IELA_URL, destination / "AW_IELA.CSV"),
+        "eka": (settings.ADDRESS_IMPORT_AW_EKA_URL, destination / "AW_EKA.CSV"),
+        "dziv": (settings.ADDRESS_IMPORT_AW_DZIV_URL, destination / "AW_DZIV.CSV"),
+    }
+    for url, target in mapping.values():
+        _download_file(url, target)
+    return VzdAddressFiles(**{name: target for name, (_url, target) in mapping.items()})
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -133,6 +160,7 @@ def import_vzd_addresses(files: VzdAddressFiles, region_codes: list[str]) -> Add
         ciems_rows = _active_rows(_read_csv(files.ciems))
         iela_rows = _active_rows(_read_csv(files.iela))
         eka_rows = _active_rows(_read_csv(files.eka))
+        dziv_rows = _active_rows(_read_csv(files.dziv)) if files.dziv else []
     except Exception as exc:  # noqa: BLE001
         run.status = AddressImportRun.Status.FAILED
         run.error_message = str(exc)
@@ -255,7 +283,44 @@ def import_vzd_addresses(files: VzdAddressFiles, region_codes: list[str]) -> Add
             )
         )
 
+    apartments: list[AddressApartment] = []
+    entry_by_code = {entry.vzd_code: entry for entry in entries}
+    for row in dziv_rows:
+        building = entry_by_code.get(row["VKUR_CD"].strip())
+        if not building:
+            continue
+        apartment_label = row["STD"].strip().strip('"')
+        apartments.append(
+            AddressApartment(
+                vzd_code=row["KODS"].strip(),
+                building=building,
+                label=apartment_label,
+                normalized_label=normalize_address_query(apartment_label),
+                postal_code=row.get("ATRIB", "").strip(),
+            )
+        )
+
+    new_entry_count = len(entries) + len(apartments)
+    previous = _latest_successful_import()
+    if previous and _is_suspicious_drop(new_entry_count, previous.entry_count):
+        run.status = AddressImportRun.Status.FAILED
+        run.error_message = (
+            f"Suspicious address import drop: previous={previous.entry_count}, new={new_entry_count}"
+        )
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "error_message", "finished_at"])
+        return run
+
+    if new_entry_count == 0 and region_set:
+        if previous:
+            run.status = AddressImportRun.Status.FAILED
+            run.error_message = "Address import produced zero selectable rows."
+            run.finished_at = timezone.now()
+            run.save(update_fields=["status", "error_message", "finished_at"])
+            return run
+
     with transaction.atomic():
+        AddressApartment.objects.all().delete()
         AddressGroup.objects.all().delete()
         for group in groups.values():
             group.entry_count = 0
@@ -267,6 +332,11 @@ def import_vzd_addresses(files: VzdAddressFiles, region_codes: list[str]) -> Add
             entry.group_id = entry.group.id
         AddressEntry.objects.bulk_create(entries)
 
+        saved_entries = {entry.vzd_code: entry for entry in AddressEntry.objects.filter(vzd_code__in=entry_by_code)}
+        for apartment in apartments:
+            apartment.building_id = saved_entries[apartment.building.vzd_code].id
+        AddressApartment.objects.bulk_create(apartments)
+
         # Refresh per-group counts
         for group in saved_groups:
             group.entry_count = group.entries.count()
@@ -274,10 +344,46 @@ def import_vzd_addresses(files: VzdAddressFiles, region_codes: list[str]) -> Add
 
     run.status = AddressImportRun.Status.SUCCEEDED
     run.group_count = len(saved_groups)
-    run.entry_count = len(entries)
+    run.entry_count = len(entries) + len(apartments)
     run.finished_at = timezone.now()
     run.save(update_fields=["status", "group_count", "entry_count", "finished_at"])
     return run
+
+
+def _latest_successful_import() -> AddressImportRun | None:
+    return cast(
+        AddressImportRun | None,
+        AddressImportRun.objects.filter(status=AddressImportRun.Status.SUCCEEDED)
+        .order_by("-finished_at", "-started_at")
+        .first(),
+    )
+
+
+def _is_suspicious_drop(new_count: int, previous_count: int) -> bool:
+    if previous_count <= 0:
+        return False
+    max_drop_ratio = getattr(settings, "ADDRESS_IMPORT_MAX_DROP_RATIO", 0.50)
+    minimum_allowed = previous_count * (1 - max_drop_ratio)
+    return new_count < minimum_allowed
+
+
+def import_vzd_addresses_from_urls(region_codes: list[str]) -> AddressImportRun:
+    import tempfile
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            files = download_vzd_address_files(Path(tmp))
+            return import_vzd_addresses(files, region_codes=region_codes)
+    except Exception as exc:  # noqa: BLE001
+        run: AddressImportRun = AddressImportRun.objects.create(
+            source="vzd_varis",
+            region_codes=",".join(region_codes),
+            status=AddressImportRun.Status.FAILED,
+            error_message=str(exc),
+            finished_at=timezone.now(),
+        )
+        logger.exception("VZD address import from URLs failed: %s", exc)
+        return run
 
 
 def _group_results(normalized: str, limit: int) -> list[dict[str, str]]:
@@ -321,3 +427,26 @@ def search_addresses(query: str, group_id: int | None = None, limit: int = 10) -
         return entries + _group_results(normalized, limit - len(entries))
 
     return _group_results(normalized, limit)
+
+
+def search_apartments(query: str, building_id: int, limit: int = 10) -> list[dict[str, str]]:
+    normalized = normalize_address_query(query)
+    if not normalized:
+        return []
+    filters = Q(building_id=building_id)
+    for token in normalized.split():
+        filters &= Q(normalized_label__icontains=token)
+    rows = (
+        AddressApartment.objects.filter(filters)
+        .order_by("normalized_label")
+        .values("vzd_code", "label", "postal_code")[:limit]
+    )
+    return [
+        {
+            "kind": "apartment",
+            "id": row["vzd_code"],
+            "label": row["label"],
+            "hint": row["postal_code"] or "",
+        }
+        for row in rows
+    ]

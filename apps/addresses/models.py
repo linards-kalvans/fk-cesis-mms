@@ -83,3 +83,26 @@ class AddressEntry(models.Model):
 
     def __str__(self) -> str:
         return str(self.label)
+
+
+class AddressApartment(models.Model):
+    """One selectable apartment / unit address from AW_DZIV."""
+
+    vzd_code = models.CharField(max_length=32, unique=True)
+    building = models.ForeignKey(
+        AddressEntry,
+        on_delete=models.CASCADE,
+        related_name="apartments",
+    )
+    label = models.CharField(max_length=255)
+    normalized_label = models.CharField(max_length=255, db_index=True)
+    postal_code = models.CharField(max_length=16, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["building", "normalized_label"]),
+            models.Index(fields=["normalized_label"]),
+        ]
+
+    def __str__(self) -> str:
+        return str(self.label)

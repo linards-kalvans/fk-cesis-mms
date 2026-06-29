@@ -268,3 +268,39 @@ def test_search_global_house_number_not_lost_in_postal_flood(
     assert len(results) >= 1
     assert results[0]["kind"] == "address"
     assert results[0]["label"] == "Raiņa iela 12, Cēsis, Cēsu nov., LV-4101"
+
+
+# ---------------------------------------------------------------------------
+# Apartment search (building-first flow)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_search_apartments_returns_units_for_selected_building():
+    from apps.addresses.models import AddressApartment, AddressEntry, AddressGroup
+    from apps.addresses.services import search_apartments
+
+    group = AddressGroup.objects.create(label="Raiņa iela, Cēsis", normalized_label="raina iela cesis")
+    building = AddressEntry.objects.create(
+        vzd_code="401",
+        label="Raiņa iela 12, Cēsis, Cēsu nov.",
+        normalized_label="raina iela 12 cesis cesu nov",
+        group=group,
+        postal_code="LV-4101",
+    )
+    AddressApartment.objects.create(
+        vzd_code="9001",
+        building=building,
+        label="Raiņa iela 12-3, Cēsis, Cēsu nov.",
+        normalized_label="raina iela 12 3 cesis cesu nov",
+        postal_code="LV-4101",
+    )
+
+    assert search_apartments("3", building.id) == [
+        {
+            "kind": "apartment",
+            "id": "9001",
+            "label": "Raiņa iela 12-3, Cēsis, Cēsu nov.",
+            "hint": "LV-4101",
+        }
+    ]

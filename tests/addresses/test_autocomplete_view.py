@@ -98,3 +98,43 @@ def test_autocomplete_supports_group_house_number_suffix(verified_client):
     assert len(data["results"]) >= 1
     assert data["results"][0]["kind"] == "address"
     assert data["results"][0]["label"] == "Raiņa iela 12, Cēsis, Cēsu nov."
+
+
+# ---------------------------------------------------------------------------
+# Building-scoped apartment endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_autocomplete_supports_building_apartment_suffix(verified_client):
+    from apps.addresses.models import AddressApartment, AddressEntry, AddressGroup
+
+    group = AddressGroup.objects.create(label="Raiņa iela, Cēsis", normalized_label="raina iela cesis")
+    building = AddressEntry.objects.create(
+        vzd_code="401",
+        label="Raiņa iela 12, Cēsis, Cēsu nov.",
+        normalized_label="raina iela 12 cesis cesu nov",
+        group=group,
+        postal_code="LV-4101",
+    )
+    AddressApartment.objects.create(
+        vzd_code="9001",
+        building=building,
+        label="Raiņa iela 12-3, Cēsis, Cēsu nov.",
+        normalized_label="raina iela 12 3 cesis cesu nov",
+        postal_code="LV-4101",
+    )
+
+    response = verified_client.get(
+        reverse("addresses:autocomplete"), {"q": "3", "building": str(building.id)}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"] == [
+        {
+            "kind": "apartment",
+            "id": "9001",
+            "label": "Raiņa iela 12-3, Cēsis, Cēsu nov.",
+            "hint": "LV-4101",
+        }
+    ]

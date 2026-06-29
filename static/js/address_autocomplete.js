@@ -90,14 +90,34 @@
     if (result.kind === "group") {
       input.setAttribute("data-address-group-id", result.id);
       input.setAttribute("data-address-group-label", result.label);
+      input.removeAttribute("data-address-building-id");
+      input.removeAttribute("data-address-building-label");
       input.focus();
       // Keep dropdown open and fetch building addresses under this group.
       dropdown.innerHTML = "";
       dropdown.style.display = "block";
       fetchSuggestions(input, dropdown);
+    } else if (result.kind === "address") {
+      input.setAttribute("data-address-building-id", result.id);
+      input.setAttribute("data-address-building-label", result.label);
+      input.removeAttribute("data-address-group-id");
+      input.removeAttribute("data-address-group-label");
+      input.focus();
+      // Keep dropdown open and fetch apartment suggestions under this building.
+      dropdown.innerHTML = "";
+      dropdown.style.display = "block";
+      fetchSuggestions(input, dropdown);
+    } else if (result.kind === "apartment") {
+      input.removeAttribute("data-address-group-id");
+      input.removeAttribute("data-address-group-label");
+      input.removeAttribute("data-address-building-id");
+      input.removeAttribute("data-address-building-label");
+      closeDropdown(dropdown);
     } else {
       input.removeAttribute("data-address-group-id");
       input.removeAttribute("data-address-group-label");
+      input.removeAttribute("data-address-building-id");
+      input.removeAttribute("data-address-building-label");
       closeDropdown(dropdown);
     }
   }
@@ -116,6 +136,20 @@
     return raw;
   }
 
+  function getBuildingId(input) {
+    var raw = input.getAttribute("data-address-building-id");
+    if (!raw) return null;
+    var value = input.value.trim();
+    var buildingLabel = input.getAttribute("data-address-building-label") || "";
+    // Clear the active building if the user has deleted or altered the building text.
+    if (buildingLabel && value.indexOf(buildingLabel) !== 0) {
+      input.removeAttribute("data-address-building-id");
+      input.removeAttribute("data-address-building-label");
+      return null;
+    }
+    return raw;
+  }
+
   function getQuery(input) {
     var value = input.value.trim();
     var groupLabel = input.getAttribute("data-address-group-label") || "";
@@ -123,23 +157,31 @@
       var suffix = value.slice(groupLabel.length).replace(/^\s*,?\s*/, "").trim();
       return suffix || groupLabel;
     }
+    var buildingLabel = input.getAttribute("data-address-building-label") || "";
+    if (getBuildingId(input) && buildingLabel && value.indexOf(buildingLabel) === 0) {
+      var buildingSuffix = value.slice(buildingLabel.length).replace(/^\s*,?\s*/, "").trim();
+      return buildingSuffix || buildingLabel;
+    }
     return value;
   }
 
   function fetchSuggestions(input, dropdown) {
     var groupId = getGroupId(input);
+    var buildingId = getBuildingId(input);
     var query = getQuery(input);
     if (!query) {
       showMessage(dropdown, MSG_START);
       return;
     }
-    if (query.length < MIN_CHARS && !groupId) {
+    if (query.length < MIN_CHARS && !groupId && !buildingId) {
       showMessage(dropdown, MSG_KEEP_TYPING);
       return;
     }
 
     var url = "/addresses/autocomplete/?q=" + encodeURIComponent(query);
-    if (groupId) {
+    if (buildingId) {
+      url += "&building=" + encodeURIComponent(buildingId);
+    } else if (groupId) {
       url += "&group=" + encodeURIComponent(groupId);
     }
 

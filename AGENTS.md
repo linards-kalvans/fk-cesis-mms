@@ -42,6 +42,7 @@ Target Django monolith with domain apps:
 - `apps/documents/models.py` implements `Document` model with private storage (`PRIVATE_DOCUMENTS_ROOT`), OCR process state fields, and `DocumentExtraction` for encrypted OCR payload/summary persistence.
 - `apps/documents` uses a dedicated private storage root (`private-uploads/`), Fernet-encrypted OCR payload/summary helpers in `apps/documents/ocr.py`, and admin-only protected preview/download endpoints (`/admin/documents/<id>/preview/`, `/admin/documents/<id>/download/`). Anonymous users are redirected to admin login; non-admin authenticated users receive `404`.
 - `.env` autoload works for local commands and app startup.
+- Address autocomplete now has a weekly URL-backed VZD VARIS import with `AW_DZIV` apartment suggestions, suspicious-drop protection, and read-only import-run admin visibility.
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 
 ### P1 delivered registration workflow UX

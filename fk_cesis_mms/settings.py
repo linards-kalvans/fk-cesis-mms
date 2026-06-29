@@ -65,6 +65,19 @@ ADDRESS_AUTOCOMPLETE_REGION_CODES = [
     if code.strip()
 ]
 
+# VZD VARIS address import URLs and schedule defaults.
+ADDRESS_IMPORT_AW_NOVADS_URL = os.environ.get("ADDRESS_IMPORT_AW_NOVADS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/c62c60bb-58d4-4f26-82c0-5b630769f9d1/download/aw_novads.csv"
+ADDRESS_IMPORT_AW_PAGASTS_URL = os.environ.get("ADDRESS_IMPORT_AW_PAGASTS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/6ba8c905-27a1-443a-b9c6-256a0777425b/download/aw_pagasts.csv"
+ADDRESS_IMPORT_AW_PILSETA_URL = os.environ.get("ADDRESS_IMPORT_AW_PILSETA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/ee02baa4-2bc3-4f77-a6cb-5427a3e9befe/download/aw_pilseta.csv"
+ADDRESS_IMPORT_AW_CIEMS_URL = os.environ.get("ADDRESS_IMPORT_AW_CIEMS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/0d3810f4-1ac0-4fba-8b10-0188084a361b/download/aw_ciems.csv"
+ADDRESS_IMPORT_AW_IELA_URL = os.environ.get("ADDRESS_IMPORT_AW_IELA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/3c4ab802-76cf-433c-9c1c-89215e28d833/download/aw_iela.csv"
+ADDRESS_IMPORT_AW_EKA_URL = os.environ.get("ADDRESS_IMPORT_AW_EKA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/a510737a-18ce-400f-ad4b-04fce5228272/download/aw_eka.csv"
+ADDRESS_IMPORT_AW_DZIV_URL = os.environ.get("ADDRESS_IMPORT_AW_DZIV_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/b83be373-f444-4f50-9b98-28741845325e/download/aw_dziv.csv"
+ADDRESS_IMPORT_WEEKDAY = int(os.environ.get("ADDRESS_IMPORT_WEEKDAY", "6"))
+ADDRESS_IMPORT_HOUR = int(os.environ.get("ADDRESS_IMPORT_HOUR", "1"))
+ADDRESS_IMPORT_MAX_DROP_RATIO = float(os.environ.get("ADDRESS_IMPORT_MAX_DROP_RATIO", "0.50"))
+ADDRESS_IMPORT_DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("ADDRESS_IMPORT_DOWNLOAD_TIMEOUT_SECONDS", "30"))
+
 MIDDLEWARE = [
     "apps.core.middleware.LocalInsecureCookieMiddleware",
     "django.middleware.security.SecurityMiddleware",

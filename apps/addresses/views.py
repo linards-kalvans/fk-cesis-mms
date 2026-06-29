@@ -9,7 +9,7 @@ from django.shortcuts import redirect
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
-from apps.addresses.services import search_addresses
+from apps.addresses.services import search_addresses, search_apartments
 
 
 def _require_verified_parent(view):
@@ -32,6 +32,17 @@ def autocomplete(request):
     """Return address suggestions for the authenticated user."""
     query = request.GET.get("q", "")
     group_id = request.GET.get("group")
+    building_id = request.GET.get("building")
+    parsed_building_id: int | None = None
+    if building_id is not None:
+        try:
+            parsed_building_id = int(building_id)
+        except ValueError:
+            parsed_building_id = None
+    if parsed_building_id is not None:
+        results = search_apartments(query, building_id=parsed_building_id)
+        return JsonResponse({"results": results})
+
     parsed_group_id: int | None = None
     if group_id is not None:
         try:

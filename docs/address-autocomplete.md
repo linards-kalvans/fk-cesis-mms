@@ -14,7 +14,7 @@ powered by the official Latvian address register (VZD VARIS open data).
 
 ## Imported files
 
-The first slice imports only the following six VARIS files:
+The importer downloads and indexes the following seven VARIS files:
 
 - `AW_NOVADS.CSV` — municipalities
 - `AW_PAGASTS.CSV` — parishes
@@ -22,12 +22,28 @@ The first slice imports only the following six VARIS files:
 - `AW_CIEMS.CSV` — villages and small villages
 - `AW_IELA.CSV` — streets
 - `AW_EKA.CSV` — buildings and land-unit addresses
+- `AW_DZIV.CSV` — apartment / unit addresses, shown only after a building is selected
 
-Only `AW_EKA` rows with `STATUSS = "EKS"` are indexed. Building rows are attached to a street group when their parent is a street, and to a locality group when their parent is a village, parish, or city without an intervening street. Apartment / unit rows from `AW_DZIV` are not imported.
+Only rows with `STATUSS = "EKS"` are indexed. Building rows are attached to a street group when their parent is a street, and to a locality group when their parent is a village, parish, or city without an intervening street. Apartments are linked to their parent building by `AW_DZIV.VKUR_CD == AW_EKA.KODS`.
+
+## Scheduled import
+
+The app registers a weekly django-q job named `address-vzd-weekly-import`.
+By default it runs Sunday 01:00 Europe/Riga and downloads the official data.gov.lv VARIS CSV files.
+
+The job runs when `ADDRESS_AUTOCOMPLETE_REGION_CODES` is configured. If no region codes are configured, it skips without creating a failed import run.
+
+Source URLs have built-in defaults and can be overridden with `ADDRESS_IMPORT_AW_*_URL` env vars.
 
 ## Import command
 
-Download the current CSV files and run:
+With no file arguments, the command downloads the configured/default URLs:
+
+```bash
+uv run python manage.py import_addresses --region-code <KODS>
+```
+
+You can also provide local CSV paths (any missing file is downloaded instead):
 
 ```bash
 uv run python manage.py import_addresses \
@@ -37,6 +53,7 @@ uv run python manage.py import_addresses \
   --ciems /path/to/AW_CIEMS.CSV \
   --iela /path/to/AW_IELA.CSV \
   --eka /path/to/AW_EKA.CSV \
+  --dziv /path/to/AW_DZIV.CSV \
   --region-code <KODS>
 ```
 
@@ -54,13 +71,10 @@ ADDRESS_AUTOCOMPLETE_REGION_CODES=123456789,987654321
 
 ## Scope limits
 
-- First slice uses `AW_EKA` only; apartment / unit addresses (`AW_DZIV`) are
-  not imported.
 - Autocomplete is assist-only: parents can always type an address manually.
 - No hard validation requires the address to exist in the imported data.
 - No VZD object codes are persisted on `RegistrationApplication`, `Guardian`,
   or `Member` records.
-- Refresh is manual in the first slice; scheduled import jobs are deferred.
 
 ## Smoke checks
 
@@ -87,5 +101,8 @@ address is not found, the registration form falls back to the existing plain
 text address inputs. Registration submission is never blocked by the
 autocomplete feature.
 
-The import command exits with an error if no region codes are configured or if
-the CSV files cannot be parsed; it never leaves a half-empty index behind.
+Failed downloads, parse errors, or imports that produce zero selectable rows
+keep the previous index. A suspicious drop greater than
+`ADDRESS_IMPORT_MAX_DROP_RATIO` (default `0.50`) also fails the run and keeps
+old data. Failed runs are recorded in `AddressImportRun` and visible in Django
+admin.

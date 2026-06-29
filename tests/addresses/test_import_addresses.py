@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from django.core.management import CommandError, call_command
@@ -27,54 +28,6 @@ def write_utf8_csv(path: Path, header: str, rows: list[str]) -> Path:
     return path
 
 
-@pytest.fixture
-def vzd_files(tmp_path):
-    """Minimal Cesis-area fixture: one novads (300), one pilseta (200 under 300),
-    one street (100 under 200), two active building rows + one DEL row.
-
-    All strings are ASCII-safe so the ISO-8859-1 encoder never fails.
-    """
-    from apps.addresses.services import VzdAddressFiles
-
-    novads = write_csv(
-        tmp_path / "AW_NOVADS.CSV",
-        "KODS,STATUSS,NOSAUKUMS,VKUR_CD",
-        ["300,EKS,Cesu nov.,"],
-    )
-    pagasts = write_csv(
-        tmp_path / "AW_PAGASTS.CSV",
-        "KODS,STATUSS,NOSAUKUMS,VKUR_CD",
-        [],
-    )
-    pilseta = write_csv(
-        tmp_path / "AW_PILSETA.CSV",
-        "KODS,STATUSS,NOSAUKUMS,VKUR_CD",
-        ["200,EKS,Cesis,300"],
-    )
-    ciems = write_csv(
-        tmp_path / "AW_CIEMS.CSV",
-        "KODS,STATUSS,NOSAUKUMS,VKUR_CD",
-        [],
-    )
-    iela = write_csv(
-        tmp_path / "AW_IELA.CSV",
-        "KODS,STATUSS,NOSAUKUMS,VKUR_CD",
-        ["100,EKS,Raina iela,200"],
-    )
-    eka = write_csv(
-        tmp_path / "AW_EKA.CSV",
-        "KODS,STATUSS,VKUR_CD,NOSAUKUMS,STD,ATRIB,KOORD_X,KOORD_Y,DD_N,DD_E",
-        [
-            '401,EKS,100,1,"Raina iela 1, Cesis, Cesu nov.",LV-4101,,,,',
-            '402,EKS,100,2,"Raina iela 2, Cesis, Cesu nov.",LV-4101,,,,',
-            '403,DEL,100,3,"Raina iela 3, Cesis, Cesu nov.",LV-4101,,,,',
-        ],
-    )
-    return VzdAddressFiles(
-        novads=novads, pagasts=pagasts, pilseta=pilseta, ciems=ciems, iela=iela, eka=eka,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Service-level import
 # ---------------------------------------------------------------------------
@@ -89,7 +42,7 @@ def test_import_vzd_addresses_creates_group_and_active_entries(vzd_files):
 
     assert run.status == AddressImportRun.Status.SUCCEEDED
     assert run.group_count == 1
-    assert run.entry_count == 2
+    assert run.entry_count == 3
     assert AddressGroup.objects.get().label == "Raina iela, Cesis"
     assert (
         list(AddressEntry.objects.order_by("vzd_code").values_list("vzd_code", flat=True))
@@ -189,16 +142,17 @@ def test_import_command_creates_group_and_entries_from_local_csv(vzd_files):
         ciems=str(vzd_files.ciems),
         iela=str(vzd_files.iela),
         eka=str(vzd_files.eka),
+        dziv=str(vzd_files.dziv),
         region_code=["300"],
         stdout=out,
     )
 
     output = out.getvalue()
-    # Must report the expected counts.
-    assert "Imported 1 address groups and 2 address entries." in output, (
+    # Must report building + apartment entries.
+    assert "Imported 1 address groups and 3 address entries." in output, (
         f"unexpected command output: {output}"
     )
-    # Must produce the right number of rows.
+    # Buildings (not apartments) in AddressEntry.
     assert AddressGroup.objects.count() == 1
     assert AddressEntry.objects.count() == 2
 
@@ -216,6 +170,7 @@ def test_import_command_excludes_other_regions(vzd_files):
         ciems=str(vzd_files.ciems),
         iela=str(vzd_files.iela),
         eka=str(vzd_files.eka),
+        dziv=str(vzd_files.dziv),
         region_code=["999"],
         stdout=out,
     )
@@ -241,11 +196,12 @@ def test_import_command_uses_setting_region_codes_when_flag_omitted(vzd_files):
         ciems=str(vzd_files.ciems),
         iela=str(vzd_files.iela),
         eka=str(vzd_files.eka),
+        dziv=str(vzd_files.dziv),
         stdout=out,
     )
 
     output = out.getvalue()
-    assert "Imported 1 address groups and 2 address entries." in output, (
+    assert "Imported 1 address groups and 3 address entries." in output, (
         f"unexpected command output: {output}"
     )
     assert AddressGroup.objects.count() == 1
@@ -263,6 +219,7 @@ def test_import_command_raises_on_failed_import(vzd_files):
             ciems=str(vzd_files.ciems),
             iela=str(vzd_files.iela),
             eka=str(vzd_files.eka),
+            dziv=str(vzd_files.dziv),
             region_code=["300"],
         )
 
@@ -354,3 +311,71 @@ def test_import_creates_locality_group_for_non_street_parent(vzd_files_priekuli)
     assert entry.group == group
     assert entry.vzd_code == "501"
     assert entry.postal_code == "LV-4126"
+
+
+# ---------------------------------------------------------------------------
+# Apartment import from AW_DZIV
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_import_vzd_addresses_imports_active_apartments(vzd_files):
+    from apps.addresses.models import AddressApartment, AddressEntry, AddressImportRun
+    from apps.addresses.services import import_vzd_addresses
+
+    run = import_vzd_addresses(vzd_files, region_codes=["300"])
+
+    assert run.status == AddressImportRun.Status.SUCCEEDED
+    assert run.entry_count == 3
+    building = AddressEntry.objects.get(vzd_code="401")
+    assert list(
+        AddressApartment.objects.order_by("vzd_code").values_list("vzd_code", "building_id", "label")
+    ) == [
+        ("9001", building.id, "Raina iela 1-3, Cesis, Cesu nov."),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# No-arg command downloads URLs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@override_settings(ADDRESS_AUTOCOMPLETE_REGION_CODES=["300"])
+def test_import_command_downloads_when_file_args_omitted(vzd_files):
+    from apps.addresses.models import AddressEntry
+
+    with patch(
+        "apps.addresses.management.commands.import_addresses.download_vzd_address_files",
+        return_value=vzd_files,
+    ) as mocked:
+        call_command("import_addresses")
+
+    mocked.assert_called_once()
+    assert AddressEntry.objects.count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Local file flags override downloaded files
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+@override_settings(ADDRESS_AUTOCOMPLETE_REGION_CODES=["300"])
+def test_import_command_local_flags_override_downloaded_files(vzd_files, tmp_path):
+    from apps.addresses.models import AddressEntry
+
+    downloaded = vzd_files
+    override_eka = write_csv(
+        tmp_path / "OVERRIDE_EKA.CSV",
+        "KODS,STATUSS,VKUR_CD,NOSAUKUMS,STD,ATRIB,KOORD_X,KOORD_Y,DD_N,DD_E",
+        ['777,EKS,100,7,"Raina iela 7, Cesis, Cesu nov.",LV-4101,,,,'],
+    )
+
+    with patch(
+        "apps.addresses.management.commands.import_addresses.download_vzd_address_files",
+        return_value=downloaded,
+    ):
+        call_command("import_addresses", eka=str(override_eka))
+
+    assert list(AddressEntry.objects.values_list("vzd_code", flat=True)) == ["777"]
