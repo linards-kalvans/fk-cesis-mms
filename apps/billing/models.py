@@ -165,6 +165,10 @@ class BillingInvoice(TimeStampedModel):
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(blank=True, default="")
 
+    external_cancellation_action = models.CharField(max_length=16, blank=True, default="")
+    external_cancellation_status = models.CharField(max_length=16, blank=True, default="")
+    external_cancellation_error_code = models.CharField(max_length=64, blank=True, default="")
+
     class Meta:
         constraints = [
             models.UniqueConstraint(

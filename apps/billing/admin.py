@@ -35,6 +35,8 @@ class BillingInvoiceInline(admin.TabularInline):
     fields = (
         "sequence", "due_date", "amount", "external_invoice_id", "external_status",
         "payment_status", "paid_to_date", "balance", "last_payment_date", "last_synced_at",
+        "cancelled_at", "cancellation_reason",
+        "external_cancellation_action", "external_cancellation_status", "external_cancellation_error_code",
     )
     readonly_fields = fields
 

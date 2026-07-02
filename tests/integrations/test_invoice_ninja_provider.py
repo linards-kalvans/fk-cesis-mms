@@ -147,3 +147,71 @@ def test_duplicate_number_recovers_existing_id(active_plan, guardian):
     ):
         result = invoice_ninja.create_invoice(rec, bi)
     assert result.external_id == "inv-existing"
+
+
+# -- P8 rework: archive_invoice + cancel_invoice HTTP shapes (F, G) --
+
+
+@override_settings(**INVOICE_NINJA)
+def test_archive_invoice_posts_to_bulk_archive():
+    """archive_invoice('abc') must POST /invoices/bulk with
+    {'action':'archive','ids':['abc']}. Expected RED: function absent."""
+    from apps.integrations import invoice_ninja
+
+    fake = SimpleNamespace(status_code=200, json=lambda: {}, text="")
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request", return_value=fake
+    ) as m:
+        invoice_ninja.archive_invoice("IN-ABC-1")
+
+    call_kwargs = m.call_args.kwargs
+    assert call_kwargs["json"]["action"] == "archive"
+    assert call_kwargs["json"]["ids"] == ["IN-ABC-1"]
+    assert "/invoices/bulk" in m.call_args.args[1]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_cancel_invoice_posts_to_bulk_cancel_with_reason():
+    """cancel_invoice('abc', 'reason') must POST /invoices/bulk with
+    {'action':'cancel','ids':['abc'],'reason':'reason'}. Expected RED."""
+    from apps.integrations import invoice_ninja
+
+    fake = SimpleNamespace(status_code=200, json=lambda: {}, text="")
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request", return_value=fake
+    ) as m:
+        invoice_ninja.cancel_invoice("IN-SENT-1", "Pārtraukta dalība")
+
+    call_kwargs = m.call_args.kwargs
+    assert call_kwargs["json"]["action"] == "cancel"
+    assert call_kwargs["json"]["ids"] == ["IN-SENT-1"]
+    assert call_kwargs["json"]["reason"] == "Pārtraukta dalība"
+    assert "/invoices/bulk" in m.call_args.args[1]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_archive_invoice_auth_error_maps():
+    """archive_invoice auth failure (401) maps to AuthError."""
+    from apps.integrations import invoice_ninja
+    from apps.integrations.invoice_platform import InvoicePlatformAuthError
+
+    fake = SimpleNamespace(status_code=401, json=lambda: {}, text="nope")
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request", return_value=fake
+    ):
+        with pytest.raises(InvoicePlatformAuthError):
+            invoice_ninja.archive_invoice("IN-ABC-1")
+
+
+@override_settings(**INVOICE_NINJA)
+def test_cancel_invoice_timeout_maps_to_transient():
+    """cancel_invoice timeout maps to TransientError."""
+    from apps.integrations import invoice_ninja
+    from apps.integrations.invoice_platform import InvoicePlatformTransientError
+
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request",
+        side_effect=requests.Timeout("t"),
+    ):
+        with pytest.raises(InvoicePlatformTransientError):
+            invoice_ninja.cancel_invoice("IN-SENT-1", "reason")

@@ -138,6 +138,28 @@ def email_invoice(external_invoice_id: str) -> None:
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
 
 
+def archive_invoice(external_invoice_id: str) -> None:
+    mode = _mode()
+    if mode == "stub":
+        return None
+    if mode == "invoiceninja":
+        from apps.integrations import invoice_ninja
+
+        return invoice_ninja.archive_invoice(external_invoice_id)
+    raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
+
+
+def cancel_invoice(external_invoice_id: str, reason: str) -> None:
+    mode = _mode()
+    if mode == "stub":
+        return None
+    if mode == "invoiceninja":
+        from apps.integrations import invoice_ninja
+
+        return invoice_ninja.cancel_invoice(external_invoice_id, reason)
+    raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
+
+
 def create_credit_note(adjustment) -> CreditResult:
     mode = _mode()
     if mode == "stub":

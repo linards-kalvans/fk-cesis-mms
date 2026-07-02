@@ -281,3 +281,216 @@ def test_non_staff_verified_parent_cannot_post_actions(
         {"action": "minor_amendment", "note": "test"},
     )
     assert resp.status_code in (302, 403, 404)
+
+
+# -- P8 rework: Void disclosure explanation (J extended) --
+
+
+def test_void_disclosure_explains_document_only_scope(
+    approved_with_signed_agreement, staff_client
+):
+    """Void disclosure must explain it only annuls the agreement document
+    and does NOT change participation or invoices. Expected RED."""
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+
+    # The void <details> must contain explanatory copy that it is
+    # document-only — doesn't change membership or billing.
+    assert "dokument" in html.lower(), (
+        "void disclosure must mention the document scope"
+    )
+    # Must mention that participation/invoices are NOT affected.
+    # At minimum one of these negations must appear:
+    negations = ["nemaina dalību", "neietekmē", "neizmaina", "neattiecas"]
+    found_any = any(phrase in html.lower() for phrase in negations)
+    assert found_any, (
+        f"void disclosure must explain limited scope; expected one of {negations}"
+    )
+
+
+# -- P8 rework: Discontinue disclosure explanation (J extended) --
+
+
+def test_discontinue_disclosure_explains_invoice_processing(
+    approved_with_signed_agreement, staff_client
+):
+    """Discontinue disclosure must explain it stops participation and
+    processes selected invoices. Expected RED."""
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+
+    # The discontinue <details> must mention invoice processing.
+    assert "norēķin" in html.lower(), (
+        "discontinue disclosure must mention invoice processing"
+    )
+    # Must mention participation ending.
+    assert "dalīb" in html.lower(), (
+        "discontinue disclosure must mention participation"
+    )
+
+
+# -- P8 rework: Label changes (J) --
+
+
+def test_agreement_module_shows_anule_liguma_dokumentu(
+    approved_with_signed_agreement, staff_client
+):
+    """Void disclosure must show 'Anulēt līguma dokumentu' label
+    (was 'Atcelt līgumu'). Expected RED: string not present yet."""
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+    assert "Anulēt līguma dokumentu" in html, (
+        "expected new void label in admin page"
+    )
+
+
+def test_agreement_module_shows_partraukt_dalibu_un_norekinus(
+    approved_with_signed_agreement, staff_client
+):
+    """Discontinue disclosure must show 'Pārtraukt dalību un norēķinus'
+    label (was 'Pārtraukt dalību'). Expected RED: not present yet."""
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+    assert "Pārtraukt dalību un norēķinus" in html, (
+        "expected new discontinue label in admin page"
+    )
+
+
+def test_old_void_label_atcelt_ligumu_not_in_page(
+    approved_with_signed_agreement, staff_client
+):
+    """The old 'Atcelt līgumu' label must not appear as a void-disclosure
+    summary in the admin page. Expected RED: it IS present now."""
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+    assert "Atcelt līgumu" not in html, (
+        "old void label must be replaced by 'Anulēt līguma dokumentu'"
+    )
+
+
+# -- P8 rework: Partial invoice blocks (K) --
+
+
+def test_post_discontinuation_with_partial_invoice_blocks(
+    approved_with_signed_agreement, staff_client, active_plan,
+    billing_record_factory,
+):
+    """When a selected invoice is partially paid, the admin action must block
+    with a Latvian error and leave agreement/member/invoices UNCHANGED."""
+    from apps.billing.models import BillingInvoice
+
+    member = approved_with_signed_agreement.approved_member
+    record = billing_record_factory(member)
+
+    partial = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=99,
+        due_date="2026-12-20",
+        amount=Decimal("30.00"),
+        external_invoice_id="IN-PARTIAL-1",
+        external_status="sent",
+        payment_status="partial",
+    )
+
+    resp = staff_client.post(
+        _action_url(approved_with_signed_agreement.id),
+        {
+            "action": "discontinue_member",
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+            "selected_invoices": [str(partial.pk)],
+        },
+        follow=True,
+    )
+    html = resp.content.decode("utf-8")
+    assert resp.status_code == 200
+
+    # Must show some Latvian error message about the partially paid invoice
+    assert "apmaks" in html.lower(), (
+        "expected a Latvian error about the partially paid invoice"
+    )
+
+    # Nothing mutated — agreement still signed
+    agreement = Agreement.objects.filter(
+        member=member, is_current=True
+    ).first()
+    assert agreement.state == Agreement.State.SIGNED, (
+        "agreement must stay signed after partial block"
+    )
+    member.refresh_from_db()
+    assert member.status == member.Status.ACTIVE, (
+        "member must stay active after partial block"
+    )
+
+    # Invoice unchanged
+    partial.refresh_from_db()
+    assert partial.cancelled_at is None, (
+        "invoice must not be cancelled on block"
+    )
+    assert partial.payment_status == "partial", (
+        "payment status must be unchanged"
+    )
+
+
+# -- P8 rework: Post-discontinuation cancelled invoice visibility (L) --
+
+
+def test_post_discontinuation_shows_cancelled_invoice_on_change_page(
+    approved_with_signed_agreement, staff_client, active_plan,
+    billing_record_factory,
+):
+    """After a successful discontinuation with a selected sent-unpaid invoice,
+    the admin change page must still show the cancelled invoice state
+    even though the member is now discontinued."""
+    from apps.billing.models import BillingInvoice
+    from apps.agreements.services import discontinue_agreement
+    import datetime
+
+    member = approved_with_signed_agreement.approved_member
+    record = billing_record_factory(member)
+
+    sent_unpaid = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=99,
+        due_date="2026-12-20",
+        amount=Decimal("30.00"),
+        external_invoice_id="IN-CANCEL-VIS",
+        external_status="sent",
+        payment_status="unpaid",
+    )
+
+    agreement = Agreement.objects.filter(
+        member=member, is_current=True
+    ).first()
+    discontinue_agreement(
+        agreement=agreement,
+        actor=None,
+        effective_date=datetime.date(2026, 9, 1),
+        reason="Pārcelšanās",
+        selected_invoice_ids=[sent_unpaid.pk],
+    )
+
+    # Verify member is discontinued
+    member.refresh_from_db()
+    assert member.status == member.Status.DISCONTINUED
+
+    # Verify the invoice is locally cancelled
+    sent_unpaid.refresh_from_db()
+    assert sent_unpaid.cancelled_at is not None, (
+        "invoice must be locally cancelled"
+    )
+
+    # Open the admin change page — must still show the invoice details
+    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
+    html = resp.content.decode("utf-8")
+    assert resp.status_code == 200
+
+    # After discontinuation, the agreement state must be visible
+    assert "Pārtraukts" in html, (
+        "agreement state 'Pārtraukts' must be visible on change page"
+    )
+
+    # The cancelled invoice's IN id must still be visible on the page
+    assert "IN-CANCEL-VIS" in html, (
+        "cancelled invoice external id must still be visible on change page"
+    )

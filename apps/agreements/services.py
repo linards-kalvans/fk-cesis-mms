@@ -288,12 +288,14 @@ def start_material_amendment(
     return cast(Agreement, new_agreement)
 
 
-def _credit_summary_for_email(adjustments: list) -> str:
-    """Parent-safe credit-note summary for the discontinuation email."""
-    if not adjustments:
-        return "Rēķinu korekcijas nav piemērotas."
-    total = sum((adj.amount for adj in adjustments), Decimal("0.00"))
-    return f"Izveidotas {len(adjustments)} rēķinu korekcijas, kopā {total} EUR."
+def _credit_summary_for_email(adjustments: list, invoice_actions: list) -> str:
+    """Parent-safe billing summary for the discontinuation email."""
+    if invoice_actions:
+        return f"Atcelti vai atcelšanai ieplānoti {len(invoice_actions)} rēķini."
+    if adjustments:
+        total = sum((adj.amount for adj in adjustments), Decimal("0.00"))
+        return f"Izveidotas {len(adjustments)} rēķinu korekcijas, kopā {total} EUR."
+    return "Rēķinu korekcijas nav piemērotas."
 
 
 def discontinue_agreement(
@@ -308,8 +310,9 @@ def discontinue_agreement(
     Billing mutations, agreement/member state, and the lifecycle event are all
     written inside one ``transaction.atomic()`` block. The billing helper raises
     ``PaidInvoiceSelected`` before any write, so a paid selection blocks the
-    whole operation without side effects. Credit-note jobs and the parent email
-    are scheduled with ``transaction.on_commit`` so they only run after commit.
+    whole operation without side effects. External archive/cancel jobs and the
+    parent email are scheduled with ``transaction.on_commit`` so they only run
+    after commit.
     """
     if agreement.state != Agreement.State.SIGNED:
         raise ValueError("discontinuation requires a signed agreement")
@@ -321,7 +324,7 @@ def discontinue_agreement(
         # Billing selection raises before any mutation (paid invoice, foreign id,
         # or unclear state). It is part of the same atomic block so any failure
         # here rolls back nothing.
-        adjustments = create_discontinuation_adjustments(
+        adjustments, invoice_actions = create_discontinuation_adjustments(
             member=member,
             event=None,
             invoice_ids=selected_invoice_ids,
@@ -351,7 +354,10 @@ def discontinue_agreement(
             note=reason,
             effective_date=effective_date,
             actor_label=_actor_label(actor),
-            metadata={"adjustment_ids": [adj.pk for adj in adjustments]},
+            metadata={
+                "adjustment_ids": [adj.pk for adj in adjustments],
+                "invoice_actions": invoice_actions,
+            },
         )
 
         # Link created adjustments to the lifecycle event.
@@ -359,11 +365,16 @@ def discontinue_agreement(
             adj.agreement_event = event
             adj.save(update_fields=["agreement_event", "updated_at"])
 
-        # Schedule credit-note jobs to run only after the transaction commits.
-        for adj in adjustments:
-            transaction.on_commit(
-                lambda adj_id=adj.pk: _enqueue_create_credit_note(adj_id)
-            )
+        # Schedule external archive/cancel jobs to run only after commit.
+        for invoice_id, action in invoice_actions:
+            if action == "archive":
+                transaction.on_commit(
+                    lambda inv_id=invoice_id: _enqueue_archive_invoice(inv_id)
+                )
+            elif action == "cancel":
+                transaction.on_commit(
+                    lambda inv_id=invoice_id: _enqueue_cancel_invoice(inv_id)
+                )
 
     # Email is sent after the atomic block so it only happens once the
     # discontinuation state is actually committed.
@@ -371,7 +382,7 @@ def discontinue_agreement(
         agreement=agreement,
         reason=reason,
         effective_date=effective_date,
-        credit_summary=_credit_summary_for_email(adjustments),
+        credit_summary=_credit_summary_for_email(adjustments, invoice_actions),
     )
 
     record_audit_event(
@@ -382,6 +393,7 @@ def discontinue_agreement(
             "effective_date": str(effective_date),
             "reason": reason,
             "adjustment_count": len(adjustments),
+            "invoice_action_count": len(invoice_actions),
         },
     )
     return agreement
@@ -392,6 +404,20 @@ def _enqueue_create_credit_note(adjustment_id: int) -> None:
     from apps.integrations.tasks import enqueue_create_credit_note
 
     enqueue_create_credit_note(adjustment_id)
+
+
+def _enqueue_archive_invoice(invoice_id: int) -> None:
+    """Lazy import wrapper to avoid a circular import with tasks."""
+    from apps.integrations.tasks import enqueue_archive_invoice
+
+    enqueue_archive_invoice(invoice_id)
+
+
+def _enqueue_cancel_invoice(invoice_id: int) -> None:
+    """Lazy import wrapper to avoid a circular import with tasks."""
+    from apps.integrations.tasks import enqueue_cancel_invoice
+
+    enqueue_cancel_invoice(invoice_id)
 
 
 def _render_and_send_discontinued_email(

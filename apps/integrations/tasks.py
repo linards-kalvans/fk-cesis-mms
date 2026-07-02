@@ -507,6 +507,91 @@ def push_billing_record(record_id: int) -> None:
     record.save(update_fields=["external_status", "external_error_code", "updated_at"])
 
 
+def enqueue_archive_invoice(invoice_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.archive_invoice_job", invoice_id)
+    except RetryableInvoiceError:
+        return
+
+
+def enqueue_cancel_invoice(invoice_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.cancel_invoice_job", invoice_id)
+    except RetryableInvoiceError:
+        return
+
+
+def _run_invoice_cancellation_job(
+    invoice_id: int,
+    action: str,
+    platform_call,
+) -> None:
+    from apps.billing.models import BillingInvoice
+
+    try:
+        invoice = BillingInvoice.objects.get(pk=invoice_id)
+    except BillingInvoice.DoesNotExist:
+        return
+
+    if not invoice.external_invoice_id:
+        return
+
+    try:
+        platform_call(invoice.external_invoice_id)
+    except Exception as exc:
+        code, retry = _classify_invoice_error(exc)
+        invoice.external_cancellation_status = "failed"
+        invoice.external_cancellation_error_code = code
+        invoice.save(
+            update_fields=[
+                "external_cancellation_status",
+                "external_cancellation_error_code",
+                "updated_at",
+            ]
+        )
+        if retry:
+            raise RetryableInvoiceError(code) from exc
+        return
+
+    invoice.external_cancellation_status = "done"
+    invoice.external_cancellation_error_code = ""
+    invoice.save(
+        update_fields=[
+            "external_cancellation_status",
+            "external_cancellation_error_code",
+            "updated_at",
+        ]
+    )
+
+
+def archive_invoice_job(invoice_id: int) -> None:
+    _run_invoice_cancellation_job(
+        invoice_id,
+        action="archive",
+        platform_call=invoice_platform.archive_invoice,
+    )
+
+
+def cancel_invoice_job(invoice_id: int) -> None:
+    from apps.billing.models import BillingInvoice
+
+    try:
+        invoice = BillingInvoice.objects.get(pk=invoice_id)
+    except BillingInvoice.DoesNotExist:
+        return
+
+    reason = invoice.cancellation_reason or ""
+
+    def _call(ext_id: str) -> None:
+        invoice_platform.cancel_invoice(ext_id, reason)
+
+    _run_invoice_cancellation_job(
+        invoice_id,
+        action="cancel",
+        platform_call=_call,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Payment sync pipeline — P6 Slice C
 # ---------------------------------------------------------------------------

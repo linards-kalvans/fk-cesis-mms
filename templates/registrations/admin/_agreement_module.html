@@ -82,7 +82,8 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
   </details>
 
   <details class="mms-review-actions__disclosure">
-    <summary>Pārtraukt dalību</summary>
+    <summary>Pārtraukt dalību un norēķinus</summary>
+    <p class="help">Pārtrauc dalību un apstrādā tikai atzīmētos norēķinu rēķinus.</p>
     <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
       {% csrf_token %}
       <div class="form-row">
@@ -126,21 +127,22 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
         </table>
       </fieldset>
       {% endif %}
-      <button type="submit" name="action" value="discontinue_member">Pārtraukt dalību</button>
+      <button type="submit" name="action" value="discontinue_member">Pārtraukt dalību un norēķinus</button>
     </form>
   </details>
   {% endif %}
 
   {% if agreement.state != "void" %}
   <details class="mms-review-actions__disclosure">
-    <summary>Atcelt līgumu</summary>
+    <summary>Anulēt līguma dokumentu</summary>
+    <p class="help">Anulē tikai līguma dokumentu; nemaina dalību un rēķinus.</p>
     <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
       {% csrf_token %}
       <div class="form-row">
         <label for="void_reason">Iemesls:</label>
         <textarea name="void_reason" id="void_reason" rows="3"></textarea>
       </div>
-      <button type="submit" name="action" value="void_agreement">Atcelt</button>
+      <button type="submit" name="action" value="void_agreement">Anulēt dokumentu</button>
     </form>
   </details>
   {% endif %}
@@ -179,6 +181,38 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
       </li>
       {% endfor %}
     </ul>
+  </div>
+  {% endif %}
+
+  {% if discontinued_billing_invoices %}
+  <div class="module mms-review-discontinued-invoices">
+    <h3>Atceltie rēķini</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Sezona</th>
+          <th>Secība</th>
+          <th>Termiņš</th>
+          <th>Summa</th>
+          <th>IN ID</th>
+          <th>Darbība</th>
+          <th>Statuss</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in discontinued_billing_invoices %}
+        <tr>
+          <td>{{ invoice.billing_record.season }}</td>
+          <td>{{ invoice.sequence }}</td>
+          <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+          <td>{{ invoice.amount }}</td>
+          <td>{{ invoice.external_invoice_id|default:"—" }}</td>
+          <td>{{ invoice.external_cancellation_action|default:"—" }}</td>
+          <td>{{ invoice.external_cancellation_status|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
   {% endif %}
 </div>

@@ -239,6 +239,39 @@ def email_invoice(external_invoice_id: str) -> None:
         )
 
 
+def archive_invoice(external_invoice_id: str) -> None:
+    """Archive a draft Invoice Ninja invoice via the bulk action."""
+    api_url, api_key = _require_config()
+    resp = _request(
+        "POST",
+        f"{api_url}/invoices/bulk",
+        api_key,
+        json={"action": "archive", "ids": [external_invoice_id]},
+    )
+    if resp.status_code >= 400:
+        raise InvoicePlatformConfigError(
+            f"invoice archive rejected: {resp.status_code} {resp.text}"
+        )
+
+
+def cancel_invoice(external_invoice_id: str, reason: str) -> None:
+    """Cancel a sent Invoice Ninja invoice via the bulk action."""
+    api_url, api_key = _require_config()
+    body = {"action": "cancel", "ids": [external_invoice_id]}
+    if reason:
+        body["reason"] = reason
+    resp = _request(
+        "POST",
+        f"{api_url}/invoices/bulk",
+        api_key,
+        json=body,
+    )
+    if resp.status_code >= 400:
+        raise InvoicePlatformConfigError(
+            f"invoice cancel rejected: {resp.status_code} {resp.text}"
+        )
+
+
 def _to_decimal(value) -> Decimal:
     return Decimal(str(value if value not in (None, "") else "0"))
 

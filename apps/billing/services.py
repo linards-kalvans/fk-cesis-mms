@@ -138,18 +138,22 @@ def is_invoice_due_to_send(invoice, today: datetime.date) -> bool:
 def create_discontinuation_adjustments(member, event, invoice_ids, reason: str):
     """Process selected BillingInvoice rows for a member discontinuation.
 
-    - Paid invoices block the operation (PaidInvoiceSelected).
+    - Paid or partially paid invoices block the operation (PaidInvoiceSelected).
     - Invoices without an external id and never sent are cancelled locally.
-    - Sent unpaid/partial invoices with an external id create a BillingAdjustment
-      and are queued for credit-note creation by the caller.
+    - Invoice Ninja draft invoices (external_status='created') are cancelled
+      locally and queued for external archive.
+    - Invoice Ninja sent unpaid invoices (external_status='sent') are cancelled
+      locally and queued for external cancel.
 
-    Returns the list of created BillingAdjustment rows (excluding locally
-    cancelled invoices).
+    Returns ``(adjustments, invoice_actions)`` where ``adjustments`` is a list
+    of created BillingAdjustment rows (empty for normal unpaid invoices) and
+    ``invoice_actions`` is a list of ``(invoice_pk, action)`` tuples describing
+    pending external archive/cancel jobs the caller must enqueue.
     """
-    from apps.billing.models import BillingAdjustment, BillingInvoice, PaymentStatus
+    from apps.billing.models import BillingInvoice, PaymentStatus
 
     if not invoice_ids:
-        return []
+        return [], []
 
     selected = list(
         BillingInvoice.objects.filter(
@@ -159,14 +163,26 @@ def create_discontinuation_adjustments(member, event, invoice_ids, reason: str):
     if len(selected) != len(invoice_ids):
         raise ValueError("one or more selected invoices are foreign to this member")
 
-    # Block on paid invoices before any mutation.
+    # Validate every selected invoice before any mutation.
     for invoice in selected:
-        if invoice.payment_status == PaymentStatus.PAID:
+        if invoice.payment_status in (PaymentStatus.PAID, PaymentStatus.PARTIAL):
             raise PaidInvoiceSelected(
                 f"Invoice {invoice.pk} is paid; refund manually in Invoice Ninja."
             )
+        if not invoice.external_invoice_id and invoice.sent_at is not None:
+            raise DiscontinuationInvoiceError(
+                "Rēķins atzīmēts kā nosūtīts, bet trūkst Invoice Ninja identifikatora."
+            )
+        if invoice.external_invoice_id and invoice.external_status not in (
+            "created",
+            "sent",
+        ):
+            raise DiscontinuationInvoiceError(
+                f"Rēķinam {invoice.pk} nav derīgs Invoice Ninja statuss."
+            )
 
-    adjustments = []
+    adjustments: list = []
+    invoice_actions: list[tuple[int, str]] = []
     now = timezone.now()
     for invoice in selected:
         if not invoice.external_invoice_id and invoice.sent_at is None:
@@ -177,23 +193,27 @@ def create_discontinuation_adjustments(member, event, invoice_ids, reason: str):
             )
             continue
 
-        if not invoice.external_invoice_id and invoice.sent_at is not None:
-            raise DiscontinuationInvoiceError(
-                "Rēķins atzīmēts kā nosūtīts, bet trūkst Invoice Ninja identifikatora."
-            )
-
-        # Sent (or pushed) invoices with an external id get a credit-note adjustment.
-        adjustment = BillingAdjustment.objects.create(
-            billing_record=invoice.billing_record,
-            invoice=invoice,
-            agreement_event=event,
-            kind=BillingAdjustment.Kind.CREDIT_NOTE,
-            amount=invoice.amount,
-            reason=reason,
+        invoice.cancelled_at = now
+        invoice.cancellation_reason = reason
+        if invoice.external_status == "created":
+            invoice.external_cancellation_action = "archive"
+        else:
+            invoice.external_cancellation_action = "cancel"
+        invoice.external_cancellation_status = "pending"
+        invoice.external_cancellation_error_code = ""
+        invoice.save(
+            update_fields=[
+                "cancelled_at",
+                "cancellation_reason",
+                "external_cancellation_action",
+                "external_cancellation_status",
+                "external_cancellation_error_code",
+                "updated_at",
+            ]
         )
-        adjustments.append(adjustment)
+        invoice_actions.append((invoice.pk, invoice.external_cancellation_action))
 
-    return adjustments
+    return adjustments, invoice_actions
 
 
 def create_draft_billing_for_member(member, agreement):
