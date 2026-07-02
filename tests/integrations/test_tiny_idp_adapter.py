@@ -17,7 +17,7 @@ from apps.integrations.tiny_idp import (
     normalize_tiny_idp_response,
 )
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.external_contract]
 
 
 # ---------------------------------------------------------------------------

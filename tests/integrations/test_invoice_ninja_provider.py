@@ -7,7 +7,7 @@ from unittest.mock import patch
 import requests
 from django.test import override_settings
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.external_contract]
 
 INVOICE_NINJA = dict(
     INVOICE_PROVIDER_MODE="invoiceninja",

@@ -17,7 +17,7 @@ from apps.members.models import TrainingGroup
 from apps.registrations.services import approve_application
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 @pytest.fixture

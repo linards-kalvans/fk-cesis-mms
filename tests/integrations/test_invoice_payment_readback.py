@@ -6,6 +6,8 @@ from unittest.mock import patch
 import requests
 from django.test import override_settings
 
+pytestmark = pytest.mark.external_contract
+
 INVOICE_NINJA = dict(
     INVOICE_PROVIDER_MODE="invoiceninja",
     INVOICE_NINJA_API_URL="https://in.example.com/api/v1",

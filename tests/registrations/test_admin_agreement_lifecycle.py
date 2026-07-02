@@ -21,7 +21,7 @@ from apps.agreements.services import (
 from apps.registrations.services import approve_application
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 @pytest.fixture
@@ -88,35 +88,56 @@ def _action_url(app_id):
 # -- Visibility on signed agreements --
 
 
-def test_signed_agreement_page_shows_minor_amendment_form(
+def test_signed_agreement_page_shows_lifecycle_forms_and_labels(
     approved_with_signed_agreement, staff_client
 ):
-    """Change page for a signed agreement must show minor amendment affordance."""
+    """Change page for a signed agreement must show the minor amendment,
+    material amendment, and discontinuation affordances with the new
+    Latvian labels and disclosure copy, and must NOT carry the old
+    void label.
+    """
     resp = staff_client.get(
         _change_url(approved_with_signed_agreement.id)
     )
     html = resp.content.decode("utf-8")
+    html_lower = html.lower()
+
+    # Lifecycle action affordances (P8 originals).
     assert "Neliels labojums" in html
-
-
-def test_signed_agreement_page_shows_material_amendment_form(
-    approved_with_signed_agreement, staff_client
-):
-    resp = staff_client.get(
-        _change_url(approved_with_signed_agreement.id)
-    )
-    html = resp.content.decode("utf-8")
     assert "Sagatavot aizvietojošu līgumu" in html
-
-
-def test_signed_agreement_page_shows_discontinuation_form(
-    approved_with_signed_agreement, staff_client
-):
-    resp = staff_client.get(
-        _change_url(approved_with_signed_agreement.id)
-    )
-    html = resp.content.decode("utf-8")
     assert "Pārtraukt dalību" in html
+
+    # Void disclosure must explain it is document-only and NOT change
+    # participation or invoices.
+    assert "dokument" in html_lower, (
+        "void disclosure must mention the document scope"
+    )
+    void_negations = ["nemaina dalību", "neietekmē", "neizmaina", "neattiecas"]
+    assert any(phrase in html_lower for phrase in void_negations), (
+        f"void disclosure must explain limited scope; expected one of {void_negations}"
+    )
+
+    # Discontinue disclosure must mention invoice processing and
+    # participation ending.
+    assert "norēķin" in html_lower, (
+        "discontinue disclosure must mention invoice processing"
+    )
+    assert "dalīb" in html_lower, (
+        "discontinue disclosure must mention participation"
+    )
+
+    # P8 rework: label changes (J).
+    assert "Anulēt līguma dokumentu" in html, (
+        "expected new void label in admin page"
+    )
+    assert "Pārtraukt dalību un norēķinus" in html, (
+        "expected new discontinue label in admin page"
+    )
+
+    # P8 rework: old void label must be gone.
+    assert "Atcelt līgumu" not in html, (
+        "old void label must be replaced by 'Anulēt līguma dokumentu'"
+    )
 
 
 # -- Generated (not signed) shows no lifecycle actions --
@@ -281,91 +302,6 @@ def test_non_staff_verified_parent_cannot_post_actions(
         {"action": "minor_amendment", "note": "test"},
     )
     assert resp.status_code in (302, 403, 404)
-
-
-# -- P8 rework: Void disclosure explanation (J extended) --
-
-
-def test_void_disclosure_explains_document_only_scope(
-    approved_with_signed_agreement, staff_client
-):
-    """Void disclosure must explain it only annuls the agreement document
-    and does NOT change participation or invoices. Expected RED."""
-    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
-    html = resp.content.decode("utf-8")
-
-    # The void <details> must contain explanatory copy that it is
-    # document-only — doesn't change membership or billing.
-    assert "dokument" in html.lower(), (
-        "void disclosure must mention the document scope"
-    )
-    # Must mention that participation/invoices are NOT affected.
-    # At minimum one of these negations must appear:
-    negations = ["nemaina dalību", "neietekmē", "neizmaina", "neattiecas"]
-    found_any = any(phrase in html.lower() for phrase in negations)
-    assert found_any, (
-        f"void disclosure must explain limited scope; expected one of {negations}"
-    )
-
-
-# -- P8 rework: Discontinue disclosure explanation (J extended) --
-
-
-def test_discontinue_disclosure_explains_invoice_processing(
-    approved_with_signed_agreement, staff_client
-):
-    """Discontinue disclosure must explain it stops participation and
-    processes selected invoices. Expected RED."""
-    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
-    html = resp.content.decode("utf-8")
-
-    # The discontinue <details> must mention invoice processing.
-    assert "norēķin" in html.lower(), (
-        "discontinue disclosure must mention invoice processing"
-    )
-    # Must mention participation ending.
-    assert "dalīb" in html.lower(), (
-        "discontinue disclosure must mention participation"
-    )
-
-
-# -- P8 rework: Label changes (J) --
-
-
-def test_agreement_module_shows_anule_liguma_dokumentu(
-    approved_with_signed_agreement, staff_client
-):
-    """Void disclosure must show 'Anulēt līguma dokumentu' label
-    (was 'Atcelt līgumu'). Expected RED: string not present yet."""
-    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
-    html = resp.content.decode("utf-8")
-    assert "Anulēt līguma dokumentu" in html, (
-        "expected new void label in admin page"
-    )
-
-
-def test_agreement_module_shows_partraukt_dalibu_un_norekinus(
-    approved_with_signed_agreement, staff_client
-):
-    """Discontinue disclosure must show 'Pārtraukt dalību un norēķinus'
-    label (was 'Pārtraukt dalību'). Expected RED: not present yet."""
-    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
-    html = resp.content.decode("utf-8")
-    assert "Pārtraukt dalību un norēķinus" in html, (
-        "expected new discontinue label in admin page"
-    )
-
-
-def test_old_void_label_atcelt_ligumu_not_in_page(
-    approved_with_signed_agreement, staff_client
-):
-    """The old 'Atcelt līgumu' label must not appear as a void-disclosure
-    summary in the admin page. Expected RED: it IS present now."""
-    resp = staff_client.get(_change_url(approved_with_signed_agreement.id))
-    html = resp.content.decode("utf-8")
-    assert "Atcelt līgumu" not in html, (
-        "old void label must be replaced by 'Anulēt līguma dokumentu'"
-    )
 
 
 # -- P8 rework: Partial invoice blocks (K) --

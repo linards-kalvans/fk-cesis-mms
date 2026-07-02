@@ -80,6 +80,7 @@ def _assert_no_english_leakage(html: str, surface: str) -> None:
 
 
 @pytest.mark.django_db
+@pytest.mark.slow
 class TestParentSurfaceCopyContract:
     def test_start_registration_has_no_english_leakage(self, client):
         url = reverse("registrations:start-registration")

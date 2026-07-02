@@ -32,7 +32,7 @@ from apps.accounts.services import issue_magic_link
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.services import create_or_update_draft
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.slow]
 
 
 # ---------------------------------------------------------------------------
@@ -310,10 +310,6 @@ class TestPortalCTAs:
     def test_portal_shows_start_new_when_no_draft_exists(self, verified_client: Client) -> None:
         resp = verified_client.get("/portal/")
         assert "Sākt jaunu reģistrāciju" in resp.content.decode()
-
-    def test_portal_shows_empty_state_when_no_applications(self, verified_client: Client) -> None:
-        resp = verified_client.get("/portal/")
-        assert "Nav pieteikumu" in resp.content.decode()
 
     def test_draft_card_shows_turpinat_cta(self) -> None:
         c, acct = _make_verified_client("portalcta4@example.com")
@@ -700,7 +696,11 @@ class TestSingleHeroCard:
 
 
 class TestVisualContractSliceD:
-    """Cross-page visual selectors introduced by Slice D."""
+    """Cross-page visual selectors introduced by Slice D + Slice E.
+
+    All mobile CSS contract assertions for parent_theme.css live here so the
+    portal_polish file stays focused on partial-rendering and template wiring.
+    """
 
     @staticmethod
     def _css() -> str:
@@ -709,6 +709,8 @@ class TestVisualContractSliceD:
             Path(__file__).resolve().parents[2]
             / "static" / "css" / "parent_theme.css"
         ).read_text(encoding="utf-8")
+
+    # -- Slice D selectors (presence only) --
 
     def test_upload_slot_selector_present(self):
         assert ".fk-upload-slot" in self._css()
@@ -724,3 +726,73 @@ class TestVisualContractSliceD:
 
     def test_address_row_selector_present(self):
         assert ".fk-address-row" in self._css()
+
+    # -- Slice E: portal + wizard mobile rules --
+
+    def test_applications_grid_stacks_under_720(self):
+        css = self._css()
+        # Multiple 720px blocks may exist in the file; the rules can land in
+        # any of them, so we concatenate all block bodies before asserting.
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        assert re.search(
+            r"\.fk-applications\s*\{[^}]*grid-template-columns\s*:\s*1fr",
+            joined,
+        ), ".fk-applications must declare grid-template-columns: 1fr"
+        assert ".fk-application-card" in joined
+        assert ".fk-app-actions" in joined
+        assert ".fk-helper-card" in joined
+
+    def test_review_meta_modifier_has_spacing_rule(self):
+        css = self._css()
+        assert re.search(
+            r"\.fk-app-meta--review\s*\{[^}]*margin-top\s*:",
+            css,
+        ), ".fk-app-meta--review must declare margin-top"
+
+    def test_wizard_nav_buttons_stretch_to_grid_track_under_720(self):
+        css = self._css()
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*width\s*:\s*100%",
+            joined,
+        ), ".fk-wizard-nav .fk-button must declare width: 100% inside a 720px media query"
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*box-sizing\s*:\s*border-box",
+            joined,
+        ), ".fk-wizard-nav .fk-button must declare box-sizing: border-box"
+
+    def test_wizard_nav_buttons_shrink_padding_under_720(self):
+        css = self._css()
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        assert re.search(
+            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*padding\s*:\s*0\s+14px",
+            joined,
+        ), ".fk-wizard-nav .fk-button must downscale padding to 0 14px on mobile"
+
+    def test_wizard_actions_stack_vertically_under_720(self):
+        css = self._css()
+        bodies = re.findall(
+            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
+            css,
+            re.DOTALL,
+        )
+        joined = "\n".join(bodies)
+        assert re.search(
+            r"\.fk-wizard-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr",
+            joined,
+        ), ".fk-wizard-actions must use grid-template-columns: 1fr on mobile"

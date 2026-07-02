@@ -65,7 +65,12 @@ steps:
       DATABASE_URL: postgres://fkmms:fkmms@postgres:5432/fkmms
     commands:
       - uv sync --frozen
-      - uv run pytest -q
+      - |
+        if [ "$CI_PIPELINE_EVENT" = "pull_request" ]; then
+          uv run pytest -q -m "not slow"
+        else
+          uv run pytest -q
+        fi
 
   # Compute the image tag(s) into a .tags file that plugin-kaniko reads
   # automatically. Format: one tag per line, with trailing newline (kaniko

@@ -13,7 +13,7 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 def _staff_client():
@@ -77,56 +77,41 @@ def applied_adjustment(db, billing_record, billing_invoice):
     )
 
 
-# -- Admin URL exists --
-
-
-def test_admin_url_resolves():
-    """admin:billing_billingadjustment_changelist must resolve to a URL."""
-    url = reverse("admin:billing_billingadjustment_changelist")
-    assert url.startswith("/")
-
-
 # -- Changelist status display --
 
 
-def test_changelist_shows_pending_status(adjustment):
-    """Pending adjustments show external status text on the changelist."""
+@pytest.mark.parametrize(
+    "fixture_name, status_substrings, error_substrings",
+    [
+        # Pending: status text or Latvian "in process" / "waiting".
+        ("adjustment", ["pending", "proces", "gaid"], []),
+        # Failed: status text or Latvian "failed"/"error", plus the auth
+        # error code or its Latvian label.
+        ("failed_adjustment", ["failed", "neizdev", "kļūda"],
+         ["auth_failed", "autentifik", "autorizācij"]),
+        # Applied: status text or Latvian "applied"/"processed".
+        ("applied_adjustment", ["applied", "piemērot", "apstrād"], []),
+    ],
+)
+def test_changelist_shows_status(
+    fixture_name, status_substrings, error_substrings, request
+):
+    """Changelist must surface each BillingAdjustment status (pending/failed/
+    applied) using the rendered status text or its Latvian label, and for
+    failed rows also surface the stored error code so staff can see why."""
+    request.getfixturevalue(fixture_name)
     c = _staff_client()
     html = c.get(
         reverse("admin:billing_billingadjustment_changelist")
     ).content.decode()
     html_lower = html.lower()
-    assert "pending" in html_lower or any(
-        term in html_lower for term in ["proces", "gaid"]
+    assert any(term in html_lower for term in status_substrings), (
+        f"expected one of {status_substrings!r} in changelist body"
     )
-
-
-def test_changelist_shows_failed_status(failed_adjustment):
-    """Failed adjustments show external status + error code on the changelist."""
-    c = _staff_client()
-    html = c.get(
-        reverse("admin:billing_billingadjustment_changelist")
-    ).content.decode()
-    html_lower = html.lower()
-    assert "failed" in html_lower or any(
-        term in html_lower for term in ["neizdev", "kļūda"]
-    )
-    # Error code or its Latvian label should appear
-    assert "auth_failed" in html_lower or any(
-        term in html_lower for term in ["autentifik", "autorizācij"]
-    )
-
-
-def test_changelist_shows_applied_status(applied_adjustment):
-    """Applied adjustments show external status on the changelist."""
-    c = _staff_client()
-    html = c.get(
-        reverse("admin:billing_billingadjustment_changelist")
-    ).content.decode()
-    html_lower = html.lower()
-    assert "applied" in html_lower or any(
-        term in html_lower for term in ["piemērot", "apstrād"]
-    )
+    if error_substrings:
+        assert any(term in html_lower for term in error_substrings), (
+            f"expected one of {error_substrings!r} in changelist body"
+        )
 
 
 # -- Retry action for failed credit notes --

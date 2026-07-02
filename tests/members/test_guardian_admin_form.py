@@ -8,7 +8,7 @@ from django.urls import reverse
 from apps.accounts.models import ParentAccount
 from apps.members.models import Guardian
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 def _staff_client():

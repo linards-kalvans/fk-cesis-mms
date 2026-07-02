@@ -16,6 +16,8 @@ from apps.integrations.tiny_idp import (
     post_document,
 )
 
+pytestmark = pytest.mark.external_contract
+
 
 _SAMPLE_PAYLOAD = {
     "success": True,

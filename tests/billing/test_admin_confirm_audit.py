@@ -13,7 +13,7 @@ from apps.billing.models import BillingRecord
 from apps.core.models import AuditEvent
 from apps.members.models import Member
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 def _staff_client():

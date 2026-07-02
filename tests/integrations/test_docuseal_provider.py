@@ -17,7 +17,7 @@ from apps.integrations import agreement_platform as ap
 from apps.integrations import docuseal
 
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.external_contract]
 
 
 @pytest.fixture

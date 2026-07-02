@@ -19,7 +19,7 @@ from apps.documents.models import Document, DocumentExtraction
 from apps.registrations.services import create_or_update_draft, submit_application
 from apps.members.models import KitSizeOption
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 # ---------------------------------------------------------------------------

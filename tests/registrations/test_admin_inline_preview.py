@@ -30,7 +30,7 @@ from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
 from apps.registrations.admin_panels import doc_preview_kind as _doc_preview_kind
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 # Ported to the admin change page (P7 C-i): the doc panels now render on the
@@ -136,7 +136,9 @@ class TestAdminInlinePreview:
     def test_page_extends_django_admin_shell(
         self, settings, staff_client, submitted_application
     ):
-        """Admin review detail must extend admin/base_site.html, not the club shell."""
+        """Admin review detail must extend admin/base_site.html, not the club shell,
+        and must load the doc lightbox script.
+        """
         settings.OCR_ENCRYPTION_KEY = _OCR_KEY
         resp = staff_client.get(_DETAIL_URL.format(pk=submitted_application.pk))
         assert resp.status_code == 200
@@ -150,15 +152,7 @@ class TestAdminInlinePreview:
         assert "fk-parent-shell" not in content, (
             "Admin review detail must not carry the parent club shell wrappers."
         )
-
-    def test_lightbox_dialog_and_script_present(
-        self, settings, staff_client, submitted_application
-    ):
-        """The lightbox <dialog> and JS bootstrapping script must load on the page."""
-        settings.OCR_ENCRYPTION_KEY = _OCR_KEY
-        resp = staff_client.get(_DETAIL_URL.format(pk=submitted_application.pk))
-        assert resp.status_code == 200
-        content = resp.content.decode()
+        # The lightbox script must be referenced.
         assert "admin/js/doc_lightbox.js" in content, (
             "Admin detail must reference admin/js/doc_lightbox.js."
         )

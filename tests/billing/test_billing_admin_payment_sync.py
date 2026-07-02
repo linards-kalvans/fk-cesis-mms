@@ -3,7 +3,7 @@ from decimal import Decimal
 from datetime import date
 from unittest.mock import patch
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 def _confirmed_record(active_plan, guardian):

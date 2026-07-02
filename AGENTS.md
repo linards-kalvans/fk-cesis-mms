@@ -491,8 +491,14 @@ uv run python manage.py migrate        # run migrations
 uv run python manage.py runserver      # start dev server locally
 uv run python manage.py qcluster       # start background-job worker (P3.5+)
 uv run pytest                          # run test suite
+uv run pytest -q -m "not slow"         # fast lane (PR CI)
 uv run ruff check .                    # lint
 uv run mypy .                          # type check
+
+Testing lanes:
+- Fast local/PR lane: `uv run pytest -q -m "not slow"`
+- Full suite: `uv run pytest -q`
+- Marker rules + lane contract live in `docs/testing.md`.
 
 # Container local smoke (deployed runtime lives in fk-cesis; see docs/local-docker-smoke.md)
 docker build -t fk-cesis-mms:dev .     # build the production image locally

@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.external_contract]
 
 
 # -- CreditResult / CreditApplyResult dataclasses --

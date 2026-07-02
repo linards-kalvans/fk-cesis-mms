@@ -1,7 +1,11 @@
-"""Tests for P4 Slice E — parent portal + shared empty-state primitive polish."""
+"""Tests for P4 Slice E — parent portal + shared empty-state primitive polish.
+
+Mobile CSS rules (previously TestParentThemeCssPortalMobile) moved to
+tests/registrations/test_visual_contract.py::TestVisualContractSliceD so all
+parent_theme.css contract assertions live in one place.
+"""
 
 import re
-from pathlib import Path
 
 import pytest
 from django.template.loader import render_to_string
@@ -122,89 +126,3 @@ class TestPortalNoInlineStyles:
                 "inline style attribute (other than dynamic width) found "
                 "inside fk-application-card region"
             )
-
-
-class TestParentThemeCssPortalMobile:
-    def _css(self) -> str:
-        css_path = (
-            Path(__file__).resolve().parents[2]
-            / "static"
-            / "css"
-            / "parent_theme.css"
-        )
-        return css_path.read_text(encoding="utf-8")
-
-    def test_applications_grid_stacks_under_720(self):
-        css = self._css()
-        # Multiple 720px blocks may exist in the file; the rules can land in
-        # any of them, so we concatenate all block bodies before asserting.
-        bodies = re.findall(
-            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
-            css,
-            re.DOTALL,
-        )
-        joined = "\n".join(bodies)
-        assert re.search(
-            r"\.fk-applications\s*\{[^}]*grid-template-columns\s*:\s*1fr",
-            joined,
-        ), ".fk-applications must declare grid-template-columns: 1fr"
-        assert ".fk-application-card" in joined
-        assert ".fk-app-actions" in joined
-        assert ".fk-helper-card" in joined
-
-    def test_review_meta_modifier_has_spacing_rule(self):
-        css = self._css()
-        assert re.search(
-            r"\.fk-app-meta--review\s*\{[^}]*margin-top\s*:",
-            css,
-        ), ".fk-app-meta--review must declare margin-top"
-
-    def test_wizard_nav_buttons_stretch_to_grid_track_under_720(self):
-        css = self._css()
-        # Confirm the rule lives inside a max-width:720px block.
-        bodies = re.findall(
-            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
-            css,
-            re.DOTALL,
-        )
-        joined = "\n".join(bodies)
-        # The wizard-nav buttons must stretch to fill their grid track,
-        # otherwise horizontal padding clips the right edge on narrow viewports.
-        assert re.search(
-            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*width\s*:\s*100%",
-            joined,
-        ), ".fk-wizard-nav .fk-button must declare width: 100% inside a 720px media query"
-        assert re.search(
-            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*box-sizing\s*:\s*border-box",
-            joined,
-        ), ".fk-wizard-nav .fk-button must declare box-sizing: border-box"
-
-    def test_wizard_nav_buttons_shrink_padding_under_720(self):
-        css = self._css()
-        bodies = re.findall(
-            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
-            css,
-            re.DOTALL,
-        )
-        joined = "\n".join(bodies)
-        # The fk-wizard-nav .fk-button rule must declare a tighter horizontal
-        # padding than the base 0 28px so long Latvian labels fit.
-        assert re.search(
-            r"\.fk-wizard-nav\s+\.fk-button\s*\{[^}]*padding\s*:\s*0\s+14px",
-            joined,
-        ), ".fk-wizard-nav .fk-button must downscale padding to 0 14px on mobile"
-
-    def test_wizard_actions_stack_vertically_under_720(self):
-        css = self._css()
-        bodies = re.findall(
-            r"@media\s*\(\s*max-width:\s*720px\s*\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}",
-            css,
-            re.DOTALL,
-        )
-        joined = "\n".join(bodies)
-        # .fk-wizard-actions must stack to one column on mobile so the
-        # summary step's Save + Submit pair don't fight for half the viewport.
-        assert re.search(
-            r"\.fk-wizard-actions\s*\{[^}]*grid-template-columns\s*:\s*1fr",
-            joined,
-        ), ".fk-wizard-actions must use grid-template-columns: 1fr on mobile"
