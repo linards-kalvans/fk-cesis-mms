@@ -278,8 +278,67 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - audit completion
 - document/admin UX polish
 
-### P8 — Calendar + WhatsApp attendance integration
-**Why last**
+### P8 — Agreement lifecycle ✅ COMPLETE (2026-06-30)
+**Why eighth**
+- extends delivered approval-to-agreement flow beyond the initial generated/sent/signed/void states
+- should happen before deeper billing renewal work because amendments and discontinuation can change billing obligations
+
+**Target outcome**
+- staff can amend an active agreement without losing the original history
+- staff can discontinue membership/agreement cleanly with reason, date, audit trail, and parent-visible status
+- agreement replacement/regeneration rules are explicit and safe around already-signed agreements
+- downstream billing behaviour is defined for amendments, discontinuation, and replacements
+- DocuSeal / manual-signing states remain understandable after lifecycle changes
+
+### P9 — Billing plan lifecycle
+**Why ninth**
+- extends delivered billing instead of changing the signed-agreement trigger ad hoc
+- removes the current "latest active plan wins" ambiguity before renewals matter
+- builds on agreement-lifecycle rules for amendments and discontinuation
+
+**Target outcome**
+- explicit billing-plan assignment for new agreements
+- staff can choose or override the plan before billing-record creation
+- existing members can be renewed into a next-season plan
+- draft billing records can be reassigned safely
+- confirmed/synced invoices are never silently mutated; changes use explicit renewal or adjustment flow
+
+### P10 — Parent invoice visibility
+**Why tenth**
+- builds on Invoice Ninja sync and payment read-back already delivered in P6
+- gives parents self-service visibility before adding more invoice types
+
+**Target outcome**
+- parent portal lists all invoices for the guardian's children
+- invoice rows show member, season or event, amount, due date, sent/payment status, and sync freshness
+- safe Invoice Ninja payment/view link is shown only when available
+- parent access is limited to the verified guardian's own invoices
+
+### P11 — Custom invoices
+**Why eleventh**
+- extends billing beyond membership dues after parent invoice visibility exists
+- covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
+
+**Target outcome**
+- staff can create one-off invoices for a guardian/member with description, amount, and due date
+- custom invoices use the same Invoice Ninja push, sync-health, send, and payment-status model where possible
+- parent portal shows custom invoices alongside membership invoices
+- creation, push, send, failure, and payment-sync actions stay audited
+
+### P12 — Coaches and training groups
+**Why twelfth**
+- extends the member/training-group admin model before adding attendance or coach-facing workflows
+- keeps coach data structured instead of burying it in free-text group names
+
+**Target outcome**
+- staff can create and manage coach records
+- one or more coaches can be linked to each training group
+- coach names are visible on training-group and member admin surfaces
+- parent-visible coach info stays optional and explicitly scoped later
+- coach portal, attendance, and messaging remain out of this slice
+
+### P13 — Calendar + WhatsApp attendance integration
+**Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
 
@@ -681,8 +740,78 @@ P7 is complete when all of the following are true:
    - active/replaced document handling
    - admin visibility for sync/error states
 
-### P8 acceptance — Calendar + WhatsApp attendance integration
+### P8 acceptance — Agreement lifecycle ✅ COMPLETE (2026-06-30)
 P8 is complete when all of the following are true:
+
+1. Staff can amend an active agreement while preserving the signed original and lifecycle history.
+2. Staff can discontinue an agreement/member relationship with an effective date, reason, audit event, and parent-visible status.
+3. Regeneration/replacement rules are explicit for generated, sent, signed, voided, amended, and discontinued agreements.
+4. Parent and admin surfaces clearly show the current agreement state and the reason/action needed when applicable.
+5. DocuSeal-backed and manual-signing paths both follow the same internal lifecycle rules.
+6. Billing side effects are defined and safe:
+   - draft records can be adjusted where allowed
+   - confirmed/synced invoices are never silently mutated
+   - credits/adjustments/stop-future-invoices flows are explicit where needed
+7. Audit events cover amendment, discontinuation, replacement, and lifecycle-state changes.
+8. Tests cover:
+   - amendment history preservation
+   - discontinuation flow
+   - replacement/regeneration guards
+   - billing side-effect guards
+   - parent/admin status visibility
+
+### P9 acceptance — Billing plan lifecycle
+P9 is complete when all of the following are true:
+
+1. New agreements do not rely on "latest active plan wins" silently.
+2. Staff can assign or override the billing plan before draft `BillingRecord` creation.
+3. Existing active members can be renewed into a new season/plan in bulk or per member.
+4. Draft billing records can be reassigned or regenerated safely.
+5. Confirmed billing records and pushed Invoice Ninja invoices are never silently mutated.
+6. Any confirmed/synced change path is explicit: renewal, adjustment, credit, or new invoice flow.
+7. Parent-facing billing amounts remain explainable after renewal/plan changes.
+8. Audit events cover plan assignment, renewal, and post-confirmation adjustments where applicable.
+9. Tests cover:
+   - new-agreement plan assignment
+   - renewal creation
+   - draft reassignment
+   - confirmed/synced no-silent-mutation guard
+
+### P10 acceptance — Parent invoice visibility
+P10 is complete when all of the following are true:
+
+1. Parent portal lists every invoice linked to the verified guardian's members.
+2. Membership invoices show member, season, installment sequence where applicable, due date, amount, sent status, payment status, and last sync time.
+3. Custom/non-membership invoice rows have a clear label and do not masquerade as membership dues.
+4. Invoice Ninja payment/view links are shown only when a safe external URL or portal URL is available.
+5. Authorization prevents one guardian from seeing another guardian's invoices.
+6. Empty/error states are parent-friendly and Latvian.
+7. Tests cover ownership, status display, empty state, and mixed paid/unpaid invoices.
+
+### P11 acceptance — Custom invoices
+P11 is complete when all of the following are true:
+
+1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
+2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
+3. Custom invoices reuse existing sync-health, send, and payment-status visibility where possible.
+4. Parent portal shows custom invoices alongside membership invoices with a distinct label.
+5. Confirmed/sent custom invoices are not silently mutated; corrections use explicit adjustment/credit/reissue flow.
+6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
+7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
+
+### P12 acceptance — Coaches and training groups
+P12 is complete when all of the following are true:
+
+1. Staff can create and edit coach records in admin.
+2. Training groups can have one or more linked coaches.
+3. Member and training-group admin views show linked coach names clearly.
+4. Search/filter support helps staff find groups by coach where practical.
+5. Coach data is not exposed to parents unless explicitly enabled in a later slice.
+6. Coach portal, attendance, and messaging are not introduced in this milestone.
+7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
+
+### P13 acceptance — Calendar + WhatsApp attendance integration
+P13 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -729,6 +858,11 @@ Remaining focus:
 - Invoice Ninja orchestration
 - sibling discount rules
 - payment visibility and retry paths
+- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
+- billing plan lifecycle and renewals (P9)
+- parent invoice visibility (P10)
+- custom one-off invoices (P11)
+- coaches linked to training groups (P12)
 
 ### M5 — Admin operations completion
 Remaining focus:
@@ -749,8 +883,13 @@ Remaining focus:
 - final security checklist (CSP, rate-limit, fail2ban, audit-log review)
 
 ### Future / post-MVP
-- calendar integration
-- WhatsApp attendance polling
+- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
+- billing plan lifecycle and renewals (P9)
+- parent invoice visibility (P10)
+- custom one-off invoices (P11)
+- coaches linked to training groups (P12)
+- calendar integration (P13)
+- WhatsApp attendance polling (P13)
 
 ---
 

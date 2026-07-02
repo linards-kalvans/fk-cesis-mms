@@ -351,6 +351,39 @@ def _ensure_product_id(plan_id: int) -> str:
         return external_id
 
 
+def _is_invalid_client_error(exc: Exception) -> bool:
+    """Detect Invoice Ninja 422 caused by a deleted/archived client id."""
+    msg = str(exc)
+    return (
+        "client_id" in msg
+        and "invalid" in msg.lower()
+        and "selected client id is invalid" in msg.lower()
+    )
+
+
+def _recover_stale_client_id(record) -> str:
+    """Clear a stale Guardian.external_client_id and recreate the client."""
+    from apps.members.models import Guardian
+
+    guardian_id = record.member.guardian_id
+    Guardian.objects.filter(pk=guardian_id).update(external_client_id="")
+    record.member.guardian.external_client_id = ""
+    fresh_id = _ensure_client_id(guardian_id)
+    record.member.guardian.external_client_id = fresh_id
+    return fresh_id
+
+
+def _create_invoice_with_stale_client_recovery(record, billing_invoice):
+    """Create an invoice, recovering once from a stale client id."""
+    try:
+        return invoice_platform.create_invoice(record, billing_invoice)
+    except Exception as exc:
+        if not _is_invalid_client_error(exc):
+            raise
+        _recover_stale_client_id(record)
+        return invoice_platform.create_invoice(record, billing_invoice)
+
+
 def _ensure_client_id(guardian_id: int) -> str:
     """Return the Invoice Ninja client id for a guardian, creating it at most once.
 
@@ -425,10 +458,12 @@ def push_billing_record(record_id: int) -> None:
     # Step 4: create one invoice per row lacking an external id.
     failed_code = ""
     for billing_invoice in rows:
+        if billing_invoice.cancelled_at is not None:
+            continue
         if billing_invoice.external_invoice_id:
             continue
         try:
-            result = invoice_platform.create_invoice(record, billing_invoice)
+            result = _create_invoice_with_stale_client_recovery(record, billing_invoice)
         except Exception as exc:
             code, retry = _classify_invoice_error(exc)
             billing_invoice.external_status = "failed"
@@ -543,6 +578,7 @@ def send_due_invoices() -> None:
     invoices = (
         BillingInvoice.objects.filter(external_status="created")
         .exclude(external_invoice_id="")
+        .filter(cancelled_at__isnull=True)
         .select_related("billing_record__member__guardian__parent_account")
     )
     for billing_invoice in invoices:
@@ -623,3 +659,116 @@ def sync_billing_record_payments(record_id: int) -> None:
         record.payment_error_code = ""
         record.save(update_fields=["payment_error_code", "updated_at"])
     roll_up_payment_status(record)
+
+
+# ---------------------------------------------------------------------------
+# Credit-note pipeline — P8 agreement lifecycle
+# ---------------------------------------------------------------------------
+
+
+def enqueue_create_credit_note(adjustment_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.create_credit_note_job", adjustment_id)
+    except RetryableInvoiceError:
+        return
+
+
+def create_credit_note_job(adjustment_id: int) -> None:
+    """Create a credit note in Invoice Ninja and apply it to the target invoice.
+
+    Terminal failures persist on the adjustment and audit the failure; transient
+    failures raise RetryableInvoiceError so django-q2 retries.
+    """
+    from apps.billing.models import BillingAdjustment
+
+    try:
+        adjustment = BillingAdjustment.objects.select_related(
+            "billing_record__member__guardian__parent_account",
+            "invoice__billing_record",
+        ).get(pk=adjustment_id)
+    except BillingAdjustment.DoesNotExist:
+        return
+
+    try:
+        result = invoice_platform.create_credit_note(adjustment)
+    except Exception as exc:
+        code, retry = _classify_invoice_error(exc)
+        adjustment.external_status = "failed"
+        adjustment.external_error_code = code
+        adjustment.save(update_fields=["external_status", "external_error_code", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.BILLING_CREDIT_FAILED),
+            actor_label="system: create_credit_note_job",
+            target=adjustment,
+            metadata={"error_code": code},
+        )
+        if retry:
+            raise RetryableInvoiceError(code) from exc
+        return
+
+    adjustment.external_credit_id = result.external_id
+    adjustment.external_status = result.external_status
+    adjustment.external_error_code = ""
+    adjustment.save(
+        update_fields=[
+            "external_credit_id",
+            "external_status",
+            "external_error_code",
+            "updated_at",
+        ]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_CREDIT_CREATED),
+        actor_label="system: create_credit_note_job",
+        target=adjustment,
+        metadata={"external_credit_id": result.external_id},
+    )
+
+    invoice = adjustment.invoice
+    if invoice is not None and invoice.external_invoice_id:
+        try:
+            apply_result = invoice_platform.apply_credit_to_invoice(
+                result.external_id,
+                invoice.external_invoice_id,
+                adjustment.amount,
+            )
+        except Exception as exc:
+            code, retry = _classify_invoice_error(exc)
+            adjustment.external_status = "failed"
+            adjustment.external_error_code = code
+            adjustment.save(update_fields=["external_status", "external_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_CREDIT_FAILED),
+                actor_label="system: apply_credit_to_invoice",
+                target=adjustment,
+                metadata={"error_code": code},
+            )
+            if retry:
+                raise RetryableInvoiceError(code) from exc
+            return
+
+        if apply_result.applied:
+            adjustment.external_status = "applied"
+            adjustment.applied_to_external_invoice_id = invoice.external_invoice_id
+            adjustment.requires_staff_apply = False
+            adjustment.save(
+                update_fields=[
+                    "external_status",
+                    "applied_to_external_invoice_id",
+                    "requires_staff_apply",
+                    "updated_at",
+                ]
+            )
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_CREDIT_APPLIED),
+                actor_label="system: create_credit_note_job",
+                target=adjustment,
+                metadata={
+                    "external_credit_id": result.external_id,
+                    "applied_to_external_invoice_id": invoice.external_invoice_id,
+                    "amount": str(adjustment.amount),
+                },
+            )
+        else:
+            adjustment.requires_staff_apply = True
+            adjustment.save(update_fields=["requires_staff_apply", "updated_at"])

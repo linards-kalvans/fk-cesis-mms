@@ -60,6 +60,18 @@ class PaymentResult:
     last_payment_date: date | None
 
 
+@dataclass(frozen=True)
+class CreditResult:
+    external_id: str
+    external_status: str
+
+
+@dataclass(frozen=True)
+class CreditApplyResult:
+    applied: bool
+    external_status: str
+
+
 def _mode() -> str:
     return getattr(settings, "INVOICE_PROVIDER_MODE", "stub")
 
@@ -123,4 +135,29 @@ def email_invoice(external_invoice_id: str) -> None:
         from apps.integrations import invoice_ninja
 
         return invoice_ninja.email_invoice(external_invoice_id)
+    raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
+
+
+def create_credit_note(adjustment) -> CreditResult:
+    mode = _mode()
+    if mode == "stub":
+        return CreditResult(
+            external_id=f"stub-credit-{adjustment.pk}",
+            external_status="created",
+        )
+    if mode == "invoiceninja":
+        from apps.integrations import invoice_ninja
+
+        return invoice_ninja.create_credit_note(adjustment)
+    raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")
+
+
+def apply_credit_to_invoice(credit_id: str, invoice_id: str, amount: Decimal) -> CreditApplyResult:
+    mode = _mode()
+    if mode == "stub":
+        return CreditApplyResult(applied=True, external_status="applied")
+    if mode == "invoiceninja":
+        from apps.integrations import invoice_ninja
+
+        return invoice_ninja.apply_credit_to_invoice(credit_id, invoice_id, amount)
     raise InvoicePlatformConfigError(f"unknown invoice provider mode: {mode}")

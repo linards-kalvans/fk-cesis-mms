@@ -162,6 +162,9 @@ class BillingInvoice(TimeStampedModel):
     last_synced_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField(blank=True, default="")
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -170,5 +173,57 @@ class BillingInvoice(TimeStampedModel):
             ),
         ]
 
-    def __str__(self) -> str:
+    def __str__(self):
         return f"{self.billing_record_id} #{self.sequence} — {self.amount}"
+
+
+class BillingAdjustment(TimeStampedModel):
+    """A credit note or other adjustment created to correct a member's billing,
+    typically when participation is discontinued. External state is tracked
+    independently so failed credit notes become retryable admin work."""
+
+    class Kind(models.TextChoices):
+        CREDIT_NOTE = "credit_note", "Kredītrēķins"
+
+    billing_record = models.ForeignKey(
+        BillingRecord, on_delete=models.CASCADE, related_name="adjustments"
+    )
+    invoice = models.ForeignKey(
+        BillingInvoice,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="adjustments",
+    )
+    agreement_event = models.ForeignKey(
+        "agreements.AgreementLifecycleEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjustments",
+    )
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    amount = models.DecimalField(max_digits=8, decimal_places=2)
+    reason = models.TextField(blank=True, default="")
+
+    external_credit_id = models.CharField(max_length=128, blank=True, default="")
+    external_status = models.CharField(max_length=16, blank=True, default="pending")
+    external_error_code = models.CharField(max_length=64, blank=True, default="")
+    applied_to_external_invoice_id = models.CharField(
+        max_length=64, blank=True, default=""
+    )
+    requires_staff_apply = models.BooleanField(default=False)
+
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="billing_adjustments_created",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.billing_record_id} — {self.amount} — {self.external_status}"

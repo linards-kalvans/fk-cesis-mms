@@ -10,7 +10,7 @@ from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.billing.messages import get_invoice_error_message
-from apps.billing.models import BillingInvoice, BillingRecord, MembershipPlan
+from apps.billing.models import BillingAdjustment, BillingInvoice, BillingRecord, MembershipPlan
 from apps.billing.services import recompute_billing_record
 from apps.core.admin_badges import status_badge
 from apps.core.admin_links import admin_link
@@ -283,3 +283,76 @@ class BillingRecordAdmin(admin.ModelAdmin):
             parts.append(f"Izlaisti {unconfirmed} (vispirms apstipriniet).")
         level = messages.WARNING if unconfirmed else messages.INFO
         self.message_user(request, " ".join(parts), level=level)
+
+
+@admin.register(BillingAdjustment)
+class BillingAdjustmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "member_link",
+        "invoice_link",
+        "amount",
+        "external_status_badge",
+        "requires_staff_apply",
+        "created_at",
+    )
+    list_filter = ("kind", "external_status", "requires_staff_apply")
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
+    readonly_fields = (
+        "billing_record", "invoice", "agreement_event", "kind", "amount", "reason",
+        "external_credit_id", "external_status", "external_error_code",
+        "applied_to_external_invoice_id", "requires_staff_apply", "created_by",
+        "created_at", "updated_at",
+    )
+    actions = ["retry_credit_note"]
+
+    class Media:
+        css = {"all": ["admin/fk_badges.css"]}
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "billing_record__member__guardian",
+            "invoice__billing_record",
+        )
+
+    @admin.display(description="Biedrs")
+    def member_link(self, obj):
+        return admin_link(obj.billing_record.member)
+
+    @admin.display(description="Rēķins")
+    def invoice_link(self, obj):
+        return admin_link(obj.invoice)
+
+    @admin.display(description="Statuss")
+    def external_status_badge(self, obj):
+        if obj.external_error_code:
+            return status_badge(
+                "Neizdevās",
+                "fail",
+                tooltip=get_invoice_error_message(obj.external_error_code),
+            )
+        if obj.external_status == "applied":
+            return status_badge("Piemērots", "ok")
+        if obj.external_status:
+            return status_badge(obj.external_status, "pending")
+        return status_badge("—", "muted")
+
+    @admin.action(description="Mēģināt vēlreiz izveidot kredītrēķini")
+    def retry_credit_note(self, request, queryset):
+        from apps.integrations.tasks import enqueue_create_credit_note
+
+        enqueued = 0
+        skipped = 0
+        for adjustment in queryset:
+            if adjustment.external_status != "failed":
+                skipped += 1
+                continue
+            enqueue_create_credit_note(adjustment.pk)
+            enqueued += 1
+        parts = [f"Ielikti rindā {enqueued} kredītrēķini."]
+        if skipped:
+            parts.append(f"Izlaisti {skipped} (neizdevušies tikai).")
+        self.message_user(request, " ".join(parts))

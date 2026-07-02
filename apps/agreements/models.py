@@ -22,6 +22,8 @@ class Agreement(TimeStampedModel):
         SENT = "sent", "Nosūtīts parakstīšanai"
         SIGNED = "signed", "Parakstīts"
         VOID = "void", "Atcelts"
+        SUPERSEDED = "superseded", "Aizvietots"
+        DISCONTINUED = "discontinued", "Pārtraukts"
 
     class SigningPath(models.TextChoices):
         ELECTRONIC = "electronic", "Elektroniski"
@@ -88,3 +90,44 @@ class Agreement(TimeStampedModel):
             args=[application.id],
         )
         return url
+
+
+class AgreementLifecycleEvent(models.Model):
+    """Parent-visible business history for an agreement.
+
+    Distinct from AuditEvent: this is domain state, not the operator/forensic
+    trail. It survives as readable history and is shown in the parent portal.
+    """
+
+    class EventType(models.TextChoices):
+        MINOR_AMENDMENT = "minor_amendment", "Neliels labojums"
+        MATERIAL_AMENDMENT_STARTED = (
+            "material_amendment_started",
+            "Sākta būtiska izmaiņu procedūra",
+        )
+        SUPERSEDED = "superseded", "Aizvietots ar jaunu līgumu"
+        DISCONTINUED = "discontinued", "Dalība pārtraukta"
+        CREDIT_NOTE_CREATED = "credit_note_created", "Izveidots kredītrēķins"
+        CREDIT_NOTE_APPLIED = "credit_note_applied", "Kredīts piemērots rēķinam"
+        CREDIT_NOTE_FAILED = "credit_note_failed", "Kredītrēķina izveide neizdevās"
+
+    agreement = models.ForeignKey(
+        Agreement,
+        on_delete=models.CASCADE,
+        related_name="lifecycle_events",
+    )
+    event_type = models.CharField(
+        max_length=32,
+        choices=EventType.choices,
+    )
+    note = models.TextField(blank=True, default="")
+    effective_date = models.DateField(null=True, blank=True)
+    actor_label = models.CharField(max_length=255, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.get_event_type_display()} @ {self.agreement_id}"

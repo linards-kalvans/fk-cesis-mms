@@ -6,8 +6,11 @@ which assembles the full panels + agreement + training-group context.
 """
 
 from apps.agreements.messages import get_agreement_error_message
+from apps.agreements.models import Agreement
 from apps.core.admin_links import admin_link, admin_links
 from apps.agreements.services import get_current_agreement
+from apps.billing.models import BillingAdjustment, BillingInvoice, PaymentStatus
+from apps.members.models import Member
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.members.models import TrainingGroup
@@ -147,6 +150,27 @@ def build_review_context(
         "Rēķini": admin_links(billing_records),
     }
 
+    agreement_lifecycle_events = []
+    if agreement is not None:
+        agreement_lifecycle_events = list(
+            agreement.lifecycle_events.order_by("created_at")
+        )
+
+    discontinuation_invoice_candidates = []
+    billing_adjustments = []
+    if (
+        member is not None
+        and agreement is not None
+        and agreement.state == Agreement.State.SIGNED
+        and member.status == Member.Status.ACTIVE
+    ):
+        discontinuation_invoice_candidates = _discontinuation_candidates(member)
+        billing_adjustments = list(
+            BillingAdjustment.objects.filter(
+                billing_record__member=member
+            ).order_by("-created_at")
+        )
+
     return {
         "related_links": related_links,
         "guardian_panel": guardian_panel,
@@ -156,4 +180,29 @@ def build_review_context(
         "current_inactive_group": current_inactive_group,
         "agreement": agreement,
         "agreement_error_message": agreement_error_message,
+        "agreement_lifecycle_events": agreement_lifecycle_events,
+        "discontinuation_invoice_candidates": discontinuation_invoice_candidates,
+        "billing_adjustments": billing_adjustments,
     }
+
+
+def _proposed_action_for_invoice(invoice: BillingInvoice) -> str:
+    if invoice.payment_status == PaymentStatus.PAID:
+        return "Apmaksāts — jāatmaksā manuāli Invoice Ninja"
+    if not invoice.external_invoice_id and invoice.sent_at is None:
+        return "Atcelt lokāli"
+    if invoice.external_invoice_id:
+        return "Izveidot kredītrēķinu"
+    return "Nezināms stāvoklis"
+
+
+def _discontinuation_candidates(member) -> list[BillingInvoice]:
+    """Return eligible BillingInvoice rows for a member discontinuation form."""
+    invoices = list(
+        BillingInvoice.objects.filter(
+            billing_record__member=member
+        ).select_related("billing_record").order_by("due_date")
+    )
+    for invoice in invoices:
+        invoice.proposed_action = _proposed_action_for_invoice(invoice)
+    return invoices

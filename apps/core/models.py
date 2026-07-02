@@ -42,6 +42,16 @@ class AuditEvent(models.Model):
         DATA_EXPORTED = "data_exported", "Data exported"
         BILLING_RECORD_CONFIRMED = "billing_record_confirmed", "Billing record confirmed"
         TRAINING_GROUPS_MERGED = "training_groups_merged", "Training groups merged"
+        AGREEMENT_MINOR_AMENDED = "agreement_minor_amended", "Agreement minor amended"
+        AGREEMENT_MATERIAL_AMENDMENT_STARTED = (
+            "agreement_material_amendment_started",
+            "Agreement material amendment started",
+        )
+        AGREEMENT_SUPERSEDED = "agreement_superseded", "Agreement superseded"
+        MEMBER_DISCONTINUED = "member_discontinued", "Member discontinued"
+        BILLING_CREDIT_CREATED = "billing_credit_created", "Billing credit created"
+        BILLING_CREDIT_FAILED = "billing_credit_failed", "Billing credit failed"
+        BILLING_CREDIT_APPLIED = "billing_credit_applied", "Billing credit applied"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

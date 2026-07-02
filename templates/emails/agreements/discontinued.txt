@@ -1,0 +1,9 @@
+Labdien, {{ guardian_full_name }}!
+
+FK Cēsis dalība bērnam {{ member_full_name }} ir pārtraukta no {{ effective_date|date:"Y-m-d" }}.
+
+Iemesls: {{ reason }}
+
+{% if credit_summary %}Rēķinu korekcijas: {{ credit_summary }}{% else %}Rēķinu korekcijas nav piemērotas.{% endif %}
+
+Pieteikumu portāls: {{ portal_url }}

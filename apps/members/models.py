@@ -83,6 +83,10 @@ class TrainingGroup(models.Model):
 class Member(models.Model):
     """A registered youth member."""
 
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Aktīvs"
+        DISCONTINUED = "discontinued", "Pārtraukts"
+
     full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")
     birth_date = models.DateField(null=True, blank=True)
@@ -98,6 +102,15 @@ class Member(models.Model):
         blank=True,
         related_name="members",
     )
+
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    discontinued_effective_date = models.DateField(null=True, blank=True)
+    discontinuation_reason = models.TextField(blank=True, default="")
+    discontinued_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.full_name or str(self.pk)

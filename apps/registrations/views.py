@@ -17,7 +17,11 @@ from django.views.decorators.http import require_POST
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
-from apps.agreements.presentation import agreement_status_copy
+from apps.agreements.presentation import (
+    agreement_status_copy,
+    lifecycle_history_items,
+    lifecycle_status_copy,
+)
 from apps.agreements.services import (
     get_current_agreement,
 )
@@ -499,6 +503,12 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
         if app.approved_member_id is not None:
             agreement = get_current_agreement(app.approved_member)
         app.agreement_status = agreement_status_copy(agreement)
+        app.lifecycle_status = (
+            lifecycle_status_copy(agreement, app.approved_member)
+            if app.approved_member_id is not None
+            else ""
+        )
+        app.lifecycle_history_items = lifecycle_history_items(agreement)
     # Personalized hero greeting — the account's canonical Guardian name, if on
     # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
     greeting_name = (

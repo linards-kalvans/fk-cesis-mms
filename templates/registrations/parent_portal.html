@@ -40,6 +40,19 @@
       {% if app.agreement_status %}
       <p class="fk-app-agreement-status">{{ app.agreement_status }}</p>
       {% endif %}
+      {% if app.lifecycle_status %}
+      <p class="fk-app-lifecycle-status">{{ app.lifecycle_status }}</p>
+      {% endif %}
+      {% if app.lifecycle_history_items %}
+      <div class="fk-app-lifecycle-history">
+        <span class="fk-block-label">Vēsture</span>
+        <ul>
+          {% for item in app.lifecycle_history_items %}
+          <li>{{ item.date }} — {{ item.label }}{% if item.note %}: {{ item.note }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
     </div>
 
     <div class="fk-app-block fk-progress-wrap">

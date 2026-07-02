@@ -1,5 +1,6 @@
 """Django admin for registrations app."""
 
+import datetime
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
@@ -12,14 +13,18 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.agreements.models import Agreement
 from apps.agreements.services import (
+    discontinue_agreement,
     get_current_agreement,
     mark_agreement_sent,
     mark_agreement_signed,
+    record_minor_amendment,
     regenerate_agreement,
     set_signing_path,
+    start_material_amendment,
     sync_application_signing_path_to_agreement,
     void_agreement,
 )
+from apps.billing.services import DiscontinuationInvoiceError, PaidInvoiceSelected
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
@@ -280,6 +285,82 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 )
                 return self._change_redirect(object_id)
             enqueue_sync_agreement_submission(agreement.id)
+            return self._change_redirect(object_id)
+
+        elif action == "minor_amendment":
+            if agreement is None:
+                self.message_user(
+                    request, "Līgums nav sagatavots.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            note = request.POST.get("note", "").strip()
+            try:
+                record_minor_amendment(agreement, request.user, note)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return self._change_redirect(object_id)
+            return self._change_redirect(object_id)
+
+        elif action == "material_amendment":
+            if agreement is None:
+                self.message_user(
+                    request, "Līgums nav sagatavots.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            note = request.POST.get("note", "").strip()
+            try:
+                start_material_amendment(agreement, request.user, note)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return self._change_redirect(object_id)
+            return self._change_redirect(object_id)
+
+        elif action == "discontinue_member":
+            if agreement is None:
+                self.message_user(
+                    request, "Līgums nav sagatavots.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            effective_date_raw = request.POST.get("effective_date", "").strip()
+            reason = request.POST.get("reason", "").strip()
+            selected_invoices = request.POST.getlist("selected_invoices")
+            if not effective_date_raw or not reason:
+                self.message_user(
+                    request,
+                    "Norādiet spēkā stāšanās datumu un iemeslu.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            try:
+                effective_date = datetime.date.fromisoformat(effective_date_raw)
+            except ValueError:
+                self.message_user(
+                    request,
+                    "Nederīgs spēkā stāšanās datums.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            try:
+                discontinue_agreement(
+                    agreement,
+                    request.user,
+                    effective_date=effective_date,
+                    reason=reason,
+                    selected_invoice_ids=[int(i) for i in selected_invoices if i],
+                )
+            except PaidInvoiceSelected:
+                self.message_user(
+                    request,
+                    "Atlasīts apmaksāts rēķins. Pirms turpināt, atmaksājiet to Invoice Ninja.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            except DiscontinuationInvoiceError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return self._change_redirect(object_id)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return self._change_redirect(object_id)
             return self._change_redirect(object_id)
 
         return self._change_redirect(object_id)

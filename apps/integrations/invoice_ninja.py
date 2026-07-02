@@ -18,6 +18,8 @@ from apps.billing import messages
 from apps.billing.services import membership_plan_product_key
 from apps.integrations.invoice_platform import (
     ClientResult,
+    CreditApplyResult,
+    CreditResult,
     InvoicePlatformAuthError,
     InvoicePlatformConfigError,
     InvoicePlatformNotFoundError,
@@ -284,3 +286,75 @@ def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
         balance=balance,
         last_payment_date=_latest_payment_date(data),
     )
+
+
+def _credit_number(adjustment) -> str:
+    prefix = getattr(settings, "INVOICE_NINJA_NUMBER_PREFIX", "MMS") or "MMS"
+    return f"{prefix}-credit-{adjustment.pk}"
+
+
+def _build_credit_note_body(adjustment) -> dict:
+    record = adjustment.billing_record
+    return {
+        "client_id": record.member.guardian.external_client_id,
+        "number": _credit_number(adjustment),
+        "date": timezone.now().date().isoformat(),
+        "public_notes": adjustment.reason,
+        "line_items": [
+            {
+                "product_key": membership_plan_product_key(record.plan),
+                "notes": messages.product_name(record.plan),
+                "cost": str(adjustment.amount),
+                "quantity": 1,
+            }
+        ],
+    }
+
+
+def create_credit_note(adjustment) -> CreditResult:
+    """Create a credit note in Invoice Ninja.
+
+    Live sandbox (2026-06-30) confirmed:
+    - POST /credits accepts the payload below;
+    - a positive line-item ``cost`` produces a credit with a positive ``amount``.
+    Returns the external credit id.
+    """
+    api_url, api_key = _require_config()
+    body = _build_credit_note_body(adjustment)
+    resp = _request("POST", f"{api_url}/credits", api_key, json=body)
+    if resp.status_code >= 400:
+        raise InvoicePlatformConfigError(
+            f"credit create rejected: {resp.status_code} {resp.text}"
+        )
+    data = _unwrap(resp)
+    return CreditResult(
+        external_id=str(data.get("id", "")),
+        external_status="created",
+    )
+
+
+def apply_credit_to_invoice(credit_id: str, invoice_id: str, amount: Decimal) -> CreditApplyResult:
+    """Apply a credit note to an invoice.
+
+    # ponytail: live sandbox returned 422 "The selected action is invalid." for
+    # /credits/bulk action="apply"; Context7 confirms apply is not a valid bulk
+    # action. Keep the staff-apply fallback until a real apply endpoint is found.
+    """
+    api_url, api_key = _require_config()
+    body = {
+        "action": "apply",
+        "ids": [credit_id],
+        "data": {
+            "invoices": [
+                {"invoice_id": invoice_id, "amount": str(amount)}
+            ]
+        },
+    }
+    resp = _request("POST", f"{api_url}/credits/bulk", api_key, json=body)
+    if resp.status_code >= 400:
+        # Treat an apply rejection as unsupported — staff will finish manually.
+        return CreditApplyResult(applied=False, external_status="unsupported")
+    data = _unwrap(resp)
+    # Invoice Ninja returns the credit object; if applied, the balance is used.
+    applied = bool(data.get("id")) or bool(data.get("success"))
+    return CreditApplyResult(applied=applied, external_status="applied" if applied else "created")

@@ -1,4 +1,4 @@
-{% comment %}P5 Slice C — admin review-detail Līgums module. Rendered only
+{% comment %}P5 Slice C + P8 — admin Līgums module. Rendered only
 when `agreement` is non-null (i.e. post-approval).{% endcomment %}
 
 <div class="module mms-review-agreement-module">
@@ -56,6 +56,81 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
   </form>
   {% endif %}
 
+  {% if agreement.state == "signed" and original.approved_member.status == "active" %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Neliels labojums</summary>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="minor_note">Piezīme:</label>
+        <textarea name="note" id="minor_note" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="minor_amendment">Saglabāt labojumu</button>
+    </form>
+  </details>
+
+  <details class="mms-review-actions__disclosure">
+    <summary>Sagatavot aizvietojošu līgumu</summary>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="material_note">Būtisko izmaiņu pamatojums:</label>
+        <textarea name="note" id="material_note" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="material_amendment" class="default">Sagatavot jaunu līgumu</button>
+    </form>
+  </details>
+
+  <details class="mms-review-actions__disclosure">
+    <summary>Pārtraukt dalību</summary>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="effective_date">Spēkā no:</label>
+        <input type="date" name="effective_date" id="effective_date" required>
+      </div>
+      <div class="form-row">
+        <label for="discontinue_reason">Iemesls:</label>
+        <textarea name="reason" id="discontinue_reason" rows="3" required></textarea>
+      </div>
+      {% if discontinuation_invoice_candidates %}
+      <fieldset>
+        <legend>Ietekmējamie rēķini</legend>
+        <table>
+          <thead>
+            <tr>
+              <th>Izvēlēties</th>
+              <th>Sezona</th>
+              <th>Secība</th>
+              <th>Termiņš</th>
+              <th>Summa</th>
+              <th>IN ID</th>
+              <th>Statuss</th>
+              <th>Paredzamā darbība</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for invoice in discontinuation_invoice_candidates %}
+            <tr>
+              <td><input type="checkbox" name="selected_invoices" value="{{ invoice.pk }}"></td>
+              <td>{{ invoice.billing_record.season }}</td>
+              <td>{{ invoice.sequence }}</td>
+              <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+              <td>{{ invoice.amount }}</td>
+              <td>{{ invoice.external_invoice_id|default:"—" }}</td>
+              <td>{{ invoice.get_payment_status_display|default:"—" }}</td>
+              <td>{{ invoice.proposed_action }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </fieldset>
+      {% endif %}
+      <button type="submit" name="action" value="discontinue_member">Pārtraukt dalību</button>
+    </form>
+  </details>
+  {% endif %}
+
   {% if agreement.state != "void" %}
   <details class="mms-review-actions__disclosure">
     <summary>Atcelt līgumu</summary>
@@ -75,5 +150,35 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
     {% csrf_token %}
     <button type="submit" name="action" value="regenerate_agreement" class="default">Sagatavot jaunu līgumu</button>
   </form>
+  {% endif %}
+
+  {% if agreement_lifecycle_events %}
+  <div class="module mms-review-lifecycle-history">
+    <h3>Līguma vēsture</h3>
+    <ul>
+      {% for event in agreement_lifecycle_events %}
+      <li>
+        <strong>{{ event.get_event_type_display }}</strong>
+        {% if event.effective_date %}({{ event.effective_date|date:"d.m.Y" }}){% endif %}
+        {% if event.note %}— {{ event.note }}{% endif %}
+        <span class="mini">{{ event.created_at|date:"d.m.Y H:i" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if billing_adjustments %}
+  <div class="module mms-review-billing-adjustments">
+    <h3>Rēķinu korekcijas</h3>
+    <ul>
+      {% for adj in billing_adjustments %}
+      <li>
+        {{ adj.amount }} EUR — {{ adj.get_kind_display }} — {{ adj.external_status }}
+        {% if adj.requires_staff_apply %}(gaida darbinieka rīcību){% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
   {% endif %}
 </div>
