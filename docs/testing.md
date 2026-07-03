@@ -31,7 +31,7 @@ uv run mypy .
 | local fast feedback          | `uv run pytest -q -m "not slow"`   |
 | local full safety            | `uv run pytest -q`                 |
 
-The lane is selected in `.woodpecker.yml` from `$CI_PIPELINE_EVENT`.
+The lane is selected in `.github/workflows/ci.yml` from `github.event_name`.
 
 ## Markers
 
@@ -73,8 +73,8 @@ test over many repeated slow admin / view tests.
 The contract is enforced by `tests/deployment/test_test_lanes_contract.py`:
 
 - `pyproject.toml` documents the three markers;
-- `.woodpecker.yml` selects the fast lane on `pull_request`;
-- `.woodpecker.yml` keeps the full suite on every other event.
+- `.github/workflows/ci.yml` selects the fast lane on `pull_request`;
+- `.github/workflows/ci.yml` keeps the full suite on every other event.
 
 If you add a new marker, register it in `pyproject.toml` and update both
 this file and the contract test.

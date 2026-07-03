@@ -966,7 +966,7 @@ Remaining focus:
 ### M6 — Production readiness
 
 Delivered:
-- two-channel deployment pipeline (2026-05-26): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres` 18, non-root UID 10001, whitenoise static, `/healthz` probe, configurable host port). Branch strategy: `dev` → floating `:dev` (dev server auto-pulls); `main` → floating `:main` plus immutable `:<major>.<minor>` from the `VERSION` file (prod server auto-pulls `:main`, can pin to a `:<X.Y>` for rollback). Codeberg Woodpecker CI orchestrates lint → test → branch-specific build → HMAC-signed POST to per-channel server listener. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
+- two-channel deployment pipeline (2026-05-26, CI migrated to GitHub Actions 2026-07-03): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres` 18, non-root UID 10001, whitenoise static, `/healthz` probe, configurable host port). Branch strategy: `dev` → floating `:dev` (dev server auto-pulls); `main` → floating `:main` plus immutable `:<major>.<minor>` from the `VERSION` file (prod server auto-pulls `:main`, can pin to a `:<X.Y>` for rollback). GitHub Actions CI orchestrates lint → test → branch-specific build/push to GHCR; deployment remains manual. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
 - deployment runbook: `docs/deployment.md`.
 
 Remaining focus:

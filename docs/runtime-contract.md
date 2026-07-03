@@ -4,7 +4,7 @@ This repository builds the application image. The `fk-cesis` infrastructure repo
 
 ## Image
 
-- Registry image: `codeberg.org/linards-kalvans/fk-cesis-mms`
+- Registry image: `ghcr.io/linards-kalvans/fk-cesis-mms`
 - Dev tag: `dev`
 - Production tag: `main`
 - Immutable release tags: `<major>.<minor>`, for example `0.42`
