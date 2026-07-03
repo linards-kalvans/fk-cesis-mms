@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 from apps.core.models import TimeStampedModel
 
@@ -50,6 +52,16 @@ class MembershipPlan(TimeStampedModel):
     is_active = models.BooleanField(default=False)
     external_product_id = models.CharField(max_length=64, blank=True, default="")
 
+    # P9: explicit default plan marker + cutoff day for the first billing month.
+    is_default = models.BooleanField(default=False)
+    billing_start_cutoff_day = models.PositiveSmallIntegerField(
+        default=20,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text=(
+            "Mēneša diena, līdz kurai pirmais rēķina mēnesis ir tekošais mēnesis."
+        ),
+    )
+
     @property
     def skip_months_list(self) -> list[int]:
         months: set[int] = set()
@@ -58,6 +70,34 @@ class MembershipPlan(TimeStampedModel):
             if part.isdigit() and 1 <= int(part) <= 12:
                 months.add(int(part))
         return sorted(months)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_default"],
+                condition=Q(is_default=True),
+                name="one_default_membership_plan",
+            ),
+            models.CheckConstraint(
+                condition=Q(is_default=False) | Q(is_active=True),
+                name="default_membership_plan_must_be_active",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.is_default and not self.is_active:
+            raise ValidationError(
+                {"is_default": "Noklusējuma plānam jābūt aktīvam."}
+            )
+        if self.is_default:
+            qs = MembershipPlan.objects.filter(is_default=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError(
+                    {"is_default": "Noklusējuma plāns jau ir izvēlēts."}
+                )
 
     def __str__(self) -> str:
         return str(self.name)
@@ -104,6 +144,9 @@ class BillingRecord(TimeStampedModel):
         max_length=16, choices=PaymentMode.choices, default=PaymentMode.INSTALLMENTS
     )
     full_price_opt_out = models.BooleanField(default=False)
+
+    # P9: override the plan's first_installment_month anchor for this record.
+    first_billing_month = models.CharField(max_length=7, blank=True, default="")
 
     manual_amount_override = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True

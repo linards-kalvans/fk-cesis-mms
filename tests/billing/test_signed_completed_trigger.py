@@ -21,7 +21,11 @@ def test_electronic_agreement_signed_completes_and_triggers_billing(active_plan,
         preferred_agreement_signing="electronic",
     )
     agreement = Agreement.objects.create(
-        member=member, generated_at=timezone.now(), signing_path="electronic",
+        member=member,
+        generated_at=timezone.now(),
+        signing_path="electronic",
+        billing_plan=active_plan,
+        first_billing_month="2026-09",
     )
 
     assert not BillingRecord.objects.filter(member=member).exists()

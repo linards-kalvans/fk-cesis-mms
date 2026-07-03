@@ -32,8 +32,28 @@ def reviewer(db):
 
 
 @pytest.fixture
-def approved_with_signed_agreement(submitted_application, reviewer):
-    """An approved application whose agreement has been sent + signed."""
+def default_plan(db):
+    """An active default MembershipPlan so the P9 signing guard passes."""
+    from decimal import Decimal
+
+    from apps.billing.models import MembershipPlan
+
+    return MembershipPlan.objects.create(
+        name="P8 Default Plan",
+        season="2026/2027",
+        annual_amount=Decimal("300.00"),
+        is_active=True,
+        is_default=True,
+    )
+
+
+@pytest.fixture
+def approved_with_signed_agreement(submitted_application, reviewer, default_plan):
+    """An approved application whose agreement has been sent + signed.
+
+    ``default_plan`` makes ``create_agreement_for_member`` preselect a
+    ``billing_plan`` on the new agreement so the P9 signing guard passes.
+    """
     app = approve_application(submitted_application, reviewer)
     agreement = create_agreement_for_member(
         app.approved_member, Agreement.SigningPath.PAPER
@@ -57,18 +77,23 @@ def active_plan(db):
 
 @pytest.fixture
 def billing_record_factory(db, active_plan):
-    """Factory: create a confirmed BillingRecord for any given member."""
+    """Factory: confirm a BillingRecord for any given member. Reuses the
+    draft record the agreement-signing signal already created for the
+    same (member, season) — P9 invariant ensures a plan was selected."""
     from apps.billing.models import BillingRecord
 
     def _make(member):
-        return BillingRecord.objects.create(
+        record, _ = BillingRecord.objects.update_or_create(
             member=member,
-            plan=active_plan,
             season=active_plan.season,
-            base_amount=active_plan.annual_amount,
-            final_amount=active_plan.annual_amount,
-            status=BillingRecord.Status.CONFIRMED,
+            defaults=dict(
+                plan=active_plan,
+                base_amount=active_plan.annual_amount,
+                final_amount=active_plan.annual_amount,
+                status=BillingRecord.Status.CONFIRMED,
+            ),
         )
+        return record
 
     return _make
 

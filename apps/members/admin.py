@@ -11,6 +11,8 @@ from django.utils.html import format_html
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import change_parent_email
 from apps.agreements.services import get_current_agreement
+from apps.billing.models import BillingRecord, MembershipPlan
+from apps.billing.services import parse_first_billing_month, renew_member_billing
 from apps.core.admin_links import admin_link, admin_links
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
@@ -160,7 +162,7 @@ class MemberAdmin(admin.ModelAdmin):
     list_display = ("full_name", "guardian", "birth_date", "training_group")
     list_filter = ("training_group",)
     search_fields = ("full_name", "personal_id")
-    actions = ["export_csv", "export_csv_with_sensitive"]
+    actions = ["export_csv", "export_csv_with_sensitive", "renew_billing"]
     readonly_fields = ("related_records",)
 
     @admin.display(description="Saistītie ieraksti")
@@ -207,6 +209,82 @@ class MemberAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             actions.pop("export_csv_with_sensitive", None)
         return actions
+
+    @admin.action(description="Atjaunot norēķinus atlasītajiem biedriem")
+    def renew_billing(self, request, queryset):
+        """Two-step renewal: first POST shows a confirmation page (plan + first
+        billing month picker); the second POST (``apply=1``) creates missing
+        draft BillingRecord rows through the service, skipping discontinued
+        members and any member that already has a record for the plan's season.
+
+        Auditing is delegated to the service; this action only reports counts.
+        """
+        members = list(queryset.select_related("guardian", "source_application"))
+        if request.POST.get("apply") == "1":
+            raw_plan = request.POST.get("billing_plan", "").strip()
+            plan = None
+            if raw_plan:
+                plan = MembershipPlan.objects.filter(
+                    pk=raw_plan, is_active=True
+                ).first()
+            if plan is None:
+                self.message_user(
+                    request, "Nezināms norēķinu plāns.", level=messages.ERROR
+                )
+                return None
+            first_billing_month = request.POST.get("first_billing_month", "").strip()
+            try:
+                if first_billing_month:
+                    parse_first_billing_month(first_billing_month)
+            except ValueError:
+                self.message_user(
+                    request,
+                    "Pirmajam mēnesim jābūt formātā GGGG-MM.",
+                    level=messages.ERROR,
+                )
+                return None
+            created = skipped_existing = skipped_discontinued = 0
+            for member in members:
+                if member.status == Member.Status.DISCONTINUED:
+                    skipped_discontinued += 1
+                    continue
+                if BillingRecord.objects.filter(
+                    member=member, season=plan.season
+                ).exists():
+                    skipped_existing += 1
+                    continue
+                if (
+                    renew_member_billing(
+                        member,
+                        plan,
+                        first_billing_month=first_billing_month,
+                        actor=request.user,
+                    )
+                    is not None
+                ):
+                    created += 1
+            self.message_user(
+                request,
+                (
+                    f"Izveidoti {created} norēķinu ieraksti. "
+                    f"Esoši: {skipped_existing}. "
+                    f"Pārtraukti: {skipped_discontinued}."
+                ),
+            )
+            return None
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Atjaunot norēķinus",
+            "members": members,
+            "plans": MembershipPlan.objects.filter(is_active=True).order_by(
+                "season", "name"
+            ),
+            "opts": self.model._meta,
+            "action_name": "renew_billing",
+        }
+        return TemplateResponse(
+            request, "admin/members/member/renew_billing_confirm.html", context
+        )
 
 
 @admin.register(KitSizeOption)

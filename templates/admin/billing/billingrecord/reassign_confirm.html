@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<p>Pašreizējais plāns: <strong>{{ record.plan }}</strong>; pirmais mēnesis: <strong>{{ record.first_billing_month|default:"—" }}</strong>.</p>
+<p>Pārpiešķiršana dzēš esošos nerēķinātos rēķinus un pārrēķina summas pēc jaunā plāna. Neder melnrakstiem ar jau izsūtītiem vai nosūtītiem rēķiniem.</p>
+<form method="post">
+  {% csrf_token %}
+  <div class="form-row">
+    <label for="billing_plan">Jaunais norēķinu plāns:</label>
+    <select id="billing_plan" name="billing_plan" required>
+      {% for plan in plans %}
+      <option value="{{ plan.pk }}"{% if record.plan_id == plan.pk %} selected{% endif %}>{{ plan.name }} — {{ plan.season }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="first_billing_month">Pirmais rēķina mēnesis (GGGG-MM):</label>
+    <input type="text" id="first_billing_month" name="first_billing_month" value="{{ record.first_billing_month }}" pattern="\d{4}-\d{2}" placeholder="2027-09">
+  </div>
+  <button type="submit" class="default">Pārpiešķirt</button>
+  <a href="{% url 'admin:billing_billingrecord_change' record.pk %}" class="button">Atcelt</a>
+</form>
+{% endblock %}

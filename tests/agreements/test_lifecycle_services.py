@@ -35,8 +35,12 @@ def staff_user(db):
 
 
 @pytest.fixture
-def signed_agreement(agreement_member, staff_user):
-    """A signed, current agreement for the test member."""
+def signed_agreement(agreement_member, staff_user, default_plan):
+    """A signed, current agreement for the test member.
+
+    ``default_plan`` makes ``create_agreement_for_member`` preselect a
+    ``billing_plan`` on the new agreement so the P9 signing guard passes.
+    """
     agreement = create_agreement_for_member(
         agreement_member, Agreement.SigningPath.PAPER
     )
@@ -298,13 +302,17 @@ def test_discontinue_agreement_is_atomic(signed_agreement, staff_user):
         annual_amount=Decimal("300.00"),
         is_active=True,
     )
-    record = BillingRecord.objects.create(
+    # Reuse the draft record the signing signal already created (P9
+    # preselects ``default_plan``); update it to CONFIRMED on the test plan.
+    record, _ = BillingRecord.objects.update_or_create(
         member=member,
-        plan=plan,
         season=plan.season,
-        base_amount=plan.annual_amount,
-        final_amount=plan.annual_amount,
-        status=BillingRecord.Status.CONFIRMED,
+        defaults=dict(
+            plan=plan,
+            base_amount=plan.annual_amount,
+            final_amount=plan.annual_amount,
+            status=BillingRecord.Status.CONFIRMED,
+        ),
     )
     invoice = BillingInvoice.objects.create(
         billing_record=record,

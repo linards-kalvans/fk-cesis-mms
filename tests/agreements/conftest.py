@@ -37,3 +37,20 @@ def agreement_member(db, agreement_guardian):
         guardian=agreement_guardian,
         training_group=None,
     )
+
+
+@pytest.fixture
+def default_plan(db):
+    """An active default MembershipPlan — P9 preselects it on agreement
+    creation so ``mark_agreement_signed`` has a ``billing_plan`` to validate."""
+    from decimal import Decimal
+
+    from apps.billing.models import MembershipPlan
+
+    return MembershipPlan.objects.create(
+        name="Test Default Plan",
+        season="2026/2027",
+        annual_amount=Decimal("300.00"),
+        is_active=True,
+        is_default=True,
+    )

@@ -32,7 +32,7 @@ class AgreementAdmin(admin.ModelAdmin):
     class Media:
         css = {"all": ["admin/fk_badges.css"]}
 
-    list_display = ("member", "state", "sync_health_badge", "signing_path", "is_current", "updated_at")
+    list_display = ("member", "state", "sync_health_badge", "signing_path", "billing_plan", "first_billing_month", "is_current", "updated_at")
     list_filter = ("state", "signing_path", "is_current", AgreementSyncHealthFilter)
     date_hierarchy = "generated_at"
     ordering = ("-generated_at",)
@@ -43,6 +43,8 @@ class AgreementAdmin(admin.ModelAdmin):
         "is_current",
         "state",
         "signing_path",
+        "billing_plan",
+        "first_billing_month",
         "generated_at",
         "sent_at",
         "signed_at",
@@ -51,8 +53,8 @@ class AgreementAdmin(admin.ModelAdmin):
         "external_provider",
         "external_id",
         "external_state",
-        "external_error_code",
         "external_url",
+        "external_error_code",
         "created_at",
         "updated_at",
     )

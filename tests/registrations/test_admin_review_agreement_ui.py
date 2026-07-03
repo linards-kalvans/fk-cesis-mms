@@ -86,7 +86,7 @@ def test_mark_sent_advances_state(
 
 
 def test_mark_signed_advances_state_from_generated(
-    submitted_application, staff_client, reviewer
+    submitted_application, staff_client, reviewer, default_membership_plan
 ):
     approve_application(submitted_application, reviewer)
     resp = staff_client.post(

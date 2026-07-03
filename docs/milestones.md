@@ -291,6 +291,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - DocuSeal / manual-signing states remain understandable after lifecycle changes
 
 ### P9 — Billing plan lifecycle
+**Status:** complete (2026-07-03) — `Agreement` owns explicit `billing_plan` + `first_billing_month`; `MembershipPlan.is_default` + `billing_start_cutoff_day` with single-default DB constraint and `default-is-active` validation; preselected default plan + derived first-billing-month at `create_agreement_for_member`; `mark_agreement_signed` refuses to mutate state without a billing plan; `set_billing_setup` admin action; selected-member `renew_member_billing` action; draft-only `reassign_draft_billing_record` action (blocks confirmed/sent invoices). Three new `AuditEvent` choices: `BILLING_PLAN_ASSIGNED`, `BILLING_RECORD_RENEWED`, `BILLING_RECORD_REASSIGNED`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-02-p9-billing-plan-lifecycle*`. Gate: 1565 passed, ruff + mypy clean, no migrations.
+
 **Why ninth**
 - extends delivered billing instead of changing the signed-agreement trigger ad hoc
 - removes the current "latest active plan wins" ambiguity before renewals matter

@@ -25,13 +25,15 @@ def webhook_settings(settings):
 
 
 @pytest.fixture
-def sent_electronic(agreement_member):
+def sent_electronic(agreement_member, default_plan):
     return Agreement.objects.create(
         member=agreement_member,
         signing_path=Agreement.SigningPath.ELECTRONIC,
         state=Agreement.State.SENT,
         external_id="ds-100",
         generated_at=timezone.now(),
+        billing_plan=default_plan,
+        first_billing_month="2026-09",
     )
 
 

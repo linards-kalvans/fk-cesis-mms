@@ -114,7 +114,7 @@ def test_mark_sent_from_generated_succeeds_and_sends_email(
     assert "nosūtīts parakstīšanai" in mail.outbox[0].body
 
 
-def test_mark_signed_email_subject_is_latvian(agreement_member, actor):
+def test_mark_signed_email_subject_is_latvian(agreement_member, actor, default_plan):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_signed(a, actor)
@@ -136,7 +136,9 @@ def test_mark_sent_from_illegal_states_raises(agreement_member, actor, from_stat
 # --- mark_agreement_signed ---
 
 
-def test_mark_signed_from_generated_succeeds_and_sends_email(agreement_member, actor):
+def test_mark_signed_from_generated_succeeds_and_sends_email(
+    agreement_member, actor, default_plan
+):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_signed(a, actor)
@@ -147,7 +149,9 @@ def test_mark_signed_from_generated_succeeds_and_sends_email(agreement_member, a
     assert "parakstīts" in mail.outbox[0].body
 
 
-def test_mark_signed_from_sent_succeeds_and_sends_email(agreement_member, actor):
+def test_mark_signed_from_sent_succeeds_and_sends_email(
+    agreement_member, actor, default_plan
+):
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_sent(a, actor)
     mail.outbox.clear()
@@ -233,7 +237,7 @@ def test_set_signing_path_same_value_is_idempotent(agreement_member, actor):
     assert update_queries == []
 
 
-def test_set_signing_path_allowed_when_signed(agreement_member, actor):
+def test_set_signing_path_allowed_when_signed(agreement_member, actor, default_plan):
     """User explicitly chose 'override at any state' — verify signed allows it."""
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
     mark_agreement_signed(a, actor)

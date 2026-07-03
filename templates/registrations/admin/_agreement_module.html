@@ -1,10 +1,36 @@
-{% comment %}P5 Slice C + P8 — admin Līgums module. Rendered only
+{% comment %}P5 Slice C + P8 + P9 — admin Līgums module. Rendered only
 when `agreement` is non-null (i.e. post-approval).{% endcomment %}
 
 <div class="module mms-review-agreement-module">
   <h2>Līgums</h2>
 
   <p>Stāvoklis: <strong>{{ agreement.get_state_display }}</strong></p>
+
+  <h3>Norēķinu plāns</h3>
+  {% if not agreement.billing_plan_id %}
+  <p class="errornote">Pirms parakstīšanas jāizvēlas norēķinu plāns.</p>
+  {% endif %}
+  {% if agreement.state == "signed" %}
+  <p>Plāns: <strong>{{ agreement.billing_plan }}</strong>; pirmais mēnesis: <strong>{{ agreement.first_billing_month|default:"—" }}</strong>.</p>
+  {% else %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="billing_plan">Norēķinu plāns:</label>
+      <select name="billing_plan" id="billing_plan" required>
+        <option value="">— Izvēlieties —</option>
+        {% for plan in membership_plans %}
+        <option value="{{ plan.pk }}"{% if agreement.billing_plan_id == plan.pk %} selected{% endif %}>{{ plan.name }} — {{ plan.season }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label for="first_billing_month">Pirmais rēķina mēnesis (GGGG-MM):</label>
+      <input type="text" name="first_billing_month" id="first_billing_month" value="{{ agreement.first_billing_month }}" placeholder="2026-09" pattern="\d{4}-\d{2}">
+    </div>
+    <button type="submit" name="action" value="set_billing_setup" class="default">Saglabāt norēķinu plānu</button>
+  </form>
+  {% endif %}
 
   {% if agreement_error_message %}
   <p class="errornote">{{ agreement_error_message }}</p>

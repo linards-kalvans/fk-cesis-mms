@@ -27,7 +27,7 @@ def test_mark_agreement_sent_records_audit_event(agreement_member, actor):
 
 
 def test_mark_agreement_signed_via_webhook_records_system_event(
-    agreement_member, actor
+    agreement_member, actor, default_plan
 ):
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_sent(a, actor=actor)

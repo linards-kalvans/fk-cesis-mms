@@ -9,7 +9,7 @@ from apps.agreements.messages import get_agreement_error_message
 from apps.agreements.models import Agreement
 from apps.core.admin_links import admin_link, admin_links
 from apps.agreements.services import get_current_agreement
-from apps.billing.models import BillingAdjustment, BillingInvoice, PaymentStatus
+from apps.billing.models import BillingAdjustment, BillingInvoice, MembershipPlan, PaymentStatus
 from apps.members.models import Member
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
@@ -198,6 +198,9 @@ def build_review_context(
         "discontinuation_invoice_candidates": discontinuation_invoice_candidates,
         "discontinued_billing_invoices": discontinued_billing_invoices,
         "billing_adjustments": billing_adjustments,
+        "membership_plans": list(
+            MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
+        ),
     }
 
 

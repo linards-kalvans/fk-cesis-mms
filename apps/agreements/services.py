@@ -34,19 +34,39 @@ def create_agreement_for_member(
 ) -> Agreement:
     """Return the current agreement when it exists and is not void; otherwise
     archive any void current and create a fresh row. Idempotent on the
-    happy path."""
+    happy path.
+
+    P9: a fresh agreement preselects the default active ``MembershipPlan`` and
+    the corresponding first billing month (cutoff-day derived). Staff can
+    override either field via the admin ``set_billing_setup`` action before
+    signing. ``mark_agreement_signed`` raises if ``billing_plan`` is missing.
+    """
     current = get_current_agreement(member)
     if current is not None and current.state != Agreement.State.VOID:
         return current
     if current is not None and current.state == Agreement.State.VOID:
         current.is_current = False
         current.save(update_fields=["is_current"])
+
+    # Lazy import to avoid an apps.billing → apps.agreements → apps.billing
+    # cycle at import time.
+    from apps.billing.services import (
+        derive_first_billing_month,
+        get_default_billing_plan,
+    )
+
+    default_plan = get_default_billing_plan()
+    first_billing_month = (
+        derive_first_billing_month(default_plan) if default_plan is not None else ""
+    )
     return cast(
         "Agreement",
         Agreement.objects.create(
             member=member,
             signing_path=signing_path,
             generated_at=timezone.now(),
+            billing_plan=default_plan,
+            first_billing_month=first_billing_month,
         ),
     )
 
@@ -92,11 +112,18 @@ def mark_agreement_signed(
     actor,
 ) -> Agreement:
     """{generated, sent} → signed. Sets signed_at, sends Latvian email, emits
-    the agreement_signed signal (billing listens)."""
+    the agreement_signed signal (billing listens).
+
+    P9: refuses to mutate state when ``billing_plan`` is missing — the signed
+    transition must realise a billing draft, so the plan choice must be
+    explicit before signing.
+    """
     if agreement.state not in (Agreement.State.GENERATED, Agreement.State.SENT):
         raise ValueError(
             f"cannot mark signed from state {agreement.state}"
         )
+    if agreement.billing_plan_id is None:
+        raise ValueError("billing plan required")
     agreement.state = Agreement.State.SIGNED
     agreement.signed_at = timezone.now()
     agreement.save(update_fields=["state", "signed_at"])
@@ -178,6 +205,52 @@ def set_signing_path(
     if application is not None and application.preferred_agreement_signing != signing_path:
         application.preferred_agreement_signing = signing_path
         application.save(update_fields=["preferred_agreement_signing"])
+    return agreement
+
+
+def set_billing_setup(
+    agreement: Agreement,
+    billing_plan,
+    first_billing_month: str,
+    actor,
+) -> Agreement:
+    """Set ``Agreement.billing_plan`` + ``first_billing_month`` from the admin
+    module. Refuses to mutate a signed/superseded/discontinued agreement
+    (billing is already realised against the locked record). Idempotent on
+    the same values — no audit row when nothing changed. Audits only on real
+    mutation.
+    """
+    if agreement.state in (
+        Agreement.State.SIGNED,
+        Agreement.State.SUPERSEDED,
+        Agreement.State.DISCONTINUED,
+    ):
+        raise ValueError("cannot change billing setup after signing")
+    if first_billing_month:
+        from apps.billing.services import parse_first_billing_month
+
+        parse_first_billing_month(first_billing_month)
+    old_plan_id = agreement.billing_plan_id
+    old_month = agreement.first_billing_month
+    new_plan_id = getattr(billing_plan, "pk", billing_plan)
+    if old_plan_id == new_plan_id and old_month == first_billing_month:
+        return agreement
+    agreement.billing_plan_id = new_plan_id
+    agreement.first_billing_month = first_billing_month
+    agreement.save(
+        update_fields=["billing_plan", "first_billing_month", "updated_at"]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_PLAN_ASSIGNED),
+        actor=actor,
+        target=agreement,
+        metadata={
+            "old_plan_id": old_plan_id,
+            "new_plan_id": new_plan_id,
+            "old_first_billing_month": old_month,
+            "new_first_billing_month": first_billing_month,
+        },
+    )
     return agreement
 
 
@@ -271,6 +344,8 @@ def start_material_amendment(
             member=agreement.member,
             signing_path=new_path,
             generated_at=now,
+            billing_plan=agreement.billing_plan,
+            first_billing_month=agreement.first_billing_month,
         )
 
     record_audit_event(

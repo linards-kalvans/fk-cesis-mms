@@ -60,6 +60,18 @@ class Agreement(TimeStampedModel):
     external_url = models.URLField(blank=True, default="")
     external_error_code = models.CharField(max_length=64, blank=True, default="")
 
+    # P9: agreement owns the billing intent that the signed transition will
+    # realise. Staff sets these on the review detail; create_agreement_for_member
+    # preselects the default plan + derived month when one is available.
+    billing_plan = models.ForeignKey(
+        "billing.MembershipPlan",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="agreements",
+    )
+    first_billing_month = models.CharField(max_length=7, blank=True, default="")
+
     class Meta:
         constraints = [
             models.UniqueConstraint(

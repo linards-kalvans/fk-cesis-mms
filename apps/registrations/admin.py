@@ -19,11 +19,13 @@ from apps.agreements.services import (
     mark_agreement_signed,
     record_minor_amendment,
     regenerate_agreement,
+    set_billing_setup,
     set_signing_path,
     start_material_amendment,
     sync_application_signing_path_to_agreement,
     void_agreement,
 )
+from apps.billing.models import MembershipPlan
 from apps.billing.services import DiscontinuationInvoiceError, PaidInvoiceSelected
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
@@ -211,7 +213,53 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             try:
                 mark_agreement_signed(agreement, request.user)
             except ValueError as exc:
-                self.message_user(request, str(exc), level=messages.ERROR)
+                raw = str(exc)
+                if raw == "billing plan required":
+                    latvian = "Pirms parakstīšanas jāizvēlas norēķinu plāns."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
+
+        elif action == "set_billing_setup":
+            if agreement is None:
+                self.message_user(
+                    request, "Līgums nav sagatavots.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            raw_plan = request.POST.get("billing_plan", "").strip()
+            if not raw_plan:
+                self.message_user(
+                    request, "Lūdzu izvēlieties norēķinu plānu.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            first_billing_month = request.POST.get("first_billing_month", "").strip()
+            try:
+                plan = MembershipPlan.objects.filter(
+                    pk=int(raw_plan), is_active=True
+                ).first()
+            except (ValueError, TypeError):
+                plan = None
+            if plan is None:
+                self.message_user(
+                    request, "Nezināms norēķinu plāns.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            try:
+                set_billing_setup(
+                    agreement,
+                    plan,
+                    first_billing_month=first_billing_month,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                raw = str(exc)
+                if "first billing month" in raw:
+                    latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
                 return self._after_review_redirect(request, object_id)
             return self._after_review_redirect(request, object_id)
 

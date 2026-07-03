@@ -5,13 +5,18 @@ from urllib.parse import urlencode
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.billing.messages import get_invoice_error_message
 from apps.billing.models import BillingAdjustment, BillingInvoice, BillingRecord, MembershipPlan
-from apps.billing.services import recompute_billing_record
+from apps.billing.services import (
+    parse_first_billing_month,
+    reassign_draft_billing_record,
+    recompute_billing_record,
+)
 from apps.core.admin_badges import status_badge
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
@@ -22,9 +27,10 @@ from apps.core.models import AuditEvent
 class MembershipPlanAdmin(admin.ModelAdmin):
     list_display = (
         "name", "season", "annual_amount", "sibling_discount_percent",
-        "installment_count", "first_installment_month", "payment_due_day", "is_active",
+        "installment_count", "first_installment_month", "payment_due_day",
+        "is_default", "billing_start_cutoff_day", "is_active",
     )
-    list_filter = ("season", "is_active")
+    list_filter = ("season", "is_active", "is_default")
     search_fields = ("name", "season")
 
 
@@ -89,7 +95,10 @@ class BillingRecordAdmin(admin.ModelAdmin):
         css = {"all": ["admin/fk_badges.css"]}
     readonly_fields = (
         "related_records",
-        "member", "plan", "agreement", "season", "base_amount", "is_full_price",
+        "reassign_link",
+        "member", "plan", "agreement", "season",
+        "first_billing_month",
+        "base_amount", "is_full_price",
         "sibling_discount_percent_applied", "discount_amount", "final_amount",
         "payment_mode", "full_price_opt_out", "external_status", "external_error_code",
         "payment_status", "payment_synced_at", "payment_error_code",
@@ -136,6 +145,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.confirm_view),
                 name="billing_billingrecord_confirm",
             ),
+            path(
+                "<int:object_id>/reassign/",
+                self.admin_site.admin_view(self.reassign_view),
+                name="billing_billingrecord_reassign",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -157,6 +171,66 @@ class BillingRecordAdmin(admin.ModelAdmin):
             self.message_user(request, "Ieraksts jau ir apstiprināts.", level=messages.INFO)
         return self._safe_redirect(request, object_id)
 
+    def reassign_view(self, request, object_id):
+        """Two-step reassignment of a draft BillingRecord to a new plan + first
+        billing month. GET renders a confirmation form; POST commits through
+        the service. The service is the source of truth for guards (DRAFT
+        only, no pushed/sent invoices)."""
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        record = get_object_or_404(BillingRecord, pk=object_id)
+        plans = MembershipPlan.objects.filter(is_active=True).order_by(
+            "season", "name"
+        )
+        if request.method == "POST":
+            raw_plan = request.POST.get("billing_plan", "").strip()
+            if not raw_plan:
+                self.message_user(
+                    request, "Lūdzu izvēlieties norēķinu plānu.", level=messages.ERROR
+                )
+            else:
+                plan = MembershipPlan.objects.filter(
+                    pk=raw_plan, is_active=True
+                ).first()
+                if plan is None:
+                    self.message_user(
+                        request, "Nezināms norēķinu plāns.", level=messages.ERROR
+                    )
+                else:
+                    first_billing_month = request.POST.get("first_billing_month", "").strip()
+                    try:
+                        if first_billing_month:
+                            parse_first_billing_month(first_billing_month)
+                        reassign_draft_billing_record(
+                            record,
+                            plan,
+                            first_billing_month=first_billing_month,
+                            actor=request.user,
+                        )
+                        self.message_user(request, "Norēķinu ieraksts pārpiešķirts.")
+                        return redirect(
+                            "admin:billing_billingrecord_change", object_id
+                        )
+                    except ValueError as exc:
+                        raw = str(exc)
+                        if "first billing month" in raw:
+                            latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                        else:
+                            latvian = raw
+                        self.message_user(request, latvian, level=messages.ERROR)
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Pārpiešķirt norēķinu ierakstu",
+            "record": record,
+            "plans": plans,
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(
+            request,
+            "admin/billing/billingrecord/reassign_confirm.html",
+            context,
+        )
+
     def _safe_redirect(self, request, object_id):
         # The one-click buttons pass `next` in the formaction query string (GET);
         # keep POST support for any direct callers.
@@ -174,6 +248,22 @@ class BillingRecordAdmin(admin.ModelAdmin):
     @admin.display(description="Līgums")
     def agreement_link(self, obj):
         return admin_link(obj.agreement)
+
+    @admin.display(description="Pārpiešķiršana")
+    def reassign_link(self, obj):
+        """Surface a one-click button to the reassignment form for draft
+        records with no pushed or sent invoices. Confirmed/locked records
+        show '—' because the service refuses the reassign anyway."""
+        if obj.status != BillingRecord.Status.DRAFT:
+            return "—"
+        if obj.invoices.exclude(external_invoice_id="").exists():
+            return "—"
+        if obj.invoices.filter(sent_at__isnull=False).exists():
+            return "—"
+        url = reverse("admin:billing_billingrecord_reassign", args=[obj.pk])
+        return format_html(  # type: ignore[return-value,no-any-return]
+            '<a class="button" href="{}">Pārpiešķirt melnrakstu</a>', url
+        )
 
     @admin.display(description="Saistītie ieraksti")
     def related_records(self, obj):

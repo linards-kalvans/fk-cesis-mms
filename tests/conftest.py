@@ -146,3 +146,36 @@ def make_guardian(db):
         )
 
     return _make
+
+
+@pytest.fixture
+def default_membership_plan(db):
+    """A single active default ``MembershipPlan`` (P9 preselection).
+
+    P9: ``create_agreement_for_member`` picks the active default plan, and
+    ``mark_agreement_signed`` refuses to mutate state without one. Tests that
+    drive an agreement through the generated/sent → signed transition request
+    this fixture so the production guard does not bite.
+
+    Uses ``get_or_create`` keyed on the unique default constraint; the
+    ``is_default=True`` row is fetched (any name) when one already exists so
+    the fixture composes with sibling fixtures that mint their own default
+    plan.
+    """
+    from decimal import Decimal
+
+    from apps.billing.models import MembershipPlan
+
+    existing = MembershipPlan.objects.filter(
+        is_default=True, is_active=True
+    ).first()
+    if existing is not None:
+        return existing
+    return MembershipPlan.objects.create(
+        name="Test Default Membership Plan",
+        season="2026/2027",
+        annual_amount=Decimal("300.00"),
+        is_active=True,
+        is_default=True,
+        billing_start_cutoff_day=20,
+    )

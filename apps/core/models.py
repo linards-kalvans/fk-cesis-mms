@@ -52,6 +52,12 @@ class AuditEvent(models.Model):
         BILLING_CREDIT_CREATED = "billing_credit_created", "Billing credit created"
         BILLING_CREDIT_FAILED = "billing_credit_failed", "Billing credit failed"
         BILLING_CREDIT_APPLIED = "billing_credit_applied", "Billing credit applied"
+        BILLING_PLAN_ASSIGNED = "billing_plan_assigned", "Billing plan assigned"
+        BILLING_RECORD_RENEWED = "billing_record_renewed", "Billing record renewed"
+        BILLING_RECORD_REASSIGNED = (
+            "billing_record_reassigned",
+            "Billing record reassigned",
+        )
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -71,14 +71,64 @@ def compute_billing_amounts(member, plan) -> BillingAmounts:
     )
 
 
-def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.date, Decimal]]:
+def get_default_billing_plan():
+    """Return the single active default MembershipPlan, or None when none is set.
+
+    The default is explicit (one row, marked ``is_default=True``); it must also
+    be active. New agreements preselect this plan + a derived first billing
+    month so the signed transition can realise billing without a staff step.
+    """
+    from apps.billing.models import MembershipPlan
+
+    return MembershipPlan.objects.filter(is_default=True, is_active=True).first()
+
+
+def derive_first_billing_month(plan, today: datetime.date | None = None) -> str:
+    """Return the ``YYYY-MM`` of the first invoice: when ``today.day <= cutoff``
+    the current month, otherwise the next month (year-wrap when month rolls
+    past December). Falls back to the configured ``today`` so tests can pin
+    a deterministic date."""
+    today = today or timezone.localdate()
+    year = int(today.year)
+    month = int(today.month)
+    if int(today.day) > int(plan.billing_start_cutoff_day):
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return f"{year:04d}-{month:02d}"
+
+
+def parse_first_billing_month(value: str) -> tuple[int, int] | None:
+    """Parse a ``YYYY-MM`` override. Blank → None (caller falls back to plan).
+    Any malformed non-blank value raises ValueError so the admin form rejects
+    garbage and the service refuses to persist it."""
+    if not value:
+        return None
+    try:
+        year_str, month_str = value.split("-", 1)
+        year = int(year_str)
+        month = int(month_str)
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("first billing month must use YYYY-MM") from exc
+    if len(year_str) != 4 or len(month_str) != 2 or not 1 <= month <= 12:
+        raise ValueError("first billing month must use YYYY-MM")
+    return year, month
+
+
+def derive_installment_schedule(
+    plan,
+    total: Decimal,
+    *,
+    first_billing_month: str = "",
+) -> list[tuple[datetime.date, Decimal]]:
     """Split `total` into `plan.installment_count` equal monthly entries, placed on
-    successive billing months starting at `plan.first_installment_month` and SKIPPING
-    any month in `plan.skip_months_list` (default July + December). Equal cents; the
-    last entry absorbs the rounding remainder. Each due date is `plan.payment_due_day`
-    clamped to the month length. The year is anchored to the first year in
-    `plan.season` ("2026/2027" -> 2026) and rolls forward when the month wraps past
-    December."""
+    successive billing months. When ``first_billing_month`` (YYYY-MM) is given,
+    the schedule anchors there; otherwise the plan's ``first_installment_month``
+    + season start-year is the anchor. SKIPS any month in ``plan.skip_months_list``
+    (default July + December). Equal cents; the last entry absorbs the rounding
+    remainder. Each due date is ``plan.payment_due_day`` clamped to the month
+    length. Year wraps past December."""
     count = max(int(plan.installment_count), 1)
     per = _money(total / Decimal(count))
     amounts = [per] * (count - 1)
@@ -86,11 +136,16 @@ def derive_installment_schedule(plan, total: Decimal) -> list[tuple[datetime.dat
 
     skip = set(plan.skip_months_list)
     due_day = int(plan.payment_due_day)
-    start_year = int(plan.season.split("/")[0])
+
+    parsed = parse_first_billing_month(first_billing_month)
+    if parsed is None:
+        start_year = int(plan.season.split("/")[0])
+        month = int(plan.first_installment_month)
+        year = start_year
+    else:
+        year, month = parsed
 
     schedule: list[tuple[datetime.date, Decimal]] = []
-    month = int(plan.first_installment_month)
-    year = start_year
     for amount in amounts:
         skipped = 0
         while month in skip:
@@ -217,14 +272,29 @@ def create_discontinuation_adjustments(member, event, invoice_ids, reason: str):
 
 
 def create_draft_billing_for_member(member, agreement):
-    """Idempotently create a draft BillingRecord for the active plan's season.
+    """Idempotently create a draft BillingRecord for the season of the plan
+    the member is on.
 
-    Returns the record (existing or new), or None when no active plan exists.
+    Plan resolution (P9):
+      - When ``agreement`` is provided and carries a non-null ``billing_plan``,
+        that plan is used (signed agreement's explicit intent). Its
+        ``first_billing_month`` is snapshotted onto the record.
+      - When the agreement is missing or has no ``billing_plan``, fall back to
+        the latest active plan (legacy backfill + ``manage.py backfill_billing``
+        + the agreement_signed signal for pre-P9 agreements without a plan).
+
+    Returns the record (existing or new), or None when no plan can be resolved.
     Never raises on missing config — signing must not break.
     """
     from apps.billing.models import BillingRecord, MembershipPlan
 
-    plan = MembershipPlan.objects.filter(is_active=True).order_by("-pk").first()
+    plan = getattr(agreement, "billing_plan", None) if agreement is not None else None
+    first_billing_month = (
+        getattr(agreement, "first_billing_month", "") or ""
+    ) if agreement is not None else ""
+
+    if plan is None:
+        plan = MembershipPlan.objects.filter(is_active=True).order_by("-pk").first()
     if plan is None:
         logger.warning(
             "No active MembershipPlan; skipping billing draft for member %s", member.pk
@@ -257,6 +327,7 @@ def create_draft_billing_for_member(member, agreement):
             "final_amount": amounts.final_amount,
             "payment_mode": payment_mode,
             "full_price_opt_out": opt_out,
+            "first_billing_month": first_billing_month,
         },
     )
     return record
@@ -326,7 +397,11 @@ def materialize_installments(record):
     if existing:
         return existing
 
-    schedule = derive_installment_schedule(record.plan, record.final_amount)
+    schedule = derive_installment_schedule(
+        record.plan,
+        record.final_amount,
+        first_billing_month=record.first_billing_month,
+    )
     if record.payment_mode == BillingRecord.PaymentMode.UPFRONT:
         first_due = schedule[0][0]
         schedule = [(first_due, record.final_amount)]
@@ -338,3 +413,145 @@ def materialize_installments(record):
         for i, (due, amount) in enumerate(schedule, start=1)
     ]
     return rows
+
+
+def renew_member_billing(
+    member,
+    plan,
+    *,
+    first_billing_month: str = "",
+    actor=None,
+):
+    """Create a missing draft BillingRecord for ``(member, plan.season)`` and
+    audit the creation.
+
+    Returns the new record, or None when a record for that season already
+    exists (skip). The caller is expected to filter out discontinued members
+    upstream — the service is intentionally simple so it stays composable in
+    the selected-member admin action and any future batch flow. Audits only
+    on real creation, never on the no-op path.
+    """
+    from apps.agreements.services import get_current_agreement
+    from apps.billing.models import BillingRecord
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+
+    if first_billing_month:
+        parse_first_billing_month(first_billing_month)
+
+    if BillingRecord.objects.filter(member=member, season=plan.season).exists():
+        return None
+
+    amounts = compute_billing_amounts(member, plan)
+    application = getattr(member, "source_application", None)
+    payment_mode = BillingRecord.PaymentMode.INSTALLMENTS
+    opt_out = False
+    if application is not None:
+        if application.preferred_payment_mode:
+            payment_mode = application.preferred_payment_mode
+        opt_out = application.support_club_instead_of_multi_child_discount is True
+
+    record = BillingRecord.objects.create(
+        member=member,
+        plan=plan,
+        agreement=get_current_agreement(member),
+        season=plan.season,
+        first_billing_month=first_billing_month,
+        base_amount=amounts.base_amount,
+        is_full_price=amounts.is_full_price,
+        sibling_discount_percent_applied=amounts.discount_percent_applied,
+        discount_amount=amounts.discount_amount,
+        final_amount=amounts.final_amount,
+        payment_mode=payment_mode,
+        full_price_opt_out=opt_out,
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_RECORD_RENEWED),
+        actor=actor,
+        target=record,
+        metadata={
+            "plan_id": plan.pk,
+            "season": plan.season,
+            "first_billing_month": first_billing_month,
+        },
+    )
+    return record
+
+
+def reassign_draft_billing_record(
+    record,
+    plan,
+    *,
+    first_billing_month: str = "",
+    actor=None,
+) -> None:
+    """Replace a draft BillingRecord's plan/season/month, recompute amounts, and
+    audit the change.
+
+    Hard guards (raise ValueError — never silently mutate):
+      - record is not DRAFT (confirmed / pushed / paid records must not drift);
+      - any invoice already pushed to Invoice Ninja (has external_invoice_id);
+      - any invoice already emailed to a parent (has sent_at).
+
+    Local-only invoices are deleted so the new plan+month materializes fresh
+    dates. A manual override on the record is preserved across the swap.
+    """
+    from apps.billing.models import BillingRecord
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+
+    if record.status != BillingRecord.Status.DRAFT:
+        raise ValueError(
+            "only draft billing records can be reassigned; confirmed records must stay locked"
+        )
+    if first_billing_month:
+        parse_first_billing_month(first_billing_month)
+    if (
+        record.invoices.exclude(external_invoice_id="").exists()
+        or record.invoices.filter(sent_at__isnull=False).exists()
+    ):
+        raise ValueError(
+            "cannot reassign a billing record with pushed or sent invoices"
+        )
+
+    old_plan_id = record.plan_id
+    old_month = record.first_billing_month
+
+    record.invoices.all().delete()
+    amounts = compute_billing_amounts(record.member, plan)
+    record.plan = plan
+    record.season = plan.season
+    record.first_billing_month = first_billing_month
+    record.base_amount = amounts.base_amount
+    record.is_full_price = amounts.is_full_price
+    record.sibling_discount_percent_applied = amounts.discount_percent_applied
+    record.discount_amount = amounts.discount_amount
+    record.final_amount = (
+        record.manual_amount_override
+        if record.manual_amount_override is not None
+        else amounts.final_amount
+    )
+    record.save(
+        update_fields=[
+            "plan",
+            "season",
+            "first_billing_month",
+            "base_amount",
+            "is_full_price",
+            "sibling_discount_percent_applied",
+            "discount_amount",
+            "final_amount",
+            "updated_at",
+        ]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_RECORD_REASSIGNED),
+        actor=actor,
+        target=record,
+        metadata={
+            "old_plan_id": old_plan_id,
+            "new_plan_id": plan.pk,
+            "old_first_billing_month": old_month,
+            "new_first_billing_month": first_billing_month,
+        },
+    )

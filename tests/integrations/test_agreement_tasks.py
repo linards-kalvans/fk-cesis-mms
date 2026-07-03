@@ -16,12 +16,14 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def electronic_agreement(agreement_member):
+def electronic_agreement(agreement_member, default_membership_plan):
     return Agreement.objects.create(
         member=agreement_member,
         signing_path=Agreement.SigningPath.ELECTRONIC,
         state=Agreement.State.SENT,
         generated_at=timezone.now(),
+        billing_plan=default_membership_plan,
+        first_billing_month="2026-09",
     )
 
 

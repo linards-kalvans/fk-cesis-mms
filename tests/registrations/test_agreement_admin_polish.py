@@ -104,7 +104,7 @@ def test_sync_updates_signing_path_when_agreement_is_sent(
 
 
 def test_sync_updates_signing_path_when_agreement_is_signed(
-    submitted_application, reviewer
+    submitted_application, reviewer, default_membership_plan
 ):
     submitted_application.preferred_agreement_signing = "electronic"
     submitted_application.save(update_fields=["preferred_agreement_signing"])

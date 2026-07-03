@@ -73,7 +73,7 @@ def test_portal_shows_sent_paper_copy(
 
 
 def test_portal_shows_signed_copy(
-    submitted_application, verified_client, reviewer
+    submitted_application, verified_client, reviewer, default_membership_plan
 ):
     approve_application(submitted_application, reviewer)
     agreement = submitted_application.approved_member.agreements.get(is_current=True)
