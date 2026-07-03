@@ -282,59 +282,15 @@ class TestLocalDockerSmokeDoc:
 
 
 # ---------------------------------------------------------------------------
-# .woodpecker.yml — CI comments describe webhook as optional handoff
+# .woodpecker.yml — CI builds images, deploys manually
 # ---------------------------------------------------------------------------
 
-class TestWoodpeckerCIComments:
-    """.woodpecker.yml must describe deploy notification as optional infra handoff."""
+class TestWoodpeckerCIManualDeploy:
+    """.woodpecker.yml must build/push images and leave deployment manual."""
 
     @property
     def content(self) -> str:
         return _read_all(REPO_ROOT / ".woodpecker.yml")
-
-    @property
-    def top_comments(self) -> str:
-        return _read_head(REPO_ROOT / ".woodpecker.yml", 15)
-
-    @property
-    def secrets_block(self) -> str:
-        """Roughly lines 20-45 of the file."""
-        lines = self.content.splitlines()
-        return "\n".join(lines[19:min(50, len(lines))])
-
-    def test_top_comments_describe_webhook_as_optional_handoff(self):
-        """The top comments must not describe deploy as CI-owned push; must be optional handoff."""
-        # Must NOT say "notify dev server" / "notify prod server"
-        assert "notify dev" not in self.top_comments.lower(), (
-            ".woodpecker.yml top comments must NOT describe deploy as 'notify dev server'"
-        )
-        assert "notify prod" not in self.top_comments.lower(), (
-            ".woodpecker.yml top comments must NOT describe deploy as 'notify prod server'"
-        )
-        # Should mention infra or fk-cesis or optional handoff
-        has_ownership = (
-            "fk-cesis" in self.top_comments.lower()
-            or "infra" in self.top_comments.lower()
-            or "optional" in self.top_comments.lower()
-        )
-        assert has_ownership, (
-            ".woodpecker.yml top comments must reference fk-cesis/infra ownership "
-            "or describe webhook as optional"
-        )
-
-    def test_secrets_block_describes_webhook_as_optional(self):
-        """Secret descriptions must frame webhook secrets as optional/infra-owned."""
-        secrets = self.secrets_block.lower()
-        # Must NOT say "shared with the dev server's listener"
-        assert "shared with the dev server" not in secrets, (
-            ".woodpecker.yml secrets must NOT claim webhook secrets are "
-            "'shared with the dev server's listener'"
-        )
-        # Should describe as optional or infra-owned
-        assert "optional" in secrets or "fk-cesis" in secrets or "infra" in secrets, (
-            ".woodpecker.yml secrets block must describe deploy webhook as optional "
-            "or infra-owned"
-        )
 
     def test_build_and_push_pipeline_preserved(self):
         """Build/publish pipeline must still be present (build-and-push, prepare-tags)."""
@@ -344,6 +300,28 @@ class TestWoodpeckerCIComments:
         assert "prepare-tags" in self.content, (
             ".woodpecker.yml must still contain prepare-tags step — dev and main"
         )
+
+    def test_deploy_notify_steps_removed(self):
+        """Deploy webhook steps must be absent while deployment is manual."""
+        assert "notify-dev:" not in self.content, (
+            ".woodpecker.yml must not call the dev deploy webhook"
+        )
+        assert "notify-prod:" not in self.content, (
+            ".woodpecker.yml must not call the prod deploy webhook"
+        )
+
+    def test_deploy_webhook_secrets_removed(self):
+        """Deploy webhook secrets must not be referenced by CI."""
+        forbidden = [
+            "DEV_DEPLOY_WEBHOOK_URL",
+            "DEV_DEPLOY_WEBHOOK_SECRET",
+            "PROD_DEPLOY_WEBHOOK_URL",
+            "PROD_DEPLOY_WEBHOOK_SECRET",
+        ]
+        for secret_name in forbidden:
+            assert secret_name not in self.content, (
+                f".woodpecker.yml must not reference {secret_name}"
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,8 @@
 #   - dev  branch: development.    Push -> build :dev.
 #   - main branch: tested releases. Push -> build :main + :<major>.<minor>.
 #
-# Deployment runtime is owned by the fk-cesis infrastructure repository. The
-# optional notify steps call infra-owned webhooks after image publication.
+# Deployment runtime is owned by the fk-cesis infrastructure repository.
+# This pipeline publishes images only; deployment is manual for now.
 #
 # Versioning on main:
 #   <major> comes from the top-level VERSION file (manually bumped).
@@ -24,15 +24,6 @@
 #   CODEBERG_USER             registry user (deploy bot or your handle)
 #   CODEBERG_TOKEN            Codeberg Application Token w/ packages:write
 #
-# Optional handoff webhook secrets, owned by fk-cesis runtime automation:
-#   DEV_DEPLOY_WEBHOOK_URL
-#   DEV_DEPLOY_WEBHOOK_SECRET
-#   PROD_DEPLOY_WEBHOOK_URL
-#   PROD_DEPLOY_WEBHOOK_SECRET
-#
-# The prod webhook secrets can be added later. Until then the notify-prod
-# step is wired to `failure: ignore` so a missing secret won't fail the
-# build (the :main and :<version> tags are still pushed).
 
 when:
   - event: push
@@ -113,7 +104,7 @@ steps:
     # has no such requirement and works fine on untrusted Codeberg-CI runs.
     image: woodpeckerci/plugin-kaniko
     when:
-      - event: [push, manual]
+      - event: [push, manual, merge]
         branch: [dev, main]
     settings:
       # repo is the path *within* the registry -- no codeberg.org prefix.
@@ -129,50 +120,6 @@ steps:
       cache: true
       # `tags` deliberately omitted -- plugin-kaniko auto-detects the
       # .tags file written by prepare-tags-{dev,main} above.
-
-  notify-dev:
-    image: alpine:3.20
-    when:
-      - event: [push, manual]
-        branch: dev
-    environment:
-      DEV_DEPLOY_WEBHOOK_URL:
-        from_secret: DEV_DEPLOY_WEBHOOK_URL
-    commands:
-      - apk add --no-cache curl openssl
-      # Diagnostic: confirm the secret env vars are non-empty and report
-      # the secret's length + sha256(value || "ok") so we can cross-check
-      # both sides byte-for-byte without leaking the secret itself.
-      - test -n "$DEV_DEPLOY_WEBHOOK_URL"    && echo "url length=${#DEV_DEPLOY_WEBHOOK_URL}"    || { echo "URL EMPTY"; exit 1; }
-      - >
-        BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"dev\"}";
-        curl -fsS -X POST "$DEV_DEPLOY_WEBHOOK_URL" \
-             -H "Content-Type: application/json" \
-             --data "$BODY"
-
-  notify-prod:
-    image: alpine:3.20
-    when:
-      - event: [push, manual]
-        branch: main
-    failure: ignore
-    environment:
-      PROD_DEPLOY_WEBHOOK_URL:
-        from_secret: PROD_DEPLOY_WEBHOOK_URL
-      PROD_DEPLOY_WEBHOOK_SECRET:
-        from_secret: PROD_DEPLOY_WEBHOOK_SECRET
-    commands:
-      - apk add --no-cache curl openssl
-      - test -n "$PROD_DEPLOY_WEBHOOK_URL"    && echo "url length=${#PROD_DEPLOY_WEBHOOK_URL}"    || { echo "URL EMPTY"; exit 1; }
-      - test -n "$PROD_DEPLOY_WEBHOOK_SECRET" && echo "secret length=${#PROD_DEPLOY_WEBHOOK_SECRET}" || { echo "SECRET EMPTY"; exit 1; }
-      - 'printf "%s" "$PROD_DEPLOY_WEBHOOK_SECRET" | sha256sum | awk ''{print "secret sha256=" $1}'''
-      - >
-        BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"main\"}";
-        SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$PROD_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
-        curl -fsS -X POST "$PROD_DEPLOY_WEBHOOK_URL" \
-             -H "Content-Type: application/json" \
-             -H "X-FK-Signature: sha256=$SIG" \
-             --data "$BODY"
 
 services:
   postgres:
