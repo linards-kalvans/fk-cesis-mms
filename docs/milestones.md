@@ -303,8 +303,39 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - draft billing records can be reassigned safely
 - confirmed/synced invoices are never silently mutated; changes use explicit renewal or adjustment flow
 
-### P10 — Parent invoice visibility
+### P10 — Public-site analytics + registration funnel
 **Why tenth**
+- public launch needs basic evidence about what visitors use before more admin-only workflow polish
+- registration funnel visibility helps diagnose drop-off without reading logs or guessing from support messages
+- parent portal ops signals help catch confusing empty/error states without tracking sensitive staff/admin work
+
+**Target outcome**
+- choose an analytics platform through a short comparison against privacy/GDPR posture, funnel/event capability, and ops burden
+- public-site traffic stats are visible: visits, page views, referrers, and top pages
+- registration funnel is visible in aggregate from public visit through registration start, verified access, and application submission
+- parent portal operational usage is visible in aggregate: visits, key CTA usage, empty/error states, and basic page health signals
+- no admin tracking, ad pixels, Google Analytics/Meta pixels, per-user profiling, or custom BI warehouse
+- no personal data in analytics payloads: no names, emails, phone numbers, personal IDs, document metadata, document names, or free-text form values
+- GDPR/privacy posture is documented before production enablement: hosting, cookies, IP handling, retention, DPA/config, and opt-out/consent implications
+
+### P11 — Family admin action hub
+**Why eleventh**
+- staff currently jumps across many Django admin pages to process one family end-to-end
+- all underlying service paths already exist (P5–P8); this is presentation/orchestration only
+- unlocks faster workflow before adding more billing/parent-facing features
+
+**Target outcome**
+- one admin page per family (Guardian) showing applications, agreements, membership, billing/invoices across all children
+- action-needed queue as primary entry point, family hub as drill-down
+- common actions (approve/request-fix/reject, agreement send/sign/retry/sync/void/regenerate/material amendment, membership discontinuation, billing confirm/push/send/sync) available from the hub
+- agreement void and membership discontinuation are clearly separate lanes/actions
+- BillingRecord and BillingInvoice shown as one "Norēķini un rēķini" block grouped by child + season
+- statuses rendered as icon + badge + next-action label, not raw model state strings
+- no new business logic, no new model states, no new service methods
+- deep edits remain on existing admin change pages
+
+### P12 — Parent invoice visibility
+**Why twelfth**
 - builds on Invoice Ninja sync and payment read-back already delivered in P6
 - gives parents self-service visibility before adding more invoice types
 
@@ -314,8 +345,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - safe Invoice Ninja payment/view link is shown only when available
 - parent access is limited to the verified guardian's own invoices
 
-### P11 — Custom invoices
-**Why eleventh**
+### P13 — Custom invoices
+**Why thirteenth**
 - extends billing beyond membership dues after parent invoice visibility exists
 - covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
 
@@ -325,8 +356,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent portal shows custom invoices alongside membership invoices
 - creation, push, send, failure, and payment-sync actions stay audited
 
-### P12 — Coaches and training groups
-**Why twelfth**
+### P14 — Coaches and training groups
+**Why fourteenth**
 - extends the member/training-group admin model before adding attendance or coach-facing workflows
 - keeps coach data structured instead of burying it in free-text group names
 
@@ -337,7 +368,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent-visible coach info stays optional and explicitly scoped later
 - coach portal, attendance, and messaging remain out of this slice
 
-### P13 — Calendar + WhatsApp attendance integration
+### P15 — Calendar + WhatsApp attendance integration
 **Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
@@ -777,8 +808,67 @@ P9 is complete when all of the following are true:
    - draft reassignment
    - confirmed/synced no-silent-mutation guard
 
-### P10 acceptance — Parent invoice visibility
+### P10 acceptance — Public-site analytics + registration funnel
 P10 is complete when all of the following are true:
+
+1. Platform comparison selects an analytics tool against three blocker-level constraints:
+   - GDPR/privacy posture: EU/self-host option, cookie/IP handling, retention, DPA/config path
+   - funnel/event power: public traffic, registration funnel, and parent portal ops events are practical
+   - ops burden: simple enough to operate without a custom analytics stack
+2. Public-site traffic stats are visible:
+   - visits
+   - page views
+   - referrers
+   - top pages
+3. Registration funnel is visible in aggregate:
+   - public visit
+   - registration start
+   - verified access
+   - application submitted
+4. Parent portal operational usage is visible in aggregate:
+   - portal visits
+   - key CTA usage
+   - empty/error-state frequency
+   - basic page health signals where the chosen platform supports them simply
+5. Scope boundaries are enforced:
+   - no admin tracking
+   - no ad/tracking pixels such as Google Analytics or Meta Pixel
+   - no per-user behaviour profiling
+   - no custom BI warehouse or bespoke dashboard unless the selected platform provides it natively
+6. Analytics payloads never include sensitive values:
+   - no names
+   - no emails
+   - no phone numbers
+   - no personal IDs
+   - no document metadata or filenames
+   - no free-text form values
+7. GDPR/privacy posture is documented before production enablement:
+   - hosting model
+   - cookie use or cookie-free mode
+   - IP anonymization / minimization
+   - retention
+   - DPA or self-host responsibility
+   - consent/notice implications
+8. Tests or config checks cover:
+   - event emission boundaries
+   - public/registration/parent-portal events only
+   - PII guardrails where practical
+
+### P11 acceptance — Family admin action hub
+P11 is complete when all of the following are true:
+
+1. Staff can open one Guardian/family and see the full current state across application, agreement, membership, and billing lanes on one page.
+2. Staff can complete the normal workflow (approve application → send agreement → mark signed → confirm billing → push invoices) from the hub without navigating to deep admin change pages.
+3. The action-needed queue shows all families with pending actions, ordered by urgency.
+4. Statuses are rendered as icon + badge + next-action label, not raw model state strings.
+5. Agreement void and membership discontinuation are clearly separate actions in separate lanes.
+6. Billing is shown as one unified "Norēķini un rēķini" block grouped by child + season, with expandable invoice rows.
+7. LAN acceptance proves staff can understand a family's status and complete the normal workflow in under ~30 seconds.
+8. All hub actions reuse existing service paths — no new business logic.
+9. Tests cover queue ordering/filtering, hub page rendering, each hub action triggering the correct service, void-vs-discontinuation separation, billing block grouping, and permission checks.
+
+### P12 acceptance — Parent invoice visibility
+P12 is complete when all of the following are true:
 
 1. Parent portal lists every invoice linked to the verified guardian's members.
 2. Membership invoices show member, season, installment sequence where applicable, due date, amount, sent status, payment status, and last sync time.
@@ -788,8 +878,8 @@ P10 is complete when all of the following are true:
 6. Empty/error states are parent-friendly and Latvian.
 7. Tests cover ownership, status display, empty state, and mixed paid/unpaid invoices.
 
-### P11 acceptance — Custom invoices
-P11 is complete when all of the following are true:
+### P13 acceptance — Custom invoices
+P13 is complete when all of the following are true:
 
 1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
 2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
@@ -799,8 +889,8 @@ P11 is complete when all of the following are true:
 6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
 7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
 
-### P12 acceptance — Coaches and training groups
-P12 is complete when all of the following are true:
+### P14 acceptance — Coaches and training groups
+P14 is complete when all of the following are true:
 
 1. Staff can create and edit coach records in admin.
 2. Training groups can have one or more linked coaches.
@@ -810,8 +900,8 @@ P12 is complete when all of the following are true:
 6. Coach portal, attendance, and messaging are not introduced in this milestone.
 7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
 
-### P13 acceptance — Calendar + WhatsApp attendance integration
-P13 is complete when all of the following are true:
+### P15 acceptance — Calendar + WhatsApp attendance integration
+P15 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -860,12 +950,13 @@ Remaining focus:
 - payment visibility and retry paths
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- parent invoice visibility (P10)
-- custom one-off invoices (P11)
-- coaches linked to training groups (P12)
+- parent invoice visibility (P12)
+- custom one-off invoices (P13)
+- coaches linked to training groups (P14)
 
 ### M5 — Admin operations completion
 Remaining focus:
+- family admin action hub (P11)
 - export
 - filters/search polish
 - document/admin operations polish
@@ -877,6 +968,7 @@ Delivered:
 - deployment runbook: `docs/deployment.md`.
 
 Remaining focus:
+- public-site analytics and registration funnel visibility (P10)
 - prod environment / second host (same image, `:prod` floating tag, separate `.env`)
 - recovery/backup notes (today: ad-hoc `pg_dump`; need scheduled job + off-host shipping)
 - integration configuration docs (Invoice Ninja, SMTP provider choice)
@@ -885,11 +977,13 @@ Remaining focus:
 ### Future / post-MVP
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- parent invoice visibility (P10)
-- custom one-off invoices (P11)
-- coaches linked to training groups (P12)
-- calendar integration (P13)
-- WhatsApp attendance polling (P13)
+- public-site analytics and registration funnel visibility (P10)
+- family admin action hub (P11)
+- parent invoice visibility (P12)
+- custom one-off invoices (P13)
+- coaches linked to training groups (P14)
+- calendar integration (P15)
+- WhatsApp attendance polling (P15)
 
 ---
 
