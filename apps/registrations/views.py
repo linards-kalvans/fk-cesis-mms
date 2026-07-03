@@ -17,11 +17,23 @@ from django.views.decorators.http import require_POST
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
+from apps.agreements.presentation import (
+    agreement_status_copy,
+    lifecycle_history_items,
+    lifecycle_status_copy,
+)
+from apps.agreements.services import (
+    get_current_agreement,
+)
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
+from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.ocr_messages import get_ocr_error_message
-from apps.integrations.tasks import enqueue_ocr_job
+from apps.integrations.tasks import (
+    enqueue_ocr_job,
+)
+from apps.members.models import Guardian
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.messages import (
     CONSENT_REQUIRED,
@@ -47,12 +59,9 @@ from apps.registrations.presentation import (
     workspace_mode,
 )
 from apps.registrations.services import (
-    approve_application,
     can_edit_application,
     create_or_update_draft,
     get_application_prefill,
-    reject_application,
-    request_application_fix,
     submit_application,
 )
 
@@ -197,6 +206,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         raise Http404
 
     editable = application.is_editable_by(account)
+    guardian_profile_locked = editable and application.guardian_profile_populated
 
     if request.method == "POST":
         if not editable:
@@ -212,6 +222,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             request.FILES,
             is_submit=submit_requested,
             has_existing_document=_active_guardian_identity_exists(application),
+            guardian_profile_locked=guardian_profile_locked,
         )
         if form.is_valid():
             try:
@@ -249,11 +260,11 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     else:
         form = RegistrationApplicationForm(
             initial={
-                "guardian_full_name": application.guardian_full_name,
-                "guardian_personal_id": application.guardian_personal_id,
-                "guardian_email": application.guardian_email,
-                "guardian_phone": application.guardian_phone,
-                "guardian_declared_address": application.guardian_declared_address,
+                "guardian_full_name": application.guardian_name,
+                "guardian_personal_id": application.guardian_pid,
+                "guardian_email": application.guardian_contact_email,
+                "guardian_phone": application.guardian_contact_phone,
+                "guardian_declared_address": application.guardian_address,
                 "member_full_name": application.member_full_name,
                 "member_personal_id": application.member_personal_id,
                 "member_birth_date": application.member_birth_date,
@@ -263,7 +274,41 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 "member_kit_size_shorts": application.member_kit_size_shorts_id,
                 "preferred_agreement_signing": application.preferred_agreement_signing,
                 "support_club_instead_of_multi_child_discount": application.support_club_instead_of_multi_child_discount,
-            }
+                "preferred_payment_mode": application.preferred_payment_mode,
+            },
+            guardian_profile_locked=guardian_profile_locked,
+        )
+
+    ocr_decrypted_summaries: dict[str, list[tuple[str, str]] | None] = {}
+    for doc in application.documents.filter(deleted_at__isnull=True).select_related("extraction"):
+        extraction = getattr(doc, "extraction", None)
+        if extraction is None or not extraction.encrypted_summary:
+            continue
+        try:
+            summary = decrypt_json(extraction.encrypted_summary)
+            ocr_decrypted_summaries[doc.kind] = parse_ocr_summary(str(summary))
+        except Exception:
+            ocr_decrypted_summaries[doc.kind] = None
+
+    import json as _json
+
+    pending_docs_qs = application.documents.filter(
+        deleted_at__isnull=True,
+        ocr_status=Document.OcrStatus.PENDING,
+    )
+    pending_by_kind = {doc.kind: doc.id for doc in pending_docs_qs}
+    pending_document_ids_csv = ",".join(str(i) for i in pending_by_kind.values())
+    pending_by_kind_json = _json.dumps(pending_by_kind)
+
+    document_bound_fields = {
+        kind: form[field_name]
+        for kind, field_name in FIELD_NAME_BY_KIND.items()
+    }
+
+    agreement_status = None
+    if application.approved_member_id is not None:
+        agreement_status = agreement_status_copy(
+            get_current_agreement(application.approved_member)
         )
 
     ocr_decrypted_summaries: dict[str, list[tuple[str, str]] | None] = {}
@@ -298,7 +343,9 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         {
             "application": application,
             "form": form,
+            "guardian_profile_locked": guardian_profile_locked,
             "workspace_mode": workspace_mode(application, account),
+            "agreement_status": agreement_status,
             "document_state": active_documents_by_kind(application),
             "document_by_field": documents_by_field_name(application),
             "field_kind_labels": FIELD_KIND_LABELS,
@@ -395,11 +442,14 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
     if not allowed:
         raise Http404
 
+    guardian_profile_locked = allowed and application.guardian_profile_populated
+
     form = RegistrationApplicationForm(
         request.POST,
         request.FILES,
         is_submit=True,
         has_existing_document=_active_guardian_identity_exists(application),
+        guardian_profile_locked=guardian_profile_locked,
     )
     if form.is_valid():
         application = create_or_update_draft(
@@ -417,6 +467,7 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
         {
             "form": form,
             "application": application,
+            "guardian_profile_locked": guardian_profile_locked,
             "workspace_mode": workspace_mode(application, account),
             "document_state": active_documents_by_kind(application),
             "document_by_field": documents_by_field_name(application),
@@ -462,7 +513,9 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             return redirect("registrations:application-workspace", application_id=draft.id)
 
     # Show all applications linked to this verified parent
-    applications = account.applications.order_by("-created_at")
+    # select_related("guardian", "parent_account") avoids N+1 from the guardian-read accessors
+    # (Slice B1) and from guardian_contact_email which traverses parent_account (Slice B2).
+    applications = account.applications.select_related("guardian", "parent_account").order_by("-created_at")
     has_draft = applications.filter(
         status__in=(
             RegistrationApplication.Status.DRAFT,
@@ -472,6 +525,24 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
     # Annotate each application with an is_editable flag for the template.
     for app in applications:
         app.can_edit = app.is_editable_by(account)
+        agreement = None
+        if app.approved_member_id is not None:
+            agreement = get_current_agreement(app.approved_member)
+        app.agreement_status = agreement_status_copy(agreement)
+        app.lifecycle_status = (
+            lifecycle_status_copy(agreement, app.approved_member)
+            if app.approved_member_id is not None
+            else ""
+        )
+        app.lifecycle_history_items = lifecycle_history_items(agreement)
+    # Personalized hero greeting — the account's canonical Guardian name, if on
+    # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
+    greeting_name = (
+        Guardian.objects.filter(parent_account=account)
+        .values_list("full_name", flat=True)
+        .first()
+        or ""
+    )
     return render(
         request,
         "registrations/parent_portal.html",
@@ -480,6 +551,7 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "applications": applications,
             "has_draft": has_draft,
             "primary_application": _portal_primary_application(account),
+            "greeting_name": greeting_name,
         },
     )
 
@@ -500,125 +572,6 @@ def view_registration_detail(request: HttpRequest, application_id: int) -> HttpR
     if not _parent_can_view_application(application, account):
         raise Http404
     return redirect("registrations:application-workspace", application_id=application.id)
-
-
-# ---------------------------------------------------------------------------
-# Staff review views
-# ---------------------------------------------------------------------------
-
-
-def _require_staff(request: HttpRequest) -> HttpResponse | None:
-    """Redirect anonymous to admin login; 404 non-staff."""
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-
-        return redirect_to_login(request.get_full_path(), "admin:login")
-    if not request.user.is_staff:
-        raise Http404
-    return None  # type: ignore[return-value]
-
-
-def admin_review_queue(request: HttpRequest) -> HttpResponse:
-    """Staff-only queue of submitted applications."""
-    result = _require_staff(request)
-    if result is not None:
-        return result
-    applications = RegistrationApplication.objects.filter(
-        status=RegistrationApplication.Status.SUBMITTED
-    ).order_by("-submitted_at")
-    return render(
-        request,
-        "registrations/admin_review_queue.html",
-        {"applications": applications},
-    )
-
-
-def admin_review_detail(request: HttpRequest, application_id: int) -> HttpResponse:
-    """Staff-only detail page with review actions."""
-    result = _require_staff(request)
-    if result is not None:
-        return result
-    application = get_object_or_404(RegistrationApplication, pk=application_id)
-
-    active_guardian_doc = application.documents.filter(
-        kind=Document.Kind.GUARDIAN_IDENTITY,
-        deleted_at__isnull=True,
-    ).select_related("extraction").first()
-    active_member_doc = application.documents.filter(
-        kind=Document.Kind.MEMBER_IDENTITY,
-        deleted_at__isnull=True,
-    ).select_related("extraction").first()
-
-    ocr_decrypted: dict[str, object | None] = {}
-    ocr_confidence: dict[str, dict[str, object]] = {}
-    for doc in [active_guardian_doc, active_member_doc]:
-        if doc is None:
-            continue
-        extraction = getattr(doc, "extraction", None)
-        if extraction is None:
-            continue
-        try:
-            payload = decrypt_json(extraction.encrypted_payload)
-            summary = decrypt_json(extraction.encrypted_summary)
-            ocr_decrypted[doc.kind] = payload if isinstance(payload, dict) else None
-            ocr_decrypted[f"{doc.kind}_summary"] = summary
-            if isinstance(payload, dict) and isinstance(payload.get("confidence"), dict):
-                ocr_confidence[doc.kind] = payload["confidence"]
-        except Exception:
-            ocr_decrypted[doc.kind] = None
-            ocr_decrypted[f"{doc.kind}_summary"] = None
-            ocr_confidence[doc.kind] = {}
-
-    context = {
-        "application": application,
-        "active_guardian_doc": active_guardian_doc,
-        "active_member_doc": active_member_doc,
-        "ocr_decrypted": ocr_decrypted,
-        "ocr_confidence": ocr_confidence,
-    }
-
-    if request.method == "POST":
-        action = request.POST.get("action", "")
-
-        if action == "request_fix":
-            message = request.POST.get("review_message", "").strip()
-            try:
-                request_application_fix(application, request.user, message)
-            except ValueError:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Labojuma ziņojums ir obligāts."},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-detail", application_id=application.id)
-
-        elif action == "reject":
-            message = request.POST.get("review_message", "").strip()
-            try:
-                reject_application(application, request.user, message)
-            except ValueError:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Noraidīšanas ziņojums ir obligāts."},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-queue")
-
-        elif action == "approve":
-            try:
-                approve_application(application, request.user)
-            except ValueError:
-                return render(
-                    request,
-                    "registrations/admin_review_detail.html",
-                    {**context, "error": "Var apstiprināt tikai iesniegtus pieteikumus."},
-                    status=400,
-                )
-            return redirect("registrations:admin-review-queue")
-
-    return render(request, "registrations/admin_review_detail.html", context)
 
 
 # ---------------------------------------------------------------------------
@@ -644,8 +597,8 @@ def _ocr_extracted_fields(document: Document) -> dict[str, str]:
     if not isinstance(person_fields, dict):
         return {}
 
-    first = str(person_fields.get("first_name", "")).strip()
-    last = str(person_fields.get("last_name", "")).strip()
+    first = normalize_latvian_name(person_fields.get("first_name", ""))
+    last = normalize_latvian_name(person_fields.get("last_name", ""))
     pid = str(person_fields.get("personal_id", "")).strip()
     full_name = " ".join(part for part in (first, last) if part)
 

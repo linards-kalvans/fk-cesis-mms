@@ -722,7 +722,7 @@ class TestGroupedFormContract:
 
     def test_agreement_section_fields(self):
         """Agreement section must contain: preferred_agreement_signing,
-        support_club_instead_of_multi_child_discount."""
+        support_club_instead_of_multi_child_discount, and preferred_payment_mode."""
         from apps.registrations.forms import RegistrationApplicationForm
 
         agree_fields = [
@@ -732,6 +732,7 @@ class TestGroupedFormContract:
         expected = (
             "preferred_agreement_signing",
             "support_club_instead_of_multi_child_discount",
+            "preferred_payment_mode",
         )
         assert agree_fields == expected, (
             f"Agreement section fields must be {expected}, got {agree_fields}."
@@ -768,7 +769,7 @@ class TestGroupedFormContract:
             "documents": 3,
             "guardian": 5,
             "member": 7,
-            "agreement": 2,
+            "agreement": 3,
         }
         for name, fields in sections:
             assert len(fields) == expected_counts[name], (
@@ -995,3 +996,84 @@ class TestSliceDFileWidgetAttrs:
         form = RegistrationApplicationForm()
         attrs = form.fields["member_portrait_document"].widget.attrs
         assert "fk-visually-hidden" in attrs.get("class", "")
+
+
+# ===========================================================================
+# 15. P6 — Form defaults for agreement signing and payment mode
+# ===========================================================================
+
+
+class TestFormFieldDefaults:
+    """RegistrationApplicationForm must default preferred_agreement_signing
+    to electronic and preferred_payment_mode to installments for new/empty
+    selections. Explicit initial values must override."""
+
+    def test_empty_form_agreement_signing_initial_is_electronic(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        from apps.registrations.models import RegistrationApplication
+
+        form = RegistrationApplicationForm()
+        assert (
+            form.fields["preferred_agreement_signing"].initial
+            == RegistrationApplication.AgreementSigning.ELECTRONIC
+        ), (
+            "Empty form must default preferred_agreement_signing.initial "
+            "to 'electronic'."
+        )
+
+    def test_empty_form_payment_mode_initial_is_installments(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        from apps.registrations.models import RegistrationApplication
+
+        form = RegistrationApplicationForm()
+        assert (
+            form.fields["preferred_payment_mode"].initial
+            == RegistrationApplication.PaymentMode.INSTALLMENTS
+        ), (
+            "Empty form must default preferred_payment_mode.initial "
+            "to 'installments'."
+        )
+
+    def test_explicit_initial_values_override_defaults(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        from apps.registrations.models import RegistrationApplication
+
+        form = RegistrationApplicationForm(
+            initial={
+                "preferred_agreement_signing": RegistrationApplication.AgreementSigning.PAPER,
+                "preferred_payment_mode": RegistrationApplication.PaymentMode.UPFRONT,
+            },
+        )
+        assert (
+            form["preferred_agreement_signing"].value()
+            == RegistrationApplication.AgreementSigning.PAPER
+        ), (
+            "Explicit initial 'paper' must override the default 'electronic' "
+            "in the rendered field value."
+        )
+        assert (
+            form["preferred_payment_mode"].value()
+            == RegistrationApplication.PaymentMode.UPFRONT
+        ), (
+            "Explicit initial 'upfront' must override the default 'installments' "
+            "in the rendered field value."
+        )
+
+    def test_empty_string_initial_values_use_defaults(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+        from apps.registrations.models import RegistrationApplication
+
+        form = RegistrationApplicationForm(
+            initial={
+                "preferred_agreement_signing": "",
+                "preferred_payment_mode": "",
+            },
+        )
+        assert (
+            form["preferred_agreement_signing"].value()
+            == RegistrationApplication.AgreementSigning.ELECTRONIC
+        )
+        assert (
+            form["preferred_payment_mode"].value()
+            == RegistrationApplication.PaymentMode.INSTALLMENTS
+        )

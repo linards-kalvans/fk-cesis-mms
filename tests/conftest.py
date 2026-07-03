@@ -10,6 +10,13 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fk_cesis_mms.settings")
 # (which used to exercise a synchronous code path) keep their existing
 # observable behavior under the Phase 1 async refactor.
 os.environ.setdefault("Q_CLUSTER_SYNC", "1")
+# Tests must never hit live external providers from a developer's .env.
+# settings.py loads .env with override=False, so these defaults (set before
+# settings import) win over any real-provider values in .env. Tests that need a
+# real-provider code path opt in explicitly via @override_settings(...).
+os.environ.setdefault("INVOICE_PROVIDER_MODE", "stub")
+os.environ.setdefault("AGREEMENT_PROVIDER_MODE", "stub")
+os.environ.setdefault("OCR_PROVIDER_MODE", "stub")
 
 
 def pytest_configure(config):
@@ -113,3 +120,62 @@ def staff_client(db):
     client = Client()
     client.login(username="staff", password="pw")
     return client
+
+
+@pytest.fixture
+def make_guardian(db):
+    """Create a Guardian linked to a ParentAccount with a populated profile.
+
+    Use in tests that previously set guardian_* columns on RegistrationApplication
+    and assert guardian values through the read accessors.
+    """
+    from tests.support import make_guardian as _support_make_guardian
+
+    def _make(account, *, full_name="", personal_id="", phone="", address=""):
+        # phone lives on the account (Guardian.phone is a proxy). When the
+        # caller passes a phone with an explicit account, apply it to the account
+        # so make_guardian(account, phone=...) is not silently dropped.
+        if phone and account.phone != phone:
+            account.phone = phone
+            account.save(update_fields=["phone", "updated_at"])
+        return _support_make_guardian(
+            account=account,
+            full_name=full_name,
+            personal_id=personal_id,
+            address=address,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def default_membership_plan(db):
+    """A single active default ``MembershipPlan`` (P9 preselection).
+
+    P9: ``create_agreement_for_member`` picks the active default plan, and
+    ``mark_agreement_signed`` refuses to mutate state without one. Tests that
+    drive an agreement through the generated/sent → signed transition request
+    this fixture so the production guard does not bite.
+
+    Uses ``get_or_create`` keyed on the unique default constraint; the
+    ``is_default=True`` row is fetched (any name) when one already exists so
+    the fixture composes with sibling fixtures that mint their own default
+    plan.
+    """
+    from decimal import Decimal
+
+    from apps.billing.models import MembershipPlan
+
+    existing = MembershipPlan.objects.filter(
+        is_default=True, is_active=True
+    ).first()
+    if existing is not None:
+        return existing
+    return MembershipPlan.objects.create(
+        name="Test Default Membership Plan",
+        season="2026/2027",
+        annual_amount=Decimal("300.00"),
+        is_active=True,
+        is_default=True,
+        billing_start_cutoff_day=20,
+    )

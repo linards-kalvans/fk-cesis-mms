@@ -2,7 +2,7 @@
 {% load static %}
 {% load reg_filters %}
 
-{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script><script src="{% static 'js/async_upload.js' %}" defer></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script><script src="{% static 'js/async_upload.js' %}" defer></script><script src="{% static 'js/address_autocomplete.js' %}"></script>{% endblock %}
 
 {% block page_content %}
 
@@ -22,6 +22,9 @@
     {% include "parent_ui/includes/save_indicator.html" %}
     {% else %}
     {% include "parent_ui/includes/application_status_banner.html" with application=application mode=workspace_mode %}
+    {% if agreement_status %}
+    <p class="fk-app-agreement-status">{{ agreement_status }}</p>
+    {% endif %}
     {% endif %}
   </div>
 
@@ -81,6 +84,47 @@
             {% include "registrations/_terms_v1.html" %}
           </div>
           {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map document_bound_fields=document_bound_fields workspace_mode=workspace_mode %}
+        {% endif %}
+        {% if section_name == "guardian" and guardian_profile_locked %}
+          <div class="fk-guardian-lock" data-guardian-lock data-guardian-lock-state="locked">
+            <p class="fk-guardian-lock__note">Vecāka dati ir aizpildīti no Jūsu profila. Lai labotu, nospiediet pogu.</p>
+            <button type="button" class="fk-button fk-button--secondary" data-guardian-unlock>Rediģēt vecāka datus</button>
+          </div>
+          <script>
+// GuardianProfileLockToggle — Slice C. Four guardian profile inputs start
+// locked (readonly + gray). Clicking the button unlocks them; clicking again
+// re-locks. Guardian email is never in the lockable list and stays readonly.
+document.addEventListener('DOMContentLoaded', function () {
+  var btn = document.querySelector('[data-guardian-unlock]');
+  var lockBlock = document.querySelector('[data-guardian-lock]');
+  if (!btn || !lockBlock) return;
+  var lockableIds = ["id_guardian_full_name", "id_guardian_personal_id", "id_guardian_phone", "id_guardian_declared_address"];
+  var LOCK_CLASS = "fk-input--guardian-locked";
+  var LABEL_UNLOCK = "Rediģēt vecāka datus";
+  var LABEL_LOCK = "Slēgt rediģēšanu";
+  function setLocked(locked) {
+    lockableIds.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (locked) {
+        el.setAttribute("readonly", "readonly");
+        el.classList.add(LOCK_CLASS);
+      } else {
+        el.removeAttribute("readonly");
+        el.classList.remove(LOCK_CLASS);
+      }
+    });
+    lockBlock.setAttribute("data-guardian-lock-state", locked ? "locked" : "unlocked");
+    btn.textContent = locked ? LABEL_UNLOCK : LABEL_LOCK;
+    btn.classList.toggle("fk-button--secondary", locked);
+    btn.classList.toggle("fk-button--primary", !locked);
+  }
+  setLocked(true);
+  btn.addEventListener("click", function () {
+    setLocked(lockBlock.getAttribute("data-guardian-lock-state") !== "locked");
+  });
+});
+          </script>
         {% endif %}
         {% for bound_field in bound_fields %}
           {% if section_name == "documents" and bound_field.field.widget.input_type == "file" %}
@@ -205,7 +249,7 @@ document.addEventListener('DOMContentLoaded',function(){
           {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
             {{ bound_field.value|yesno:"Jā,Nē" }}
           {% elif bound_field.name == "guardian_email" %}
-            {{ application.guardian_email }}
+            {{ application.guardian_contact_email }}
           {% else %}
             {{ bound_field.value|default:"—" }}
           {% endif %}

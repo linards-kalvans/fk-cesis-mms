@@ -1,0 +1,15 @@
+Sveiki, {{ guardian_full_name }}!
+
+Jūsu pieteikums dalībai FK Cēsis ir jālabo.
+
+Bērns: {{ member_full_name }}
+
+Komentārs no kluba:
+{{ review_message }}
+
+Lūdzu, atveriet pieteikumu un veiciet labojumus, tad iesniedziet to vēlreiz:
+{{ application_url }}
+
+Ja rodas jautājumi, atbildiet uz šo e-pastu.
+
+FK Cēsis

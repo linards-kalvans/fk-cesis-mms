@@ -58,8 +58,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
-# Non-root runtime user. UID 10001 must match the host `fkmms` user that owns
-# the bind-mounted data directories (see docs/deployment.md).
+# Non-root runtime user. UID 10001 should match the service user that owns
+# bind-mounted data directories in the infra repo runtime.
 ARG APP_UID=10001
 ARG APP_GID=10001
 RUN groupadd --gid ${APP_GID} app \

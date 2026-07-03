@@ -7,6 +7,8 @@ Approved plan:
 - Auth regression: non-staff gets 404 (covered by existing test suite).
 """
 
+import re
+
 import pytest
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -17,7 +19,7 @@ from apps.documents.models import Document, DocumentExtraction
 from apps.registrations.services import create_or_update_draft, submit_application
 from apps.members.models import KitSizeOption
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 # ---------------------------------------------------------------------------
@@ -95,19 +97,27 @@ class TestAdminDetailOcrDecryption:
         assert extraction.encrypted_summary != ""
 
         # Admin detail must show decrypted content
-        staff = User.objects.create_user(
-            username="staff", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff", email="staff@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Decrypted guardian summary contains "issuer: MLP" from stub provider
-        assert "issuer: MLP" in content, (
-            "Admin detail must decrypt and render guardian extraction summary content."
+        # P5 Slice A (Revision A): OCR summary renders as a labeled
+        # <dl class="mms-review-ocr-readout">. "MLP" (stub issuer) must still
+        # appear, paired with its Latvian label "Izsniedzējs".
+        assert '<dl class="mms-review-ocr-readout"' in content, (
+            "Admin detail must render OCR readout as a labeled <dl> block."
+        )
+        assert "Izsniedzējs" in content, (
+            "Admin detail must render the Latvian label for the issuer field."
+        )
+        assert "MLP" in content, (
+            "Admin detail must render the decrypted issuer value (stub: 'MLP')."
         )
 
     def test_admin_detail_shows_decrypted_member_summary(self, settings):
@@ -151,13 +161,13 @@ class TestAdminDetailOcrDecryption:
         assert member_extraction.encrypted_summary != ""
 
         # Admin detail must show decrypted member content
-        staff = User.objects.create_user(
-            username="staff2", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff2", email="staff2@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -199,13 +209,13 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff3", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff3", email="staff3@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -251,18 +261,31 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff3b", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff3b", email="staff3b@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        assert content.count("Apskatīt dokumentu (priekšskatījums)") >= 2, (
-            "Admin detail must show separate preview entries for guardian and member identity documents."
+        # P5 Slice A: inline embeds (<img> for images) replace the textual
+        # "Apskatīt dokumentu (priekšskatījums)" links. The admin-document-preview
+        # URL appears once per active doc embed. With three uploaded docs
+        # (guardian + member identity + portrait), expect at least three.
+        guardian_doc = app.documents.get(
+            kind=Document.Kind.GUARDIAN_IDENTITY, deleted_at__isnull=True
+        )
+        member_doc = app.documents.get(
+            kind=Document.Kind.MEMBER_IDENTITY, deleted_at__isnull=True
+        )
+        assert f"/admin/documents/{guardian_doc.id}/preview/" in content, (
+            "Admin detail must embed the active guardian doc preview URL."
+        )
+        assert f"/admin/documents/{member_doc.id}/preview/" in content, (
+            "Admin detail must embed the active member doc preview URL."
         )
 
     def test_admin_detail_shows_confidence_when_provider_returns_it(self, settings):
@@ -298,13 +321,13 @@ class TestAdminDetailOcrDecryption:
         )
         submit_application(app, account)
 
-        staff = User.objects.create_user(
-            username="staff4", password="staffpass", is_staff=True
+        staff = User.objects.create_superuser(
+            username="staff4", email="staff4@example.com", password="staffpass"
         )
         client = Client()
         client.force_login(staff)
 
-        resp = client.get(f"/admin/review/applications/{app.id}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.id}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -312,6 +335,20 @@ class TestAdminDetailOcrDecryption:
         # 0.98 is the stub confidence for first_name
         assert "0.98" in content, (
             "Admin detail must render confidence values when provider returns them."
+        )
+        # P5 Slice A code-review fix: chip labels must be translated through
+        # OCR_FIELD_LABELS so staff see Latvian labels, not raw English keys.
+        chip_match = re.search(
+            r'<ul class="mms-review-ocr-confidence">.*?</ul>', content, re.DOTALL
+        )
+        assert chip_match, "Admin detail must render the confidence chip list."
+        chip_section = chip_match.group(0)
+        assert "Vārds" in chip_section, (
+            "Confidence chip for first_name must render the Latvian label "
+            f"'Vārds', not the raw English key. Got: {chip_section!r}"
+        )
+        assert "first_name" not in chip_section, (
+            "Confidence chip must not leak the raw English key 'first_name'."
         )
 
     def test_admin_detail_no_crash_without_any_ocr(self, settings):
@@ -359,7 +396,7 @@ class TestAdminDetailOcrDecryption:
         client = Client()
         client.force_login(staff_user)
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()

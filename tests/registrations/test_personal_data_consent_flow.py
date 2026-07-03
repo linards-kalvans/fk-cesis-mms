@@ -41,14 +41,13 @@ class TestSchema:
         assert PERSONAL_DATA_CONSENT_VERSION  # non-empty
 
     def test_consent_fields_default_to_null(self):
-        app = RegistrationApplication.objects.create(guardian_email="parent@example.com")
+        app = RegistrationApplication.objects.create()
         assert app.personal_data_consent_at is None
         assert app.personal_data_consent_version is None
 
     def test_consent_fields_persist_when_set(self):
         when = datetime(2026, 5, 23, 12, 0, tzinfo=dt_timezone.utc)
         app = RegistrationApplication.objects.create(
-            guardian_email="parent@example.com",
             personal_data_consent_at=when,
             personal_data_consent_version=PERSONAL_DATA_CONSENT_VERSION,
         )
@@ -65,7 +64,6 @@ class TestSchema:
 def _make_application(email: str = "parent@example.com", **extra) -> RegistrationApplication:
     """Persist a bare-bones draft application for stamping tests."""
     app: RegistrationApplication = RegistrationApplication.objects.create(
-        guardian_email=email,
         claimed_email=email,
         **extra,
     )
@@ -225,6 +223,10 @@ def test_consent_stamping_does_not_break_draft_save_for_non_consent_fields():
     )
     result.refresh_from_db()
 
-    assert result.guardian_full_name == "Jānis Bērziņš"
+    # This is the unverified/anonymous draft path (no verified_account), which by
+    # design (Slice B2) persists only consent + claimed_email — the guardian profile
+    # (e.g. guardian_full_name) is not stored without a linked Guardian. We assert the
+    # consent stamping still works; verified-path guardian persistence is covered in
+    # tests/registrations/test_guardian_read_through.py.
     assert result.personal_data_consent_at is not None
     assert result.personal_data_consent_version == PERSONAL_DATA_CONSENT_VERSION

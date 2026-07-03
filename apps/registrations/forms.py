@@ -46,6 +46,7 @@ class RegistrationApplicationForm(forms.Form):
             (
                 "preferred_agreement_signing",
                 "support_club_instead_of_multi_child_discount",
+                "preferred_payment_mode",
             ),
         ),
     )
@@ -73,6 +74,7 @@ class RegistrationApplicationForm(forms.Form):
     member_kit_size_shorts = forms.ChoiceField(required=False, label="Šortu izmērs")
     preferred_agreement_signing = forms.ChoiceField(required=False, label="Līguma parakstīšanas veids")
     support_club_instead_of_multi_child_discount = forms.BooleanField(required=False, label="Nepiemērot Līgumā noteiktās atlaides - Vēlos atbalstīt klubu")
+    preferred_payment_mode = forms.ChoiceField(required=False, label="Maksājuma veids")
     # Enforced at service layer, not here — rendered manually in template.
     personal_data_consent = forms.BooleanField(required=False, label="Piekrītu personas datu apstrādei")
     guardian_identity_document = forms.FileField(required=False, label="Vecāka personas dokuments")
@@ -95,10 +97,18 @@ class RegistrationApplicationForm(forms.Form):
         "preferred_agreement_signing",
     )
 
-    def __init__(self, *args, is_submit: bool = False, has_existing_document: bool = False, **kwargs):
+    def __init__(
+        self,
+        *args,
+        is_submit: bool = False,
+        has_existing_document: bool = False,
+        guardian_profile_locked: bool = False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.is_submit = is_submit
         self.has_existing_document = has_existing_document
+        self.guardian_profile_locked = guardian_profile_locked
 
         # Populate kit size choices from database
         from apps.members.models import KitSizeOption
@@ -112,8 +122,24 @@ class RegistrationApplicationForm(forms.Form):
         from apps.registrations.models import RegistrationApplication
 
         self.fields["preferred_agreement_signing"].choices = RegistrationApplication.AgreementSigning.choices
+        self.fields["preferred_payment_mode"].choices = RegistrationApplication.PaymentMode.choices
+        defaults = {
+            "preferred_agreement_signing": RegistrationApplication.AgreementSigning.ELECTRONIC,
+            "preferred_payment_mode": RegistrationApplication.PaymentMode.INSTALLMENTS,
+        }
+        for field_name, default in defaults.items():
+            self.fields[field_name].initial = default
+            if not self.is_bound and not self.initial.get(field_name):
+                self.initial[field_name] = default
 
         self.fields["member_actual_address"].widget.attrs["data-sync-address-for"] = "id_member_same_address_as_guardian"
+
+        # Address-autocomplete hooks (assist-only; no VZD codes persisted).
+        for _address_field in ("guardian_declared_address", "member_actual_address"):
+            attrs = self.fields[_address_field].widget.attrs
+            attrs["data-address-autocomplete"] = "1"
+            attrs["autocomplete"] = "street-address"
+            attrs["aria-autocomplete"] = "list"
 
         # P3.5: tag file inputs so static/js/async_upload.js can bind to them.
         # The progress slot id mirrors id_for_label so the template can render
@@ -163,6 +189,31 @@ class RegistrationApplicationForm(forms.Form):
             widget.attrs["data-step-error-empty"] = STEP_FIELD_REQUIRED
             if field_name in _format_validated:
                 widget.attrs["data-step-error-format"] = STEP_FIELD_FORMAT
+
+        # Slice C — verified email is the OTP identity; never parent-editable.
+        # Staff change it via Django admin (apps.accounts.services.change_parent_email).
+        guardian_email_attrs = self.fields["guardian_email"].widget.attrs
+        guardian_email_attrs["readonly"] = "readonly"
+        guardian_email_attrs["class"] = " ".join(
+            part
+            for part in [
+                guardian_email_attrs.get("class", ""),
+                "fk-input--guardian-locked",
+            ]
+            if part
+        )
+
+        # Slice C — returning parents see the guardian profile locked. readonly
+        # (NOT disabled) keeps the values in the POST so a save round-trips them
+        # unchanged; the template's unlock toggle removes readonly client-side.
+        if guardian_profile_locked:
+            for _name in (
+                "guardian_full_name",
+                "guardian_personal_id",
+                "guardian_phone",
+                "guardian_declared_address",
+            ):
+                self.fields[_name].widget.attrs["readonly"] = "readonly"
 
     def clean(self):
         cleaned_data = super().clean()

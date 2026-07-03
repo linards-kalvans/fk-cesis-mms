@@ -1,9 +1,11 @@
 # Woodpecker CI for fk-cesis-mms
 #
-# Two-channel branch strategy:
-#   - dev  branch: development.    Push -> build :dev    -> notify dev server.
-#   - main branch: tested releases. Push -> build :main + :<major>.<minor>
-#                                          -> notify prod server.
+# Two-channel image strategy:
+#   - dev  branch: development.    Push -> build :dev.
+#   - main branch: tested releases. Push -> build :main + :<major>.<minor>.
+#
+# Deployment runtime is owned by the fk-cesis infrastructure repository.
+# This pipeline publishes images only; deployment is manual for now.
 #
 # Versioning on main:
 #   <major> comes from the top-level VERSION file (manually bumped).
@@ -13,22 +15,21 @@
 #
 # PRs only run lint + test. No image is built for PR events.
 #
+# Image builds use woodpeckerci/plugin-kaniko (rootless, no BuildKit,
+# no nested daemon, no sysctl writes). plugin-docker-buildx fails on
+# Codeberg-CI because the runtime denies the sysctl writes BuildKit makes
+# while booting its container.
+#
 # Required Codeberg secrets (Repo Settings -> Secrets):
 #   CODEBERG_USER             registry user (deploy bot or your handle)
 #   CODEBERG_TOKEN            Codeberg Application Token w/ packages:write
-#   DEV_DEPLOY_WEBHOOK_URL    https://<dev-subdomain>/hooks/codeberg
-#   DEV_DEPLOY_WEBHOOK_SECRET shared with the dev server's listener
-#   PROD_DEPLOY_WEBHOOK_URL   https://<prod-subdomain>/hooks/codeberg
-#   PROD_DEPLOY_WEBHOOK_SECRET shared with the prod server's listener
 #
-# The prod webhook secrets can be added later. Until then the notify-prod
-# step is wired to `failure: ignore` so a missing secret won't fail the
-# build (the :main and :<version> tags are still pushed).
 
 when:
   - event: push
     branch: [dev, main]
   - event: pull_request
+  - event: manual
 
 # Force a full clone so `git log -1 -- VERSION` and `git rev-list --count`
 # can reach the SHA where VERSION was last bumped, however long ago.
@@ -55,93 +56,70 @@ steps:
       DATABASE_URL: postgres://fkmms:fkmms@postgres:5432/fkmms
     commands:
       - uv sync --frozen
-      - uv run pytest -q
+      - |
+        if [ "$CI_PIPELINE_EVENT" = "pull_request" ]; then
+          uv run pytest -q -m "not slow"
+        else
+          uv run pytest -q
+        fi
 
-  build-and-push-dev:
-    image: docker:27
-    when:
-      - event: push
-        branch: dev
-    environment:
-      CODEBERG_USER:
-        from_secret: CODEBERG_USER
-      CODEBERG_TOKEN:
-        from_secret: CODEBERG_TOKEN
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    commands:
-      - export IMAGE=codeberg.org/linards-kalvans/fk-cesis-mms
-      - echo "$CODEBERG_TOKEN" | docker login codeberg.org -u "$CODEBERG_USER" --password-stdin
-      - docker build -t "$IMAGE:dev" .
-      - docker push "$IMAGE:dev"
-
-  build-and-push-main:
-    image: docker:27
-    when:
-      - event: push
-        branch: main
-    environment:
-      CODEBERG_USER:
-        from_secret: CODEBERG_USER
-      CODEBERG_TOKEN:
-        from_secret: CODEBERG_TOKEN
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    commands:
-      # Install git so we can read VERSION and count commits.
-      - apk add --no-cache git
-      - export MAJOR=$(tr -d '[:space:]' < VERSION)
-      - export LAST_VERSION_SHA=$(git log -1 --format=%H -- VERSION)
-      - export MINOR_OFFSET=$(git rev-list --count "$LAST_VERSION_SHA..HEAD")
-      - export MINOR=$((MINOR_OFFSET + 1))
-      - export VERSION_TAG="$MAJOR.$MINOR"
-      - export IMAGE=codeberg.org/linards-kalvans/fk-cesis-mms
-      - echo "Tagging $IMAGE:main and $IMAGE:$VERSION_TAG"
-      - echo "$CODEBERG_TOKEN" | docker login codeberg.org -u "$CODEBERG_USER" --password-stdin
-      - docker build -t "$IMAGE:main" -t "$IMAGE:$VERSION_TAG" .
-      - docker push "$IMAGE:main"
-      - docker push "$IMAGE:$VERSION_TAG"
-
-  notify-dev:
+  # Compute the image tag(s) into a .tags file that plugin-kaniko reads
+  # automatically. Format: one tag per line, with trailing newline (kaniko
+  # plugin convention).
+  prepare-tags-dev:
     image: alpine:3.20
     when:
-      - event: push
+      - event: [push, manual]
         branch: dev
-    environment:
-      DEV_DEPLOY_WEBHOOK_URL:
-        from_secret: DEV_DEPLOY_WEBHOOK_URL
-      DEV_DEPLOY_WEBHOOK_SECRET:
-        from_secret: DEV_DEPLOY_WEBHOOK_SECRET
     commands:
-      - apk add --no-cache curl openssl
-      - >
-        BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"dev\"}";
-        SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$DEV_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
-        curl -fsS -X POST "$DEV_DEPLOY_WEBHOOK_URL" \
-             -H "Content-Type: application/json" \
-             -H "X-FK-Signature: sha256=$SIG" \
-             --data "$BODY"
+      - echo "dev" > .tags
+      - echo "--- .tags contents ---"
+      - cat .tags
+      - echo "--- hex dump ---"
+      - od -c .tags
 
-  notify-prod:
-    image: alpine:3.20
+  prepare-tags-main:
+    image: alpine/git:latest
     when:
-      - event: push
+      - event: [push, manual]
         branch: main
-    failure: ignore
-    environment:
-      PROD_DEPLOY_WEBHOOK_URL:
-        from_secret: PROD_DEPLOY_WEBHOOK_URL
-      PROD_DEPLOY_WEBHOOK_SECRET:
-        from_secret: PROD_DEPLOY_WEBHOOK_SECRET
     commands:
-      - apk add --no-cache curl openssl
-      - >
-        BODY="{\"ref\":\"${CI_COMMIT_REF}\",\"sha\":\"${CI_COMMIT_SHA}\",\"channel\":\"main\"}";
-        SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$PROD_DEPLOY_WEBHOOK_SECRET" | awk '{print $2}');
-        curl -fsS -X POST "$PROD_DEPLOY_WEBHOOK_URL" \
-             -H "Content-Type: application/json" \
-             -H "X-FK-Signature: sha256=$SIG" \
-             --data "$BODY"
+      - MAJOR=$(tr -d '[:space:]' < VERSION)
+      - LAST_VERSION_SHA=$(git log -1 --format=%H -- VERSION)
+      - MINOR_OFFSET=$(git rev-list --count "$LAST_VERSION_SHA..HEAD")
+      - MINOR=$((MINOR_OFFSET + 1))
+      - VERSION_TAG="$MAJOR.$MINOR"
+      - echo "Computed version tag $VERSION_TAG"
+      - printf 'main\n%s\n' "$VERSION_TAG" > .tags
+      - echo "--- .tags contents ---"
+      - cat .tags
+      - echo "--- hex dump ---"
+      - od -c .tags
+
+  build-and-push:
+    # plugin-kaniko (not plugin-docker-buildx) because Codeberg-CI's container
+    # runtime denies the sysctl writes BuildKit makes during its boot:
+    #   "open sysctl net.ipv4.ip_unprivileged_port_start file: permission denied"
+    # Kaniko builds rootless without BuildKit / a nested docker daemon, so it
+    # has no such requirement and works fine on untrusted Codeberg-CI runs.
+    image: woodpeckerci/plugin-kaniko
+    when:
+      - event: [push, manual, merge]
+        branch: [dev, main]
+    settings:
+      # repo is the path *within* the registry -- no codeberg.org prefix.
+      # plugin-kaniko concatenates ${registry}/${repo}, so duplicating the
+      # host here would produce codeberg.org/codeberg.org/... and 401.
+      repo: linards-kalvans/fk-cesis-mms
+      registry: codeberg.org
+      username:
+        from_secret: CODEBERG_USER
+      password:
+        from_secret: CODEBERG_TOKEN
+      dockerfile: Dockerfile
+      cache: true
+      # `tags` deliberately omitted -- plugin-kaniko auto-detects the
+      # .tags file written by prepare-tags-{dev,main} above.
 
 services:
   postgres:

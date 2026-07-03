@@ -38,7 +38,7 @@ if _extra_allowed:
     )
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.core.apps.FkAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -49,12 +49,34 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.registrations",
     "apps.members",
+    "apps.agreements",
     "apps.billing",
     "apps.documents",
     "apps.integrations",
+    "apps.addresses",
     # Background-job runner (P3.5)
     "django_q",
 ]
+
+# VZD address autocomplete region/locality object codes, comma-separated.
+ADDRESS_AUTOCOMPLETE_REGION_CODES = [
+    code.strip()
+    for code in os.environ.get("ADDRESS_AUTOCOMPLETE_REGION_CODES", "").split(",")
+    if code.strip()
+]
+
+# VZD VARIS address import URLs and schedule defaults.
+ADDRESS_IMPORT_AW_NOVADS_URL = os.environ.get("ADDRESS_IMPORT_AW_NOVADS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/c62c60bb-58d4-4f26-82c0-5b630769f9d1/download/aw_novads.csv"
+ADDRESS_IMPORT_AW_PAGASTS_URL = os.environ.get("ADDRESS_IMPORT_AW_PAGASTS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/6ba8c905-27a1-443a-b9c6-256a0777425b/download/aw_pagasts.csv"
+ADDRESS_IMPORT_AW_PILSETA_URL = os.environ.get("ADDRESS_IMPORT_AW_PILSETA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/ee02baa4-2bc3-4f77-a6cb-5427a3e9befe/download/aw_pilseta.csv"
+ADDRESS_IMPORT_AW_CIEMS_URL = os.environ.get("ADDRESS_IMPORT_AW_CIEMS_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/0d3810f4-1ac0-4fba-8b10-0188084a361b/download/aw_ciems.csv"
+ADDRESS_IMPORT_AW_IELA_URL = os.environ.get("ADDRESS_IMPORT_AW_IELA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/3c4ab802-76cf-433c-9c1c-89215e28d833/download/aw_iela.csv"
+ADDRESS_IMPORT_AW_EKA_URL = os.environ.get("ADDRESS_IMPORT_AW_EKA_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/a510737a-18ce-400f-ad4b-04fce5228272/download/aw_eka.csv"
+ADDRESS_IMPORT_AW_DZIV_URL = os.environ.get("ADDRESS_IMPORT_AW_DZIV_URL") or "https://data.gov.lv/dati/dataset/6b06a7e8-dedf-4705-a47b-2a7c51177473/resource/b83be373-f444-4f50-9b98-28741845325e/download/aw_dziv.csv"
+ADDRESS_IMPORT_WEEKDAY = int(os.environ.get("ADDRESS_IMPORT_WEEKDAY", "6"))
+ADDRESS_IMPORT_HOUR = int(os.environ.get("ADDRESS_IMPORT_HOUR", "1"))
+ADDRESS_IMPORT_MAX_DROP_RATIO = float(os.environ.get("ADDRESS_IMPORT_MAX_DROP_RATIO", "0.50"))
+ADDRESS_IMPORT_DOWNLOAD_TIMEOUT_SECONDS = int(os.environ.get("ADDRESS_IMPORT_DOWNLOAD_TIMEOUT_SECONDS", "30"))
 
 MIDDLEWARE = [
     "apps.core.middleware.LocalInsecureCookieMiddleware",
@@ -167,6 +189,40 @@ TINY_IDP_API_URL = os.environ.get("TINY_IDP_API_URL", "")
 TINY_IDP_API_KEY = os.environ.get("TINY_IDP_API_KEY", "")
 OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
+# Agreement-platform integration (P5 Slice D — DocuSeal self-hosted).
+AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
+DOCUSEAL_API_URL = os.environ.get("DOCUSEAL_API_URL", "")
+DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")
+DOCUSEAL_TEMPLATE_ID = os.environ.get("DOCUSEAL_TEMPLATE_ID", "")
+DOCUSEAL_WEBHOOK_SECRET = os.environ.get("DOCUSEAL_WEBHOOK_SECRET", "")
+
+# Invoicing integration (P6 Slice B — Invoice Ninja self-hosted).
+INVOICE_PROVIDER_MODE = os.environ.get("INVOICE_PROVIDER_MODE") or "stub"
+INVOICE_NINJA_API_URL = os.environ.get("INVOICE_NINJA_API_URL", "")
+INVOICE_NINJA_API_KEY = os.environ.get("INVOICE_NINJA_API_KEY", "")
+# Billing auto-send (P6 invoice issue/send policy). When False, the nightly
+# send job is a no-op — deploy the machinery, verify on one parent, then flip on.
+BILLING_AUTOSEND_ENABLED = os.environ.get("BILLING_AUTOSEND_ENABLED", "false").lower() in {"1", "true", "yes"}
+# Hour (local time) for the nightly send sweep; offset from payment-sync (3).
+BILLING_SEND_DUE_HOUR = int(os.environ.get("BILLING_SEND_DUE_HOUR", "4"))
+INVOICE_NINJA_NUMBER_PREFIX = os.environ.get("INVOICE_NINJA_NUMBER_PREFIX") or "MMS"
+# Localization / time zone. Datetimes are stored in UTC (USE_TZ); TIME_ZONE is
+# the project's local zone used for `timezone.localtime()` and admin rendering.
+# This also fixes the local hour interpreted by the nightly payment-sync schedule
+# below (without it, Django's America/Chicago default would offset the run time).
+TIME_ZONE = os.environ.get("TIME_ZONE") or "Europe/Riga"
+USE_TZ = True
+
+# Hour-of-day (local time, 0-23) for the nightly billing payment-sync sweep.
+# Editable per-environment; the django-q2 Schedule row created by
+# apps/billing/migrations/0005 reads this for its initial next_run.
+BILLING_PAYMENT_SYNC_HOUR = int(os.environ.get("BILLING_PAYMENT_SYNC_HOUR", "3"))
+
+# Audit log retention (P7). Nightly prune deletes events older than this many days.
+AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "730"))
+# Local-time hour for the nightly audit prune (offset from billing 3/4).
+AUDIT_PRUNE_HOUR = int(os.environ.get("AUDIT_PRUNE_HOUR", "2"))
+
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(
     os.environ.get("DOCUMENT_UPLOAD_MAX_BYTES", str(8 * 1024 * 1024))  # 8 MiB
@@ -177,6 +233,42 @@ DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
     "image/webp",
     "application/pdf",
 )
+
+# Surface uncaught view exceptions to stderr so production deployments
+# (DEBUG=False) don't silently swallow tracebacks. Without this, Django's
+# default logging routes `django.request` errors to `mail_admins` only —
+# meaning every 500 response renders an empty 145-byte page and the
+# Python traceback never reaches docker logs / journalctl. We hit this
+# during the 2026-05-31 LAN UAT and lost ~30 minutes to "no traceback
+# anywhere" before realising production logging wasn't configured.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {process:d} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 # Background-job runner (django-q2) — uses the Django DB as broker so we
 # don't need Redis for this single-instance app. Worker starts with

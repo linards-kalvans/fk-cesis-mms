@@ -1,0 +1,244 @@
+{% comment %}P5 Slice C + P8 + P9 — admin Līgums module. Rendered only
+when `agreement` is non-null (i.e. post-approval).{% endcomment %}
+
+<div class="module mms-review-agreement-module">
+  <h2>Līgums</h2>
+
+  <p>Stāvoklis: <strong>{{ agreement.get_state_display }}</strong></p>
+
+  <h3>Norēķinu plāns</h3>
+  {% if not agreement.billing_plan_id %}
+  <p class="errornote">Pirms parakstīšanas jāizvēlas norēķinu plāns.</p>
+  {% endif %}
+  {% if agreement.state == "signed" %}
+  <p>Plāns: <strong>{{ agreement.billing_plan }}</strong>; pirmais mēnesis: <strong>{{ agreement.first_billing_month|default:"—" }}</strong>.</p>
+  {% else %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="billing_plan">Norēķinu plāns:</label>
+      <select name="billing_plan" id="billing_plan" required>
+        <option value="">— Izvēlieties —</option>
+        {% for plan in membership_plans %}
+        <option value="{{ plan.pk }}"{% if agreement.billing_plan_id == plan.pk %} selected{% endif %}>{{ plan.name }} — {{ plan.season }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label for="first_billing_month">Pirmais rēķina mēnesis (GGGG-MM):</label>
+      <input type="text" name="first_billing_month" id="first_billing_month" value="{{ agreement.first_billing_month }}" placeholder="2026-09" pattern="\d{4}-\d{2}">
+    </div>
+    <button type="submit" name="action" value="set_billing_setup" class="default">Saglabāt norēķinu plānu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement_error_message %}
+  <p class="errornote">{{ agreement_error_message }}</p>
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="retry_docuseal" class="default">Mēģināt vēlreiz</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.external_url %}
+  <p><a href="{{ agreement.external_url }}" target="_blank" rel="noopener">Atvērt DocuSeal ↗</a></p>
+  {% endif %}
+
+  {% if agreement.external_id %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="sync_docuseal">Pārbaudīt DocuSeal statusu</button>
+  </form>
+  {% endif %}
+
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="signing_path">Parakstīšanas veids:</label>
+      <select name="signing_path" id="signing_path">
+        <option value="electronic"{% if agreement.signing_path == "electronic" %} selected{% endif %}>Elektroniski</option>
+        <option value="paper"{% if agreement.signing_path == "paper" %} selected{% endif %}>Ar roku, papīra dokuments</option>
+      </select>
+    </div>
+    <button type="submit" name="action" value="set_signing_path" class="default">Saglabāt</button>
+  </form>
+
+  <p>Sagatavots: {{ agreement.generated_at|date:"d.m.Y H:i" }}</p>
+  {% if agreement.sent_at %}<p>Nosūtīts: {{ agreement.sent_at|date:"d.m.Y H:i" }}</p>{% endif %}
+  {% if agreement.signed_at %}<p>Parakstīts: {{ agreement.signed_at|date:"d.m.Y H:i" }}</p>{% endif %}
+  {% if agreement.voided_at %}<p>Atcelts: {{ agreement.voided_at|date:"d.m.Y H:i" }}{% if agreement.void_reason %} — {{ agreement.void_reason }}{% endif %}</p>{% endif %}
+
+  {% if agreement.state == "generated" %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="mark_agreement_sent" class="default">Atzīmēt kā nosūtītu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.state == "generated" or agreement.state == "sent" %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="mark_agreement_signed" class="default">Atzīmēt kā parakstītu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement.state == "signed" and original.approved_member.status == "active" %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Neliels labojums</summary>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="minor_note">Piezīme:</label>
+        <textarea name="note" id="minor_note" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="minor_amendment">Saglabāt labojumu</button>
+    </form>
+  </details>
+
+  <details class="mms-review-actions__disclosure">
+    <summary>Sagatavot aizvietojošu līgumu</summary>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="material_note">Būtisko izmaiņu pamatojums:</label>
+        <textarea name="note" id="material_note" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="material_amendment" class="default">Sagatavot jaunu līgumu</button>
+    </form>
+  </details>
+
+  <details class="mms-review-actions__disclosure">
+    <summary>Pārtraukt dalību un norēķinus</summary>
+    <p class="help">Pārtrauc dalību un apstrādā tikai atzīmētos norēķinu rēķinus.</p>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="effective_date">Spēkā no:</label>
+        <input type="date" name="effective_date" id="effective_date" required>
+      </div>
+      <div class="form-row">
+        <label for="discontinue_reason">Iemesls:</label>
+        <textarea name="reason" id="discontinue_reason" rows="3" required></textarea>
+      </div>
+      {% if discontinuation_invoice_candidates %}
+      <fieldset>
+        <legend>Ietekmējamie rēķini</legend>
+        <table>
+          <thead>
+            <tr>
+              <th>Izvēlēties</th>
+              <th>Sezona</th>
+              <th>Secība</th>
+              <th>Termiņš</th>
+              <th>Summa</th>
+              <th>IN ID</th>
+              <th>Statuss</th>
+              <th>Paredzamā darbība</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for invoice in discontinuation_invoice_candidates %}
+            <tr>
+              <td><input type="checkbox" name="selected_invoices" value="{{ invoice.pk }}"></td>
+              <td>{{ invoice.billing_record.season }}</td>
+              <td>{{ invoice.sequence }}</td>
+              <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+              <td>{{ invoice.amount }}</td>
+              <td>{{ invoice.external_invoice_id|default:"—" }}</td>
+              <td>{{ invoice.get_payment_status_display|default:"—" }}</td>
+              <td>{{ invoice.proposed_action }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </fieldset>
+      {% endif %}
+      <button type="submit" name="action" value="discontinue_member">Pārtraukt dalību un norēķinus</button>
+    </form>
+  </details>
+  {% endif %}
+
+  {% if agreement.state != "void" %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Anulēt līguma dokumentu</summary>
+    <p class="help">Anulē tikai līguma dokumentu; nemaina dalību un rēķinus.</p>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="void_reason">Iemesls:</label>
+        <textarea name="void_reason" id="void_reason" rows="3"></textarea>
+      </div>
+      <button type="submit" name="action" value="void_agreement">Anulēt dokumentu</button>
+    </form>
+  </details>
+  {% endif %}
+
+  {% if agreement.state == "void" %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="regenerate_agreement" class="default">Sagatavot jaunu līgumu</button>
+  </form>
+  {% endif %}
+
+  {% if agreement_lifecycle_events %}
+  <div class="module mms-review-lifecycle-history">
+    <h3>Līguma vēsture</h3>
+    <ul>
+      {% for event in agreement_lifecycle_events %}
+      <li>
+        <strong>{{ event.get_event_type_display }}</strong>
+        {% if event.effective_date %}({{ event.effective_date|date:"d.m.Y" }}){% endif %}
+        {% if event.note %}— {{ event.note }}{% endif %}
+        <span class="mini">{{ event.created_at|date:"d.m.Y H:i" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if billing_adjustments %}
+  <div class="module mms-review-billing-adjustments">
+    <h3>Rēķinu korekcijas</h3>
+    <ul>
+      {% for adj in billing_adjustments %}
+      <li>
+        {{ adj.amount }} EUR — {{ adj.get_kind_display }} — {{ adj.external_status }}
+        {% if adj.requires_staff_apply %}(gaida darbinieka rīcību){% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if discontinued_billing_invoices %}
+  <div class="module mms-review-discontinued-invoices">
+    <h3>Atceltie rēķini</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Sezona</th>
+          <th>Secība</th>
+          <th>Termiņš</th>
+          <th>Summa</th>
+          <th>IN ID</th>
+          <th>Darbība</th>
+          <th>Statuss</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in discontinued_billing_invoices %}
+        <tr>
+          <td>{{ invoice.billing_record.season }}</td>
+          <td>{{ invoice.sequence }}</td>
+          <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+          <td>{{ invoice.amount }}</td>
+          <td>{{ invoice.external_invoice_id|default:"—" }}</td>
+          <td>{{ invoice.external_cancellation_action|default:"—" }}</td>
+          <td>{{ invoice.external_cancellation_status|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>

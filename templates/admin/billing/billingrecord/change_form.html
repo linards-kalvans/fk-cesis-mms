@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+
+{% block field_sets %}
+  {% if original and original.status == "draft" %}
+  {# Bare button (no nested <form>): rides the surrounding change form's POST + #}
+  {# CSRF via formaction/formmethod, posting to the audited confirm endpoint. #}
+  <div class="module" style="margin-bottom:1rem">
+    <button type="submit" class="button default"
+            formaction="{% url 'admin:billing_billingrecord_confirm' original.pk %}?next={% url 'admin:billing_billingrecord_change' original.pk %}"
+            formmethod="post">Apstiprināt ierakstu</button>
+  </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

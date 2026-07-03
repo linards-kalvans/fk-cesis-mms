@@ -5,15 +5,23 @@ from typing import Any
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import transaction
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import ParentAccount
+from apps.agreements.models import Agreement
+from apps.agreements.services import create_agreement_for_member
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.documents.models import Document, DocumentExtraction
 from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
-from apps.members.models import Guardian, KitSizeOption, Member
+from apps.members.models import KitSizeOption, Member, TrainingGroup
+from apps.members.services import resolve_guardian_for_account
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
     RegistrationApplication,
@@ -44,7 +52,18 @@ REQUIRED_SUBMIT_FIELDS = (
     "preferred_agreement_signing",
 )
 
-# All manual P1 form fields that map to model columns (excl. guardian_email = derived)
+# Slice B2: guardian fields in REQUIRED_SUBMIT_FIELDS are legacy column names;
+# resolve them through the read accessors instead of direct attribute access.
+_GUARDIAN_SUBMIT_ACCESSORS = {
+    "guardian_full_name": "guardian_name",
+    "guardian_personal_id": "guardian_pid",
+    "guardian_email": "guardian_contact_email",
+    "guardian_phone": "guardian_contact_phone",
+    "guardian_declared_address": "guardian_address",
+}
+
+# Manual P1 form-field names used as field_sources keys (guardian fields now
+# live on the Guardian row; guardian_email is derived from ParentAccount).
 MANUAL_P1_FIELDS = (
     "guardian_full_name",
     "guardian_personal_id",
@@ -57,6 +76,7 @@ MANUAL_P1_FIELDS = (
     "member_same_address_as_guardian",
     "preferred_agreement_signing",
     "support_club_instead_of_multi_child_discount",
+    "preferred_payment_mode",
 )
 
 
@@ -114,9 +134,9 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
     if latest is not None:
         prefill.update(
             {
-                "guardian_full_name": latest.guardian_full_name,
-                "guardian_personal_id": latest.guardian_personal_id,
-                "guardian_declared_address": latest.guardian_declared_address,
+                "guardian_full_name": latest.guardian_name,
+                "guardian_personal_id": latest.guardian_pid,
+                "guardian_declared_address": latest.guardian_address,
             }
         )
 
@@ -211,6 +231,12 @@ def _handle_document_upload(application: RegistrationApplication, upload, kind: 
     if existing is not None:
         existing.deleted_at = timezone.now()
         existing.save(update_fields=["deleted_at", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.DOCUMENT_DELETED),
+            actor_label=f"parent: {application.guardian_contact_email or application.claimed_email}",
+            target=existing,
+            metadata={"kind": kind, "reason": "replaced"},
+        )
 
     from django.core.files.base import ContentFile
 
@@ -379,8 +405,10 @@ def create_or_update_draft(
         if verified_account.email.lower() != email:
             raise ValueError("verified account email must match claimed email")
         application.parent_account = verified_account
+        application.guardian = resolve_guardian_for_account(verified_account)
 
-    # Backward-compat aliases for old field names
+    # Backward-compat aliases for old field names. "guardian_address" feeds the
+    # verified-path Guardian write below; the child_* entries feed member fields.
     _alias = {
         "guardian_address": "guardian_declared_address",
         "child_full_name": "member_full_name",
@@ -392,24 +420,37 @@ def create_or_update_draft(
             data = dict(data)
             data[new] = data[old]
 
-    application.guardian_full_name = str(data.get("guardian_full_name", "")).strip()
-    application.guardian_personal_id = str(data.get("guardian_personal_id", "")).strip()
-    application.guardian_email = email
-    application.guardian_phone = str(data.get("guardian_phone", "")).strip()
-    application.guardian_declared_address = str(data.get("guardian_declared_address", "")).strip()
+    # Slice B2: when a Guardian is linked, write only the canonical Guardian
+    # row; the legacy columns are not written. Unverified drafts hold only
+    # claimed_email — no guardian_* column writes.
+    if application.guardian_id is not None:
+        _guardian = application.guardian
+        _guardian.full_name = str(data.get("guardian_full_name", "")).strip()
+        _guardian.personal_id = str(data.get("guardian_personal_id", "")).strip()
+        _guardian.address = str(data.get("guardian_declared_address", "")).strip()
+        _guardian.save(update_fields=["full_name", "personal_id", "address"])
+        account = _guardian.parent_account
+        new_phone = str(data.get("guardian_phone", "")).strip()
+        if account is not None and new_phone and account.phone != new_phone:
+            account.phone = new_phone
+            account.save(update_fields=["phone", "updated_at"])
     application.member_full_name = str(data.get("member_full_name", "")).strip()
     application.member_personal_id = str(data.get("member_personal_id", "")).strip()
     application.member_birth_date = data.get("member_birth_date") or None
     application.member_same_address_as_guardian = bool(data.get("member_same_address_as_guardian", False))
     preferred = str(data.get("preferred_agreement_signing", "")).strip()
     if not preferred:
-        preferred = "paper"
+        preferred = "electronic"
     application.preferred_agreement_signing = preferred
     if "support_club_instead_of_multi_child_discount" in data:
         raw = data["support_club_instead_of_multi_child_discount"]
         application.support_club_instead_of_multi_child_discount = bool(raw) if raw is not None else None
     else:
         application.support_club_instead_of_multi_child_discount = None
+    payment_mode = str(data.get("preferred_payment_mode", "")).strip()
+    if not payment_mode:
+        payment_mode = "installments"
+    application.preferred_payment_mode = payment_mode
 
     # Kit sizes — FK to KitSizeOption
     shirt_id = data.get("member_kit_size_shirt")
@@ -521,7 +562,8 @@ def _require_complete_application(application: RegistrationApplication) -> None:
     }
     missing = []
     for field in REQUIRED_SUBMIT_FIELDS:
-        val = getattr(application, field)
+        attr = _GUARDIAN_SUBMIT_ACCESSORS.get(field, field)
+        val = getattr(application, attr)
         if field in boolean_fields:
             if val is None:
                 missing.append(field)
@@ -603,15 +645,6 @@ def submit_application(
     application.reviewed_at = None
     application.save(update_fields=["status", "submitted_at", "updated_at", "review_message", "reviewed_by_id", "reviewed_at"])
 
-    # Sync the parent account's phone to the contact phone the parent entered
-    # in this application. account.phone is the source of truth for prefill;
-    # keeping it current means later new-app prefill suggests the right phone.
-    if application.parent_account_id is not None and application.guardian_phone:
-        account = application.parent_account
-        if account.phone != application.guardian_phone:
-            account.phone = application.guardian_phone
-            account.save(update_fields=["phone", "updated_at"])
-
     return application
 
 
@@ -655,10 +688,17 @@ def request_application_fix(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_FIX_REQUESTED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "has_message": bool(message)},
+    )
+
+    _render_and_send_notification(
         application,
+        template_name="request_fix",
         subject="Jūsu pieteikums ir jālabo",
-        message=f"Pieteikuma labojuma pieprasījums:\n\n{message.strip()}\n\nLūdzu, labojiet pieteikumu un iesniedziet to vēlreiz.",
     )
     return application
 
@@ -681,19 +721,36 @@ def reject_application(
     application.reviewed_at = timezone.now()
     application.save(update_fields=["status", "review_message", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_REJECTED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "has_message": bool(message)},
+    )
+
+    _render_and_send_notification(
         application,
+        template_name="reject",
         subject="Jūsu pieteikums ir noraidīts",
-        message=f"Pieteikuma noraidīšanas iemesls:\n\n{message.strip()}",
     )
     return application
 
 
+@transaction.atomic
 def approve_application(
     application: RegistrationApplication,
     reviewer: settings.AUTH_USER_MODEL,
+    training_group: TrainingGroup | None = None,
 ) -> RegistrationApplication:
-    """Approve an application, creating Guardian + Member. Idempotent."""
+    """Approve an application, reusing the resolved Guardian and creating Member + Agreement.
+    Idempotent and atomic.
+
+    Optionally assigns the new Member to a TrainingGroup at create-time.
+    Idempotent re-approval ignores the training_group argument — assignment
+    edits go through apps.members.services.assign_training_group. The
+    @transaction.atomic decorator guards against partial-write inconsistency
+    across the three cross-table writes (Guardian, Member, Agreement).
+    """
     # Idempotent: if already approved with linked member, return as-is
     if application.approved_member_id is not None:
         return application
@@ -701,44 +758,88 @@ def approve_application(
     if application.status != RegistrationApplication.Status.SUBMITTED:
         raise ValueError("can only approve submitted application")
 
-    # Create Guardian from application guardian data
-    guardian = Guardian.objects.create(
-        full_name=application.guardian_full_name,
-        personal_id=application.guardian_personal_id,
-        email=application.guardian_email,
-        phone=application.guardian_phone,
-        address=application.guardian_declared_address,
-    )
+    if training_group is not None and not training_group.is_active:
+        raise ValueError("cannot assign inactive training group at approval time")
 
-    # Create Member linked to Guardian, no training_group
+    # Guardian is resolved at initiation and its profile is written at draft-save
+    # (Slice B1), so approval just reuses it — no snapshot copy. The fallback
+    # covers ORM-built applications that never went through create_or_update_draft.
+    guardian = application.guardian
+    if guardian is None:
+        if application.parent_account_id is None:
+            raise ValueError("Cannot approve an application without a parent account.")
+        guardian = resolve_guardian_for_account(application.parent_account)
+        application.guardian = guardian
+
+    # Create Member linked to Guardian, optionally to a TrainingGroup
     member = Member.objects.create(
         full_name=application.member_full_name,
         personal_id=application.member_personal_id,
         birth_date=application.member_birth_date,
         guardian=guardian,
-        training_group=None,
+        training_group=training_group,
+    )
+
+    create_agreement_for_member(
+        member,
+        signing_path=(
+            application.preferred_agreement_signing
+            or str(Agreement.SigningPath.ELECTRONIC)
+        ),
     )
 
     application.status = RegistrationApplication.Status.APPROVED
     application.approved_member = member
     application.reviewed_by = reviewer
     application.reviewed_at = timezone.now()
-    application.save(update_fields=["status", "approved_member_id", "reviewed_by_id", "reviewed_at", "updated_at"])
+    application.save(update_fields=["status", "approved_member_id", "guardian", "reviewed_by_id", "reviewed_at", "updated_at"])
 
-    _send_notification(
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_APPROVED),
+        actor=reviewer,
+        target=application,
+        metadata={"to_status": application.status, "member_id": application.approved_member_id},
+    )
+
+    _render_and_send_notification(
         application,
+        template_name="approve",
         subject="Jūsu pieteikums ir apstiprināts",
-        message=f"Bija veiksmīgi apstiprināts. Jūsu bērns '{application.member_full_name}' ir pievienots kluba dalībnieku reģistram.",
     )
     return application
 
 
-def _send_notification(application: RegistrationApplication, subject: str, message: str) -> None:
-    """Send an email notification to the parent's email address."""
+def _render_and_send_notification(
+    application: RegistrationApplication,
+    template_name: str,
+    subject: str,
+    extra_context: dict | None = None,
+) -> None:
+    """Render a plain-text email template and send it to the guardian.
+
+    Templates live under ``templates/emails/registrations/<template_name>.txt``.
+    Absolute URLs are built from ``settings.SITE_URL`` so links work outside
+    the request cycle (admin review actions run without a live request).
+    """
+    application_path = reverse(
+        "registrations:application-workspace", args=[application.id]
+    )
+    portal_path = reverse("registrations:parent-portal")
+    context: dict[str, Any] = {
+        "application": application,
+        "member_full_name": application.member_full_name,
+        "guardian_full_name": application.guardian_name,
+        "review_message": application.review_message or "",
+        "application_url": f"{settings.SITE_URL}{application_path}",
+        "portal_url": f"{settings.SITE_URL}{portal_path}",
+    }
+    if extra_context:
+        context.update(extra_context)
+    body = render_to_string(f"emails/registrations/{template_name}.txt", context)
     send_mail(
         subject=subject,
-        message=message,
+        message=body,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[application.guardian_email],
+        recipient_list=[application.guardian_contact_email],
         fail_silently=False,
     )

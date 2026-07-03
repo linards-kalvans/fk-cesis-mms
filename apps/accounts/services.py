@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db import IntegrityError, transaction
 from django.utils import timezone as django_timezone
 
 from apps.accounts.models import EmailVerificationCode, MagicLinkToken, ParentAccount
@@ -318,3 +319,35 @@ def verify_one_time_code(email: str, code: str) -> ParentAccount:
 
     attach_claimed_email_apps_to_parent(email, cast(ParentAccount, account))
     return cast(ParentAccount, account)
+
+
+@transaction.atomic
+def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount:
+    """Change a parent's verified email (admin-initiated).
+
+    Normalizes the new email, enforces the unique constraint (rejecting an
+    email already owned by another account, case-insensitive), and persists it.
+    No-op when the email is unchanged. Raises ValueError on collision.
+    """
+    normalized = new_email.strip().lower()
+    if not normalized:
+        raise ValueError("new email is required")
+    if normalized == account.email.lower():
+        return account
+
+    clash = (
+        ParentAccount.objects.filter(email__iexact=normalized)
+        .exclude(pk=account.pk)
+        .exists()
+    )
+    if clash:
+        raise ValueError("email already in use by another account")
+
+    try:
+        with transaction.atomic():
+            account.email = normalized
+            account.save(update_fields=["email", "updated_at"])
+    except IntegrityError as exc:
+        raise ValueError("email already in use by another account") from exc
+
+    return account

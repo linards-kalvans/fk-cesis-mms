@@ -167,4 +167,19 @@ Live tiny-IDP sample-document validation, agreement-handling first slice, and pr
 - Authoritative project guide: `AGENTS.md`
 - Canonical product spec: `docs/superpowers/specs/2026-05-08-fk-cesis-mms-product-spec.md`
 - Milestones: `docs/milestones.md`
+- Runtime contract: `docs/runtime-contract.md`
+- Local Docker smoke: `docs/local-docker-smoke.md`
+- Deployment ownership pointer: `docs/deployment.md` (deployed runtime lives in `https://github.com/linards-kalvans/fk-cesis`)
+- Audit log (operator guide): `docs/audit-log.md`
 - Historical plans archive: `docs/archive/plans/` *(read only when explicitly needed for history)*
+
+## License
+
+This project is licensed under the **GNU Affero General Public License v3.0
+or later** (AGPL-3.0-or-later). See [`LICENSE`](./LICENSE) for the full text.
+
+The AGPL applies the GPL's source-availability obligations to network-hosted
+software: anyone running a modified copy of this code as a service for
+others must make their changes available to those users under the same
+license. This is intentional — it keeps a community sports-club tool a
+shared commons rather than fuel for a closed-source product.

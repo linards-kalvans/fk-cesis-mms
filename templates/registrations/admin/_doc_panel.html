@@ -1,0 +1,127 @@
+{% comment %}
+P5 Slice A (Revision A) — per-kind admin doc panel.
+
+Expects a ``panel`` dict with keys: kind, panel_title, active (Document or None),
+replaced (list of Documents), ocr_summary (list of (label, value) tuples,
+empty for portrait), ocr_confidence_items (list of (label, value) tuples,
+empty for portrait), preview_kind ("image" | "pdf" | "other" | "").
+
+Markup contract:
+- Thumbnail grid (≈160 px) per kind. Click a thumbnail opens a native <dialog>
+  lightbox (wired up by static/admin/js/doc_lightbox.js).
+- Image thumbs render <img>; PDFs / other render an inline SVG doc icon.
+- No-JS fallback: thumbnail anchors point at admin-document-preview with
+  ``target="_blank"``.
+- "Other" file kinds expose a "Lejupielādēt failu" link to admin-document-download.
+{% endcomment %}
+<section class="mms-review-panel" data-kind="{{ panel.kind }}">
+  <h2 class="mms-review-panel-title">{{ panel.panel_title }}</h2>
+
+  {% if panel.active %}
+    <ul class="mms-review-thumb-grid">
+      <li class="mms-review-thumb">
+        <a class="mms-review-thumb-link"
+           href="{% url 'documents:admin-document-preview' panel.active.id %}"
+           target="_blank"
+           rel="noopener"
+           data-mms-lightbox
+           data-doc-kind="{{ panel.preview_kind|default:'other' }}">
+          {% if panel.preview_kind == "image" %}
+            <img class="mms-review-thumb-img"
+                 src="{% url 'documents:admin-document-preview' panel.active.id %}"
+                 alt="{{ panel.panel_title }}">
+          {% else %}
+            {# Inline SVG document icon — feather-style. #}
+            <svg class="mms-review-thumb-icon"
+                 data-doc-icon="{{ panel.preview_kind|default:'other' }}"
+                 xmlns="http://www.w3.org/2000/svg"
+                 viewBox="0 0 24 24"
+                 width="48"
+                 height="48"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.5"
+                 stroke-linecap="round"
+                 stroke-linejoin="round"
+                 aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+          {% endif %}
+        </a>
+        <div class="mms-review-thumb-meta">
+          <span class="mms-review-badge mms-review-badge--active">Aktīvs</span>
+          <strong class="mms-review-thumb-name">{{ panel.active.original_filename }}</strong>
+          <span class="mms-review-thumb-date">{{ panel.active.created_at|date:"d.m.Y H:i" }}</span>
+          <a class="mms-review-thumb-download"
+             href="{% url 'documents:admin-document-download' panel.active.id %}">
+            {% if panel.preview_kind == "image" or panel.preview_kind == "pdf" %}
+              Lejupielādēt dokumentu
+            {% else %}
+              Lejupielādēt failu
+            {% endif %}
+          </a>
+        </div>
+      </li>
+    </ul>
+
+    {% if panel.ocr_summary %}
+      <dl class="mms-review-ocr-readout">
+        {% for label, value in panel.ocr_summary %}
+          <dt>{{ label }}</dt>
+          <dd>{{ value }}</dd>
+        {% endfor %}
+      </dl>
+      {% if panel.ocr_confidence_items %}
+        <ul class="mms-review-ocr-confidence">
+          {% for label, value in panel.ocr_confidence_items %}
+            <li class="mms-review-ocr-confidence__chip"><strong>{{ label }}</strong>: {{ value }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="mms-review-empty">Dokuments nav iesniegts.</p>
+  {% endif %}
+
+  {% if panel.replaced %}
+    <details class="mms-review-history">
+      <summary>Iepriekšējās versijas ({{ panel.replaced|length }})</summary>
+      <ul class="mms-review-thumb-grid mms-review-thumb-grid--history">
+        {% for old in panel.replaced %}
+          <li class="mms-review-thumb">
+            <a class="mms-review-thumb-link"
+               href="{% url 'documents:admin-document-preview' old.id %}"
+               target="_blank"
+               rel="noopener"
+               data-mms-lightbox
+               data-doc-kind="{{ old.preview_kind|default:'other' }}">
+              <svg class="mms-review-thumb-icon"
+                   data-doc-icon="replaced"
+                   xmlns="http://www.w3.org/2000/svg"
+                   viewBox="0 0 24 24"
+                   width="48"
+                   height="48"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="1.5"
+                   stroke-linecap="round"
+                   stroke-linejoin="round"
+                   aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+            </a>
+            <div class="mms-review-thumb-meta">
+              <span class="mms-review-badge mms-review-badge--replaced">Aizvietots</span>
+              <strong class="mms-review-thumb-name">{{ old.original_filename }}</strong>
+              <span class="mms-review-thumb-date">{{ old.created_at|date:"d.m.Y H:i" }}</span>
+              <a class="mms-review-thumb-download"
+                 href="{% url 'documents:admin-document-download' old.id %}">Lejupielādēt</a>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</section>

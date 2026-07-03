@@ -273,6 +273,32 @@ class TestEditableWorkspaceActions:
         assert resp.status_code == 200
         assert "Iesniegt pieteikumu" in content
 
+    def test_editable_workspace_preserves_saved_payment_mode(self):
+        """GET workspace must show saved preferred_payment_mode, not fallback default."""
+        client = Client()
+        acct, app = _make_workspace_draft("payment-mode@example.com")
+        app.preferred_payment_mode = "upfront"
+        app.save(update_fields=["preferred_payment_mode", "updated_at"])
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        assert resp.context["form"]["preferred_payment_mode"].value() == "upfront"
+
+    def test_editable_workspace_defaults_empty_payment_and_signing_modes(self):
+        """Blank model values should render the new form defaults."""
+        client = Client()
+        acct, app = _make_workspace_draft("default-modes@example.com")
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        form = resp.context["form"]
+        assert form["preferred_agreement_signing"].value() == "electronic"
+        assert form["preferred_payment_mode"].value() == "installments"
+
     def test_editable_workspace_post_saves_draft_and_redirects(self):
         """POST with save_draft action must save and redirect to workspace."""
         client = Client()
@@ -298,5 +324,5 @@ class TestEditableWorkspaceActions:
         assert resp.status_code == 302
         assert f"/applications/{app.pk}/" in resp.headers["Location"]
         app.refresh_from_db()
-        assert app.guardian_full_name == "Updated Parent"
+        assert app.guardian_name == "Updated Parent"
         assert app.status == "draft"

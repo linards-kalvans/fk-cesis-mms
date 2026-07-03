@@ -41,6 +41,8 @@ dmypy.json
 # Django
 db.sqlite3
 db.sqlite3-journal
+*.sqlite3
+*.sqlite3.bak
 /media
 /staticfiles
 uploads/
@@ -65,9 +67,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
-
-# uv
-uv.lock
 
 # Local-only tiny-IDP validation inputs and evidence (real PII, never commit)
 /tmp/

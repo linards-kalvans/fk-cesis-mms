@@ -240,10 +240,6 @@ def _inject_completed_extraction(
 
     app = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="Prior Parent",
-        guardian_personal_id="010101-90000",
-        guardian_phone="+37120000099",
         status=RegistrationApplication.Status.SUBMITTED,
     )
     doc = Document.objects.create(
@@ -437,10 +433,6 @@ class TestPrefillNoDoubling:
         # Prior app model stores the same name OCR will return (normalized).
         app = RegistrationApplication.objects.create(
             parent_account=account,
-            guardian_email=account.email,
-            guardian_full_name="Anna Bērziņa",
-            guardian_personal_id="010101-70000",
-            guardian_phone="+37120000070",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(
@@ -531,10 +523,6 @@ class TestPrefillNoDoubling:
         )
         app = RegistrationApplication.objects.create(
             parent_account=account,
-            guardian_email=account.email,
-            guardian_full_name="Prior Guardian",
-            guardian_personal_id="010101-71000",
-            guardian_phone="+37120000071",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(

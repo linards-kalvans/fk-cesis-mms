@@ -410,3 +410,59 @@ class TestOcrSettingsExposed:
         assert snapshot["ocr_encryption_key"] == "", (
             f"Expected ocr_encryption_key='' default, got {snapshot['ocr_encryption_key']!r}."
         )
+
+
+class TestBillingAutosendSettingsExposed:
+    """BILLING_AUTOSEND_ENABLED / BILLING_SEND_DUE_HOUR exposed as settings,
+    asserted via the subprocess-isolation pattern so the defaults are tested
+    without leakage from the runner's ambient env (these keys are cleared by
+    _ENV_ISOLATION_KEYS before the temp .env loads)."""
+
+    def _billing_env(self, tmp_path, extra: str = "") -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://billing-test.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n" + extra
+        )
+        return _run_helper(tmp_path)
+
+    def test_autosend_defaults_off_when_unset(self, tmp_path):
+        snapshot = self._billing_env(tmp_path)
+        assert snapshot["billing_autosend_enabled"] is False
+
+    def test_autosend_enabled_from_env(self, tmp_path):
+        snapshot = self._billing_env(tmp_path, "BILLING_AUTOSEND_ENABLED=true\n")
+        assert snapshot["billing_autosend_enabled"] is True
+
+    def test_send_due_hour_defaults_to_4_when_unset(self, tmp_path):
+        snapshot = self._billing_env(tmp_path)
+        assert snapshot["billing_send_due_hour"] == 4
+
+    def test_send_due_hour_from_env(self, tmp_path):
+        snapshot = self._billing_env(tmp_path, "BILLING_SEND_DUE_HOUR=6\n")
+        assert snapshot["billing_send_due_hour"] == 6
+
+
+class TestAuditRetentionSettingsExposed:
+    """AUDIT_RETENTION_DAYS / AUDIT_PRUNE_HOUR exposed as settings, asserted via
+    the subprocess-isolation snapshot so defaults aren't polluted by ambient env."""
+
+    def _audit_env(self, tmp_path, extra: str = "") -> dict:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "SITE_URL=http://audit-test.example.com\n"
+            "DJANGO_SECRET_KEY=test-key\n" + extra
+        )
+        return _run_helper(tmp_path)
+
+    def test_retention_days_default(self, tmp_path):
+        snapshot = self._audit_env(tmp_path)
+        assert snapshot["audit_retention_days"] == 730
+
+    def test_retention_days_from_env(self, tmp_path):
+        snapshot = self._audit_env(tmp_path, "AUDIT_RETENTION_DAYS=365\n")
+        assert snapshot["audit_retention_days"] == 365
+
+    def test_prune_hour_default(self, tmp_path):
+        snapshot = self._audit_env(tmp_path)
+        assert snapshot["audit_prune_hour"] == 2

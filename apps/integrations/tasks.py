@@ -12,14 +12,25 @@ separate makes spying in tests trivial.
 
 from __future__ import annotations
 
+import logging
+
+from django.db import transaction
 from django.utils import timezone
 from django_q.tasks import async_task
 
+from apps.agreements.models import Agreement
+from apps.agreements.services import mark_agreement_signed
+from apps.core.audit import record_audit_event
+from apps.core.models import AuditEvent
 from apps.documents.models import Document, DocumentExtraction
 from apps.documents.ocr import encrypt_json
+from apps.integrations import agreement_platform
+from apps.integrations import invoice_platform
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS, safe_extract_document_data
 from apps.registrations.models import RegistrationApplication
+
+logger = logging.getLogger(__name__)
 
 
 class RetryableOCRError(Exception):
@@ -156,3 +167,693 @@ def _apply_field_sources(application: RegistrationApplication, kind: str) -> Non
     sources.update(field_map)
     application.field_sources = sources
     application.save(update_fields=["field_sources", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# Agreement-platform (DocuSeal) pipeline — P5 Slice D
+# ---------------------------------------------------------------------------
+
+
+class RetryableAgreementError(Exception):
+    """Raised for transient agreement-platform failures so django-q2 retries."""
+
+
+_AGREEMENT_ERROR_CODES: dict[type[Exception], tuple[str, bool]] = {
+    agreement_platform.AgreementPlatformTransientError: ("unavailable", True),
+    agreement_platform.AgreementPlatformAuthError: ("auth_failed", False),
+    agreement_platform.AgreementPlatformConfigError: ("misconfigured", False),
+    agreement_platform.AgreementPlatformNotFoundError: ("not_found", False),
+}
+
+
+def _classify_agreement_error(exc: Exception) -> tuple[str, bool]:
+    for exc_type, mapping in _AGREEMENT_ERROR_CODES.items():
+        if isinstance(exc, exc_type):
+            return mapping
+    return ("provider_error", False)
+
+
+def _mark_agreement_failed(agreement: Agreement, code: str) -> None:
+    agreement.external_state = "failed"
+    agreement.external_error_code = code
+    agreement.save(
+        update_fields=["external_state", "external_error_code", "updated_at"]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.AGREEMENT_SYNC_FAILED),
+        actor_label="system: docuseal_sync",
+        target=agreement,
+        metadata={"error_code": code},
+    )
+
+
+def enqueue_create_agreement_submission(agreement_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.create_agreement_submission", agreement_id
+        )
+    except RetryableAgreementError:
+        return
+
+
+def enqueue_sync_agreement_submission(agreement_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.sync_agreement_submission", agreement_id
+        )
+    except RetryableAgreementError:
+        return
+
+
+def enqueue_archive_agreement_submission(external_id: str) -> None:
+    async_task(
+        "apps.integrations.tasks.archive_agreement_submission", external_id
+    )
+
+
+def create_agreement_submission(agreement_id: int) -> None:
+    try:
+        agreement = Agreement.objects.select_related(
+            "member__guardian__parent_account"
+        ).get(
+            pk=agreement_id
+        )
+    except Agreement.DoesNotExist:
+        return
+    try:
+        result = agreement_platform.create_submission(agreement)
+    except Exception as exc:
+        code, retry = _classify_agreement_error(exc)
+        _mark_agreement_failed(agreement, code)
+        if retry:
+            raise RetryableAgreementError(code) from exc
+        return
+    agreement.external_provider = "docuseal"
+    agreement.external_id = result.external_id
+    agreement.external_url = result.external_url
+    agreement.external_state = result.external_state
+    agreement.external_error_code = ""
+    agreement.save(
+        update_fields=[
+            "external_provider",
+            "external_id",
+            "external_url",
+            "external_state",
+            "external_error_code",
+            "updated_at",
+        ]
+    )
+
+
+def sync_agreement_submission(agreement_id: int) -> None:
+    try:
+        agreement = Agreement.objects.get(pk=agreement_id)
+    except Agreement.DoesNotExist:
+        return
+    if not agreement.external_id:
+        return
+    try:
+        result = agreement_platform.sync_submission(agreement.external_id)
+    except Exception as exc:
+        code, retry = _classify_agreement_error(exc)
+        _mark_agreement_failed(agreement, code)
+        if retry:
+            raise RetryableAgreementError(code) from exc
+        return
+    agreement.external_state = result.external_state
+    agreement.external_error_code = ""
+    agreement.save(
+        update_fields=["external_state", "external_error_code", "updated_at"]
+    )
+    agreement.refresh_from_db(fields=["state"])
+    if result.external_state == "completed" and agreement.state in (
+        Agreement.State.GENERATED,
+        Agreement.State.SENT,
+    ):
+        mark_agreement_signed(agreement, actor=None)
+
+
+def archive_agreement_submission(external_id: str) -> None:
+    try:
+        agreement_platform.archive_submission(external_id)
+    except Exception:
+        logger.warning("DocuSeal archive failed for %s", external_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Invoicing (Invoice Ninja) push pipeline — P6 Slice B
+# ---------------------------------------------------------------------------
+
+
+class RetryableInvoiceError(Exception):
+    """Raised for transient invoicing failures so django-q2 retries."""
+
+
+_INVOICE_ERROR_CODES: dict[type[Exception], tuple[str, bool]] = {
+    invoice_platform.InvoicePlatformTransientError: ("unavailable", True),
+    invoice_platform.InvoicePlatformAuthError: ("auth_failed", False),
+    invoice_platform.InvoicePlatformConfigError: ("misconfigured", False),
+    invoice_platform.InvoicePlatformNotFoundError: ("not_found", False),
+}
+
+
+def _classify_invoice_error(exc: Exception) -> tuple[str, bool]:
+    for exc_type, mapping in _INVOICE_ERROR_CODES.items():
+        if isinstance(exc, exc_type):
+            return mapping
+    return ("provider_error", False)
+
+
+def enqueue_push_billing_record(record_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.push_billing_record", record_id)
+    except RetryableInvoiceError:
+        return
+
+
+def _ensure_product_id(plan_id: int) -> str:
+    """Return the Invoice Ninja product id for a plan, creating it at most once.
+
+    The check-and-create runs inside a ``select_for_update`` row lock and
+    re-reads the locked row, so a product id committed by a concurrent sibling
+    push is reused rather than duplicated. On Postgres the lock serialises
+    concurrent django-q workers; the re-read picks up the committed value.
+    """
+    from apps.billing.models import MembershipPlan
+
+    with transaction.atomic():
+        plan = MembershipPlan.objects.select_for_update().get(pk=plan_id)
+        if plan.external_product_id:
+            return str(plan.external_product_id)
+        external_id = invoice_platform.ensure_product(plan).external_id
+        plan.external_product_id = external_id
+        plan.save(update_fields=["external_product_id", "updated_at"])
+        return external_id
+
+
+def _is_invalid_client_error(exc: Exception) -> bool:
+    """Detect Invoice Ninja 422 caused by a deleted/archived client id."""
+    msg = str(exc)
+    return (
+        "client_id" in msg
+        and "invalid" in msg.lower()
+        and "selected client id is invalid" in msg.lower()
+    )
+
+
+def _recover_stale_client_id(record) -> str:
+    """Clear a stale Guardian.external_client_id and recreate the client."""
+    from apps.members.models import Guardian
+
+    guardian_id = record.member.guardian_id
+    Guardian.objects.filter(pk=guardian_id).update(external_client_id="")
+    record.member.guardian.external_client_id = ""
+    fresh_id = _ensure_client_id(guardian_id)
+    record.member.guardian.external_client_id = fresh_id
+    return fresh_id
+
+
+def _create_invoice_with_stale_client_recovery(record, billing_invoice):
+    """Create an invoice, recovering once from a stale client id."""
+    try:
+        return invoice_platform.create_invoice(record, billing_invoice)
+    except Exception as exc:
+        if not _is_invalid_client_error(exc):
+            raise
+        _recover_stale_client_id(record)
+        return invoice_platform.create_invoice(record, billing_invoice)
+
+
+def _ensure_client_id(guardian_id: int) -> str:
+    """Return the Invoice Ninja client id for a guardian, creating it at most once.
+
+    Same row-locked, re-read pattern as :func:`_ensure_product_id`. This is what
+    makes the "one Invoice Ninja client per parent" guarantee hold when a
+    parent's siblings are pushed concurrently: the second worker blocks on the
+    lock, then reuses the client the first worker committed.
+    """
+    from apps.members.models import Guardian
+
+    with transaction.atomic():
+        guardian = (
+            Guardian.objects.select_related("parent_account")
+            .select_for_update()
+            .get(pk=guardian_id)
+        )
+        if guardian.external_client_id:
+            return str(guardian.external_client_id)
+        external_id = invoice_platform.ensure_client(guardian).external_id
+        guardian.external_client_id = external_id
+        # Guardian has no updated_at — do not include it in update_fields.
+        guardian.save(update_fields=["external_client_id"])
+        return external_id
+
+
+def push_billing_record(record_id: int) -> None:
+    from apps.billing.models import BillingRecord
+    from apps.billing.services import materialize_installments
+
+    try:
+        record = BillingRecord.objects.select_related(
+            "plan", "member__guardian"
+        ).get(pk=record_id)
+    except BillingRecord.DoesNotExist:
+        return
+    if record.status != BillingRecord.Status.CONFIRMED:
+        return
+    if record.external_status == "synced":
+        return
+
+    record.external_status = "pending"
+    record.external_error_code = ""
+    record.save(update_fields=["external_status", "external_error_code", "updated_at"])
+
+    # Steps 1-2: ensure product + client. Each is created at most once under a
+    # row lock so concurrent sibling pushes (separate django-q workers, same
+    # guardian/plan) reuse the shared id instead of creating duplicates. The
+    # returned ids are written back onto the in-memory record so the downstream
+    # invoice build uses them.
+    try:
+        record.plan.external_product_id = _ensure_product_id(record.plan_id)
+        record.member.guardian.external_client_id = _ensure_client_id(
+            record.member.guardian_id
+        )
+    except Exception as exc:
+        code, retry = _classify_invoice_error(exc)
+        record.external_status = "failed"
+        record.external_error_code = code
+        record.save(update_fields=["external_status", "external_error_code", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.INVOICE_PUSH_FAILED),
+            actor_label="system: push_billing_record",
+            target=record, metadata={"error_code": code},
+        )
+        if retry:
+            raise RetryableInvoiceError(code) from exc
+        return
+
+    # Step 3: materialize installment rows (idempotent).
+    rows = materialize_installments(record)
+
+    # Step 4: create one invoice per row lacking an external id.
+    failed_code = ""
+    for billing_invoice in rows:
+        if billing_invoice.cancelled_at is not None:
+            continue
+        if billing_invoice.external_invoice_id:
+            continue
+        try:
+            result = _create_invoice_with_stale_client_recovery(record, billing_invoice)
+        except Exception as exc:
+            code, retry = _classify_invoice_error(exc)
+            billing_invoice.external_status = "failed"
+            billing_invoice.external_error_code = code
+            billing_invoice.save(
+                update_fields=["external_status", "external_error_code", "updated_at"]
+            )
+            record_audit_event(
+                action=str(AuditEvent.Action.INVOICE_PUSH_FAILED),
+                actor_label="system: push_billing_record",
+                target=record, metadata={"error_code": code},
+            )
+            if retry:
+                record.external_status = "failed"
+                record.external_error_code = code
+                record.save(
+                    update_fields=["external_status", "external_error_code", "updated_at"]
+                )
+                raise RetryableInvoiceError(code) from exc
+            failed_code = failed_code or code
+            continue
+        billing_invoice.external_invoice_id = result.external_id
+        billing_invoice.external_status = "created"
+        billing_invoice.external_error_code = ""
+        billing_invoice.save(
+            update_fields=[
+                "external_invoice_id",
+                "external_status",
+                "external_error_code",
+                "updated_at",
+            ]
+        )
+
+    # Step 5: roll up.
+    if failed_code:
+        record.external_status = "failed"
+        record.external_error_code = failed_code
+    else:
+        record.external_status = "synced"
+        record.external_error_code = ""
+    record.save(update_fields=["external_status", "external_error_code", "updated_at"])
+
+
+def enqueue_archive_invoice(invoice_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.archive_invoice_job", invoice_id)
+    except RetryableInvoiceError:
+        return
+
+
+def enqueue_cancel_invoice(invoice_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.cancel_invoice_job", invoice_id)
+    except RetryableInvoiceError:
+        return
+
+
+def _run_invoice_cancellation_job(
+    invoice_id: int,
+    action: str,
+    platform_call,
+) -> None:
+    from apps.billing.models import BillingInvoice
+
+    try:
+        invoice = BillingInvoice.objects.get(pk=invoice_id)
+    except BillingInvoice.DoesNotExist:
+        return
+
+    if not invoice.external_invoice_id:
+        return
+
+    try:
+        platform_call(invoice.external_invoice_id)
+    except Exception as exc:
+        code, retry = _classify_invoice_error(exc)
+        invoice.external_cancellation_status = "failed"
+        invoice.external_cancellation_error_code = code
+        invoice.save(
+            update_fields=[
+                "external_cancellation_status",
+                "external_cancellation_error_code",
+                "updated_at",
+            ]
+        )
+        if retry:
+            raise RetryableInvoiceError(code) from exc
+        return
+
+    invoice.external_cancellation_status = "done"
+    invoice.external_cancellation_error_code = ""
+    invoice.save(
+        update_fields=[
+            "external_cancellation_status",
+            "external_cancellation_error_code",
+            "updated_at",
+        ]
+    )
+
+
+def archive_invoice_job(invoice_id: int) -> None:
+    _run_invoice_cancellation_job(
+        invoice_id,
+        action="archive",
+        platform_call=invoice_platform.archive_invoice,
+    )
+
+
+def cancel_invoice_job(invoice_id: int) -> None:
+    from apps.billing.models import BillingInvoice
+
+    try:
+        invoice = BillingInvoice.objects.get(pk=invoice_id)
+    except BillingInvoice.DoesNotExist:
+        return
+
+    reason = invoice.cancellation_reason or ""
+
+    def _call(ext_id: str) -> None:
+        invoice_platform.cancel_invoice(ext_id, reason)
+
+    _run_invoice_cancellation_job(
+        invoice_id,
+        action="cancel",
+        platform_call=_call,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Payment sync pipeline — P6 Slice C
+# ---------------------------------------------------------------------------
+
+
+def _sync_invoice_payment(billing_invoice) -> None:
+    """Fetch + write the payment projection for one invoice. Raises on
+    provider error (caller decides isolation vs. surfacing)."""
+    result = invoice_platform.fetch_invoice_payment(billing_invoice.external_invoice_id)
+    billing_invoice.payment_status = result.payment_status
+    billing_invoice.paid_to_date = result.paid_to_date
+    billing_invoice.balance = result.balance
+    billing_invoice.last_payment_date = result.last_payment_date
+    billing_invoice.last_synced_at = timezone.now()
+    billing_invoice.save(
+        update_fields=[
+            "payment_status",
+            "paid_to_date",
+            "balance",
+            "last_payment_date",
+            "last_synced_at",
+            "updated_at",
+        ]
+    )
+
+
+def sync_billing_payments() -> None:
+    """Scheduled nightly sweep: refresh the payment projection for every
+    invoice with an external id. Per-row errors are logged and skipped so one
+    bad row never aborts the run."""
+    from apps.billing.models import BillingInvoice
+    from apps.billing.services import roll_up_payment_status
+
+    invoices = BillingInvoice.objects.exclude(external_invoice_id="").select_related(
+        "billing_record"
+    )
+    touched: dict[int, object] = {}
+    for billing_invoice in invoices:
+        try:
+            _sync_invoice_payment(billing_invoice)
+        except Exception as exc:  # noqa: BLE001 - batch sweep isolates per-row failures
+            logger.warning(
+                "payment sync failed for invoice %s: %s", billing_invoice.pk, exc
+            )
+            continue
+        touched[billing_invoice.billing_record_id] = billing_invoice.billing_record
+    for record in touched.values():
+        roll_up_payment_status(record)
+
+
+def send_due_invoices() -> None:
+    """Scheduled nightly sweep: issue + email each Draft installment invoice
+    on/after the 1st of its due month. Gated by BILLING_AUTOSEND_ENABLED.
+
+    Emailing a Draft in Invoice Ninja flips it to Sent and delivers the
+    invoice email. Per-row errors are recorded on the invoice and logged so one
+    bad row never aborts the run; the row stays 'created' and is retried on the
+    next nightly run (the cadence is the retry loop)."""
+    from django.conf import settings
+
+    if not getattr(settings, "BILLING_AUTOSEND_ENABLED", False):
+        logger.info("send_due_invoices: BILLING_AUTOSEND_ENABLED is off; skipping")
+        return
+
+    from apps.billing.models import BillingInvoice
+    from apps.billing.services import is_invoice_due_to_send
+
+    today = timezone.localdate()
+    invoices = (
+        BillingInvoice.objects.filter(external_status="created")
+        .exclude(external_invoice_id="")
+        .filter(cancelled_at__isnull=True)
+        .select_related("billing_record__member__guardian__parent_account")
+    )
+    for billing_invoice in invoices:
+        if not is_invoice_due_to_send(billing_invoice, today):
+            continue
+        guardian = billing_invoice.billing_record.member.guardian
+        if not guardian.email:
+            logger.warning(
+                "send_due_invoices: invoice %s skipped — guardian %s has no email",
+                billing_invoice.pk,
+                guardian.pk,
+            )
+            continue
+        try:
+            invoice_platform.email_invoice(billing_invoice.external_invoice_id)
+        except Exception as exc:  # noqa: BLE001 - batch sweep isolates per-row failures
+            code, _retry = _classify_invoice_error(exc)
+            billing_invoice.external_error_code = code
+            billing_invoice.save(update_fields=["external_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.INVOICE_SEND_FAILED),
+                actor_label="system: send_due_invoices",
+                target=billing_invoice.billing_record,
+                metadata={"error_code": code},
+            )
+            logger.warning(
+                "send_due_invoices: email failed for invoice %s: %s",
+                billing_invoice.pk,
+                exc,
+            )
+            continue
+        billing_invoice.external_status = "sent"
+        billing_invoice.sent_at = timezone.now()
+        billing_invoice.external_error_code = ""
+        billing_invoice.save(
+            update_fields=["external_status", "sent_at", "external_error_code", "updated_at"]
+        )
+
+
+def enqueue_sync_billing_record_payments(record_id: int) -> None:
+    try:
+        async_task(
+            "apps.integrations.tasks.sync_billing_record_payments", record_id
+        )
+    except RetryableInvoiceError:
+        return
+
+
+def sync_billing_record_payments(record_id: int) -> None:
+    """Manual single-record payment sync (admin action). Surfaces a terminal
+    error on the record's payment_error_code; re-raises transient errors so
+    the cluster retries."""
+    from apps.billing.models import BillingRecord
+    from apps.billing.services import roll_up_payment_status
+
+    try:
+        record = BillingRecord.objects.get(pk=record_id)
+    except BillingRecord.DoesNotExist:
+        return
+
+    for billing_invoice in record.invoices.exclude(external_invoice_id=""):
+        try:
+            _sync_invoice_payment(billing_invoice)
+        except Exception as exc:
+            code, retry = _classify_invoice_error(exc)
+            record.payment_error_code = code
+            record.save(update_fields=["payment_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.PAYMENT_SYNC_FAILED),
+                actor_label="system: sync_billing_record_payments",
+                target=record, metadata={"error_code": code},
+            )
+            if retry:
+                raise RetryableInvoiceError(code) from exc
+            return
+
+    if record.payment_error_code:
+        record.payment_error_code = ""
+        record.save(update_fields=["payment_error_code", "updated_at"])
+    roll_up_payment_status(record)
+
+
+# ---------------------------------------------------------------------------
+# Credit-note pipeline — P8 agreement lifecycle
+# ---------------------------------------------------------------------------
+
+
+def enqueue_create_credit_note(adjustment_id: int) -> None:
+    try:
+        async_task("apps.integrations.tasks.create_credit_note_job", adjustment_id)
+    except RetryableInvoiceError:
+        return
+
+
+def create_credit_note_job(adjustment_id: int) -> None:
+    """Create a credit note in Invoice Ninja and apply it to the target invoice.
+
+    Terminal failures persist on the adjustment and audit the failure; transient
+    failures raise RetryableInvoiceError so django-q2 retries.
+    """
+    from apps.billing.models import BillingAdjustment
+
+    try:
+        adjustment = BillingAdjustment.objects.select_related(
+            "billing_record__member__guardian__parent_account",
+            "invoice__billing_record",
+        ).get(pk=adjustment_id)
+    except BillingAdjustment.DoesNotExist:
+        return
+
+    try:
+        result = invoice_platform.create_credit_note(adjustment)
+    except Exception as exc:
+        code, retry = _classify_invoice_error(exc)
+        adjustment.external_status = "failed"
+        adjustment.external_error_code = code
+        adjustment.save(update_fields=["external_status", "external_error_code", "updated_at"])
+        record_audit_event(
+            action=str(AuditEvent.Action.BILLING_CREDIT_FAILED),
+            actor_label="system: create_credit_note_job",
+            target=adjustment,
+            metadata={"error_code": code},
+        )
+        if retry:
+            raise RetryableInvoiceError(code) from exc
+        return
+
+    adjustment.external_credit_id = result.external_id
+    adjustment.external_status = result.external_status
+    adjustment.external_error_code = ""
+    adjustment.save(
+        update_fields=[
+            "external_credit_id",
+            "external_status",
+            "external_error_code",
+            "updated_at",
+        ]
+    )
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_CREDIT_CREATED),
+        actor_label="system: create_credit_note_job",
+        target=adjustment,
+        metadata={"external_credit_id": result.external_id},
+    )
+
+    invoice = adjustment.invoice
+    if invoice is not None and invoice.external_invoice_id:
+        try:
+            apply_result = invoice_platform.apply_credit_to_invoice(
+                result.external_id,
+                invoice.external_invoice_id,
+                adjustment.amount,
+            )
+        except Exception as exc:
+            code, retry = _classify_invoice_error(exc)
+            adjustment.external_status = "failed"
+            adjustment.external_error_code = code
+            adjustment.save(update_fields=["external_status", "external_error_code", "updated_at"])
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_CREDIT_FAILED),
+                actor_label="system: apply_credit_to_invoice",
+                target=adjustment,
+                metadata={"error_code": code},
+            )
+            if retry:
+                raise RetryableInvoiceError(code) from exc
+            return
+
+        if apply_result.applied:
+            adjustment.external_status = "applied"
+            adjustment.applied_to_external_invoice_id = invoice.external_invoice_id
+            adjustment.requires_staff_apply = False
+            adjustment.save(
+                update_fields=[
+                    "external_status",
+                    "applied_to_external_invoice_id",
+                    "requires_staff_apply",
+                    "updated_at",
+                ]
+            )
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_CREDIT_APPLIED),
+                actor_label="system: create_credit_note_job",
+                target=adjustment,
+                metadata={
+                    "external_credit_id": result.external_id,
+                    "applied_to_external_invoice_id": invoice.external_invoice_id,
+                    "amount": str(adjustment.amount),
+                },
+            )
+        else:
+            adjustment.requires_staff_apply = True
+            adjustment.save(update_fields=["requires_staff_apply", "updated_at"])

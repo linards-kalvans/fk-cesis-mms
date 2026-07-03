@@ -43,13 +43,6 @@ class RegistrationApplication(TimeStampedModel):
     draft_session_key = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.DRAFT)
 
-    # Guardian snapshot fields (P1 names)
-    guardian_full_name = models.CharField(max_length=255, blank=True)
-    guardian_personal_id = models.CharField(max_length=32, blank=True)
-    guardian_email = models.EmailField()
-    guardian_phone = models.CharField(max_length=32, blank=True)
-    guardian_declared_address = models.CharField(max_length=255, blank=True)
-
     # Member (child/player) snapshot fields (P1 names)
     member_full_name = models.CharField(max_length=255, blank=True)
     member_personal_id = models.CharField(max_length=32, blank=True)
@@ -77,6 +70,10 @@ class RegistrationApplication(TimeStampedModel):
         ELECTRONIC = "electronic", "Elektroniski"
         PAPER = "paper", "Ar roku, papīra dokuments"
 
+    class PaymentMode(models.TextChoices):
+        UPFRONT = "upfront", "Vienā maksājumā"
+        INSTALLMENTS = "installments", "Pa daļām"
+
     # Application-level fields
     preferred_agreement_signing = models.CharField(
         max_length=16,
@@ -87,6 +84,11 @@ class RegistrationApplication(TimeStampedModel):
         null=True,
         blank=True,
         default=None,
+    )
+    preferred_payment_mode = models.CharField(
+        max_length=16,
+        choices=PaymentMode.choices,
+        blank=True,
     )
 
     # Field source classification (JSON)
@@ -120,6 +122,15 @@ class RegistrationApplication(TimeStampedModel):
         related_name="source_application",
     )
 
+    # Canonical guardian (1:1 with ParentAccount), resolved at initiation.
+    guardian = models.ForeignKey(
+        "members.Guardian",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="applications",
+    )
+
     def is_draft(self) -> bool:
         result: bool = self.status == self.Status.DRAFT
         return result
@@ -136,4 +147,31 @@ class RegistrationApplication(TimeStampedModel):
         return result
 
     def __str__(self):
-        return f"{self.guardian_email} — {self.member_full_name or 'draft'}"
+        return f"{self.guardian_contact_email or self.claimed_email} — {self.member_full_name or 'draft'}"
+
+    # --- Guardian-read accessors (Slice B2). No fallback to legacy columns. ---
+    @property
+    def guardian_name(self) -> str:
+        return str(self.guardian.full_name) if self.guardian_id is not None else ""
+
+    @property
+    def guardian_pid(self) -> str:
+        return str(self.guardian.personal_id) if self.guardian_id is not None else ""
+
+    @property
+    def guardian_contact_phone(self) -> str:
+        return str(self.guardian.phone) if self.guardian_id is not None else ""
+
+    @property
+    def guardian_address(self) -> str:
+        return str(self.guardian.address) if self.guardian_id is not None else ""
+
+    @property
+    def guardian_contact_email(self) -> str:
+        return str(self.parent_account.email) if self.parent_account_id is not None else ""
+
+    @property
+    def guardian_profile_populated(self) -> bool:
+        """True when this application's canonical Guardian profile is already
+        filled (returning parent). Drives the locked-profile UX in Slice C."""
+        return bool(self.guardian_id is not None and self.guardian.full_name)

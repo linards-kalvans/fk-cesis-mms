@@ -183,7 +183,7 @@ h1, h2, h3 {
   border: 1px solid var(--fk-border);
   box-shadow: var(--fk-shadow-soft);
   border-radius: var(--fk-radius-xl);
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: 16px;
 }
 
@@ -316,6 +316,15 @@ h1, h2, h3 {
 
 .fk-form-field input.fk-input--error {
   border-color: var(--fk-red);
+}
+
+/* Guardian-profile locked visual state (Slice C). The always-readonly
+   guardian email intentionally uses the same class for consistent appearance. */
+.fk-form-field input.fk-input--guardian-locked {
+  color: var(--fk-muted);
+  background: #f4f6fb;
+  border-color: #e0e4ef;
+  cursor: not-allowed;
 }
 
 .fk-form-help {
@@ -1229,4 +1238,59 @@ h1, h2, h3 {
     margin-left: auto;
     margin-bottom: 8px;
   }
+}
+
+/* Address autocomplete dropdown. Scoped to the input's positioned parent
+   so suggestions render directly under the field without disturbing layout. */
+.fk-address-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+  background: var(--fk-white);
+  border: 1px solid var(--fk-border);
+  border-radius: var(--fk-radius-md);
+  box-shadow: var(--fk-shadow);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.fk-address-dropdown__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--fk-border);
+}
+
+.fk-address-dropdown__item:last-child {
+  border-bottom: none;
+}
+
+.fk-address-dropdown__item:hover,
+.fk-address-dropdown__item--active {
+  background: var(--fk-soft-blue);
+}
+
+.fk-address-dropdown__label {
+  color: var(--fk-text);
+}
+
+.fk-address-dropdown__hint {
+  flex-shrink: 0;
+  color: var(--fk-muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.fk-address-dropdown__message {
+  padding: 12px 14px;
+  color: var(--fk-muted);
+  font-size: 0.9em;
 }

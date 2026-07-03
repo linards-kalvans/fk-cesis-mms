@@ -18,7 +18,7 @@ from apps.documents.models import Document
 from apps.members.models import KitSizeOption
 from apps.registrations.services import create_or_update_draft, submit_application
 
-pytestmark = pytest.mark.django_db
+pytestmark = [pytest.mark.django_db, pytest.mark.admin_view, pytest.mark.slow]
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ class TestAdminOcrReviewDetail:
 
         app = ParentAccount.objects.get(email="guardianext@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -137,7 +137,7 @@ class TestAdminOcrReviewDetail:
 
         app = ParentAccount.objects.get(email="memberext@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -158,7 +158,7 @@ class TestAdminOcrReviewDetail:
 
         app = ParentAccount.objects.get(email="previewlink@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -180,7 +180,7 @@ class TestAdminOcrReviewDetail:
 
         app = ParentAccount.objects.get(email="confidence@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -202,7 +202,7 @@ class TestAdminOcrReviewDetail:
 
         app = ParentAccount.objects.get(email="flags@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
         assert resp.status_code == 200
         content = resp.content.decode()
@@ -225,7 +225,7 @@ class TestAdminOcrReviewDetail:
 class TestAdminOcrAuthRegression:
     """Non-staff must not see OCR extracted values in admin review."""
 
-    def test_non_staff_gets_404_on_admin_ocr_detail(self, settings):
+    def test_non_staff_blocked_on_admin_ocr_detail(self, settings):
         settings.OCR_PROVIDER_MODE = "stub"
         settings.OCR_ENCRYPTION_KEY = "Y14NJYvOnvr0FLs41cks5xUkk8j95dwHcT3xsp-LkbY="
 
@@ -240,9 +240,16 @@ class TestAdminOcrAuthRegression:
 
         app = ParentAccount.objects.get(email="nonstaffocr@example.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/")
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/")
 
-        assert resp.status_code == 404, "Non-staff must get 404 on admin review detail."
+        # The Django admin gates non-staff users at the admin shell (redirect to
+        # the admin login), so they never reach the OCR readout. Either a 403 or
+        # a login redirect is an acceptable denial.
+        assert resp.status_code in (302, 403, 404), (
+            "Non-staff must be denied the admin review detail."
+        )
+        if resp.status_code == 302:
+            assert "/admin/login/" in resp.url
 
     def test_anonymous_redirected_on_admin_ocr_detail(self, settings):
         settings.OCR_PROVIDER_MODE = "stub"
@@ -253,7 +260,7 @@ class TestAdminOcrAuthRegression:
 
         app = ParentAccount.objects.get(email="anonocrexample.com").applications.first()
 
-        resp = client.get(f"/admin/review/applications/{app.pk}/", follow=False)
+        resp = client.get(f"/admin/registrations/registrationapplication/{app.pk}/change/", follow=False)
 
         assert resp.status_code == 302, "Anonymous must be redirected on admin review detail."
         assert "/admin/login/" in resp.url, "Redirect must go to admin login."

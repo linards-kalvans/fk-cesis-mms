@@ -284,7 +284,7 @@ class TestManualFallbackOnOcrFailure:
         assert resp.status_code == 302, "POST to save draft must succeed after OCR failure."
         app.refresh_from_db()
         assert app.status == "draft"
-        assert app.guardian_full_name == "Updated After OCR Fail"
+        assert app.guardian_name == "Updated After OCR Fail"
 
     def test_manual_edit_clears_ocr_source_badge(self, settings):
         """When parent manually edits OCR-derived field, field_sources must update to manual_only."""
@@ -322,7 +322,7 @@ class TestManualFallbackOnOcrFailure:
 
         assert resp.status_code == 302
         app.refresh_from_db()
-        assert app.guardian_full_name == "Manually Updated Name"
+        assert app.guardian_name == "Manually Updated Name"
         # field_sources should still have guardian_full_name (updated by save)
         assert "guardian_full_name" in (app.field_sources or {})
 
@@ -605,8 +605,6 @@ class TestOcrExtractedFieldsDob:
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
-            guardian_email=parent_account.email,
-            guardian_phone="+37100000099",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(
@@ -652,8 +650,6 @@ class TestOcrExtractedFieldsDob:
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
-            guardian_email=parent_account.email,
-            guardian_phone="+37100000098",
             status=RegistrationApplication.Status.SUBMITTED,
         )
         doc = Document.objects.create(

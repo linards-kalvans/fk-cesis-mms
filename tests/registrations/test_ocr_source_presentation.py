@@ -113,11 +113,6 @@ class TestSourceBadgeAbsent:
         )
         app = RegistrationApplication.objects.create(
             parent_account=acct,
-            guardian_email="nosrc@example.com",
-            guardian_full_name="NoSrc Parent",
-            guardian_personal_id="010101-60000",
-            guardian_phone="+37160000000",
-            guardian_declared_address="Riga 6",
             member_full_name="NoSrc Child",
             member_personal_id="010125-60000",
             member_birth_date="2025-01-01",

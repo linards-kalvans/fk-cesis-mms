@@ -35,13 +35,6 @@ def _verified_client(account: ParentAccount) -> Client:
 def _make_application(account: ParentAccount) -> RegistrationApplication:
     app: RegistrationApplication = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="",
-        guardian_personal_id="",
-        guardian_phone="+37120000001",
-        guardian_declared_address="Riga 1",
-        member_full_name="",
-        member_personal_id="",
         member_birth_date="2025-01-01",
     )
     return app
@@ -224,13 +217,6 @@ def test_status_returns_404_when_document_belongs_to_other_application():
     app1 = _make_application(account)
     app2 = RegistrationApplication.objects.create(
         parent_account=account,
-        guardian_email=account.email,
-        guardian_full_name="",
-        guardian_personal_id="",
-        guardian_phone="+37120000007",
-        guardian_declared_address="Riga 1",
-        member_full_name="",
-        member_personal_id="",
         member_birth_date="2025-01-01",
     )
     doc = _make_document(app1)
@@ -344,3 +330,100 @@ def test_status_omits_error_message_when_completed(settings):
     payload = json.loads(response.content)
     assert payload["ocr_status"] == "completed"
     assert "ocr_error_message" not in payload
+
+
+def test_status_normalizes_uppercase_guardian_name(settings):
+    """Guardian identity COMPLETED: raw uppercase OCR payload → normalized name.
+
+    The endpoint reads person_fields first_name / last_name from the
+    encrypted payload. Without normalization, the toast / prefill receives
+    ``"JOHN SMITH"`` instead of ``"John Smith"``.  This test pins the
+    Latvian title-case contract.
+    """
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="uppercase-g@example.com", phone="+37120000020"
+    )
+    app = _make_application(account)
+    doc = _make_document(
+        app,
+        kind="guardian_identity",
+        ocr_status=Document.OcrStatus.COMPLETED,
+    )
+    encrypted_payload = encrypt_json(
+        {
+            "subject": "guardian",
+            "person_fields": {
+                "first_name": "JOHN",
+                "last_name": "SMITH",
+                "personal_id": "010180-12345",
+            },
+            "document_metadata": {},
+            "confidence": {},
+            "flags": [],
+            "raw_reference": {"provider": "tiny_idp"},
+        }
+    )
+    DocumentExtraction.objects.create(
+        document=doc,
+        subject_role="guardian",
+        provider="tiny_idp",
+        extraction_schema_version="v1",
+        encrypted_payload=encrypted_payload,
+        encrypted_summary=encrypt_json("first_name: JOHN"),
+    )
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+    assert response.status_code == 200
+    payload = json.loads(response.content)
+    assert payload["ocr_status"] == "completed"
+    assert payload["extracted_fields"]["guardian_full_name"] == "John Smith"
+    assert payload["extracted_fields"]["guardian_personal_id"] == "010180-12345"
+
+
+def test_status_normalizes_uppercase_member_name(settings):
+    """Member identity COMPLETED: raw uppercase OCR payload → normalized name.
+
+    Ensures the shared code path covers member documents too.
+    """
+    settings.OCR_ENCRYPTION_KEY = _FERNET_KEY_FIXTURE
+    account = ParentAccount.objects.create(
+        email="uppercase-m@example.com", phone="+37120000021"
+    )
+    app = _make_application(account)
+    doc = _make_document(
+        app,
+        kind="member_identity",
+        ocr_status=Document.OcrStatus.COMPLETED,
+    )
+    encrypted_payload = encrypt_json(
+        {
+            "subject": "member",
+            "person_fields": {
+                "first_name": "JANE",
+                "last_name": "DOE",
+                "personal_id": "010125-99999",
+            },
+            "document_metadata": {},
+            "confidence": {},
+            "flags": [],
+            "raw_reference": {"provider": "tiny_idp"},
+        }
+    )
+    DocumentExtraction.objects.create(
+        document=doc,
+        subject_role="member",
+        provider="tiny_idp",
+        extraction_schema_version="v1",
+        encrypted_payload=encrypted_payload,
+        encrypted_summary=encrypt_json("first_name: JANE"),
+    )
+    client = _verified_client(account)
+
+    response = client.get(_url(app.id, doc.id))
+    assert response.status_code == 200
+    payload = json.loads(response.content)
+    assert payload["ocr_status"] == "completed"
+    assert payload["extracted_fields"]["member_full_name"] == "Jane Doe"
+    assert payload["extracted_fields"]["member_personal_id"] == "010125-99999"

@@ -1,0 +1,12 @@
+.fk-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.fk-badge--ok { background: #def7e4; color: #1a7f37; }
+.fk-badge--fail { background: #fce8e6; color: #b3261e; }
+.fk-badge--pending { background: #fef3c7; color: #92660e; }
+.fk-badge--muted { background: #eceff1; color: #607d8b; }

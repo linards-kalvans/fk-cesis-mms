@@ -1,6 +1,8 @@
 """Member-domain models: Guardian, TrainingGroup, Member, KitSizeOption."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class KitSizeOption(models.Model):
@@ -22,16 +24,33 @@ class KitSizeOption(models.Model):
 
 
 class Guardian(models.Model):
-    """A parent/guardian record created on application approval."""
+    """Canonical parent/guardian record, 1:1 with ParentAccount, resolved at registration initiation and reused at approval."""
 
     full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")
-    email = models.EmailField(blank=True, default="")
-    phone = models.CharField(max_length=32, blank=True, default="")
     address = models.CharField(max_length=255, blank=True, default="")
+    external_client_id = models.CharField(max_length=64, blank=True, default="")
+    parent_account = models.OneToOneField(
+        "accounts.ParentAccount",
+        on_delete=models.PROTECT,
+        blank=True,
+        related_name="guardian",
+    )
+
+    @property
+    def email(self) -> str:
+        return self.parent_account.email if self.parent_account_id else ""
+
+    @property
+    def phone(self) -> str:
+        return self.parent_account.phone if self.parent_account_id else ""
 
     def __str__(self):
         return self.full_name or str(self.pk)
+
+    class Meta:
+        verbose_name = "Vecāks"
+        verbose_name_plural = "Vecāki"
 
 
 class TrainingGroup(models.Model):
@@ -40,12 +59,33 @@ class TrainingGroup(models.Model):
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"), name="uniq_training_group_name_ci"
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        clash = TrainingGroup.objects.filter(name__iexact=self.name)
+        if self.pk is not None:
+            clash = clash.exclude(pk=self.pk)
+        if clash.exists():
+            raise ValidationError(
+                {"name": "Treniņu grupa ar šādu nosaukumu jau pastāv."}
+            )
+
     def __str__(self):
         return self.name
 
 
 class Member(models.Model):
     """A registered youth member."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Aktīvs"
+        DISCONTINUED = "discontinued", "Pārtraukts"
 
     full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")
@@ -62,6 +102,15 @@ class Member(models.Model):
         blank=True,
         related_name="members",
     )
+
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    discontinued_effective_date = models.DateField(null=True, blank=True)
+    discontinuation_reason = models.TextField(blank=True, default="")
+    discontinued_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.full_name or str(self.pk)

@@ -341,7 +341,7 @@ class TestSameBrowserVsCrossBrowser:
         # Fresh client = different browser
         other_browser = Client()
         app = RegistrationApplication.objects.get(
-            guardian_email="crosscross@example.com"
+            claimed_email="crosscross@example.com"
         )
         resp = other_browser.get(f"/applications/{app.pk}/edit/")
         assert resp.status_code == 404, (
@@ -473,7 +473,7 @@ class TestFixRequestedDraftSavePreservesStatus:
         assert app.status == RegistrationApplication.Status.FIX_REQUESTED, (
             f"Expected fix_requested after save-draft, got {app.status}."
         )
-        assert app.guardian_full_name == "Updated Guardian", (
+        assert app.guardian_name == "Updated Guardian", (
             "Edited field must be persisted after save-draft."
         )
         assert app.review_message == "Please correct the personal ID format.", (

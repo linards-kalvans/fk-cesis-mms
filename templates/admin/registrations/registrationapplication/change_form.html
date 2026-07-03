@@ -1,0 +1,88 @@
+{% extends "admin/change_form.html" %}
+
+{% block field_sets %}
+  <div class="mms-admin-review">
+    {% if original %}
+      {% url 'admin:registrations_registrationapplication_review-action' original.pk as review_action_url %}
+    {% endif %}
+    {% block mms_action_bar %}
+      {% if original %}
+        {% if original.status == "submitted" %}
+        <div class="module mms-review-actions">
+          <h2>Revīzijas darbības</h2>
+
+          <p>
+            <a href="{% url 'admin:registrations_registrationapplication_approve' original.pk %}" class="button default">Apstiprināt →</a>
+          </p>
+
+          <details class="mms-review-actions__disclosure">
+            <summary>Pieprasīt labojumu</summary>
+            <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+              {% csrf_token %}
+              <label for="fix_message">Ziņojums:</label>
+              <textarea name="review_message" id="fix_message" rows="3"></textarea>
+              <button type="submit" name="action" value="request_fix">Pieprasīt labojumu</button>
+            </form>
+          </details>
+
+          <details class="mms-review-actions__disclosure">
+            <summary>Noraidīt pieteikumu</summary>
+            <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+              {% csrf_token %}
+              <label for="reject_message">Ziņojums:</label>
+              <textarea name="review_message" id="reject_message" rows="3"></textarea>
+              <button type="submit" name="action" value="reject">Noraidīt</button>
+            </form>
+          </details>
+        </div>
+        {% endif %}
+
+        <div class="module mms-related-records">
+          <h2>Saistītie ieraksti</h2>
+          <ul>
+            {% for label, link in related_links.items %}
+              <li><strong>{{ label }}:</strong> {{ link }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        {% if original.approved_member_id %}
+        <div class="module mms-review-group-module">
+          <h2>Treniņu grupa</h2>
+          {% if original.approved_member.training_group %}
+            <p>Pašreizējā grupa: <strong>{{ original.approved_member.training_group.name }}</strong>{% if current_inactive_group %} <em>(neaktīva)</em>{% endif %}</p>
+          {% else %}
+            <p>Vēl nav piešķirta.</p>
+          {% endif %}
+
+          <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+            {% csrf_token %}
+            <div class="form-row">
+              <label for="reassign_training_group">Mainīt grupu:</label>
+              <select name="training_group" id="reassign_training_group">
+                <option value="">— Notīrīt piešķīrumu —</option>
+                {% for grp in active_training_groups %}
+                  <option value="{{ grp.id }}"{% if original.approved_member.training_group_id == grp.id %} selected{% endif %}>{{ grp.name }}</option>
+                {% endfor %}
+                {% if current_inactive_group %}
+                  <option value="{{ current_inactive_group.id }}" selected data-inactive="true">{{ current_inactive_group.name }} (neaktīva)</option>
+                {% endif %}
+              </select>
+            </div>
+            <button type="submit" name="action" value="assign_training_group" class="default">Saglabāt</button>
+          </form>
+        </div>
+        {% endif %}
+      {% endif %}
+    {% endblock %}
+    {% if original %}
+      {% include "registrations/admin/_doc_panel.html" with panel=guardian_panel %}
+      {% include "registrations/admin/_doc_panel.html" with panel=member_panel %}
+      {% include "registrations/admin/_doc_panel.html" with panel=portrait_panel %}
+      {% if agreement %}
+        {% include "registrations/admin/_agreement_module.html" with review_action_url=review_action_url %}
+      {% endif %}
+    {% endif %}
+  </div>
+  {{ block.super }}
+{% endblock %}

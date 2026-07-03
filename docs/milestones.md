@@ -22,6 +22,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 - `uv` workflow is in place
 - `.env` autoload works for local commands and app startup
 - acceptance-test baseline available on LAN at `http://192.168.3.245:8000`
+- deployment runtime ownership is split: this repo owns app image build/tagging and local smoke; `https://github.com/linards-kalvans/fk-cesis` owns deployed runtime configuration and rollout docs.
 
 ### Accounts and parent access
 - `ParentAccount` and `MagicLinkToken` exist
@@ -73,7 +74,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 4. Open gaps and debt
 
 ### Security and architecture gaps
-- audit/event baseline still incomplete (P7 target)
+- audit/event baseline **delivered (P7 Slice A, 2026-06-13)** — `apps.core.AuditEvent` append-only model + fail-safe `record_audit_event` helper + read-only admin viewer + configurable retention prune (`AUDIT_RETENTION_DAYS`=730, daily `audit-retention-prune` Schedule). Wired: review actions, training-group assign/clear, document preview/download/delete, agreement sent/signed/voided/sync-failed, billing push/sync-triggered + push/send/payment-sync failures. Routine automated sync successes deliberately not audited. Spec/plan under `docs/superpowers/`. (P7 Slices B export + C admin-polish still pending.)
 
 ### Registration UX gaps
 - step-gated wizard validation with background draft auto-save — delivered in P4 Slice C
@@ -86,14 +87,27 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ### Admin UX gaps
 - admin review should show inline identity-document previews beside applicant data (P5 target)
-- admin document UX should better distinguish active vs replaced documents (P7 target)
+- admin document UX should better distinguish active vs replaced documents **delivered (P7 C-ii b2 Plan 2, 2026-06-15)** — `DocumentAdmin` Aktīvs/Vēsturisks badge + `state` filter
 - training-group assignment flow still incomplete (P5 target)
-- review-action audit entries still incomplete (P7 target)
+- review-action audit entries **delivered (P7 Slice A, 2026-06-13)** — approve/reject/request-fix now recorded as `AuditEvent`s with actor + target
+
+#### P7 — COMPLETE (LAN sign-off 2026-06-19)
+All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + batch 2 Plans 1–3), the Guardian/ParentAccount consolidation, the admin menu re-order, and the audit close-out.
+- **Audit gaps — CLOSED (2026-06-16).** The billing one-click **confirm** and the training-group **merge** now emit `AuditEvent`s (`BILLING_RECORD_CONFIRMED` / `TRAINING_GROUPS_MERGED`; merge metadata carries merged ids/names + reparented count) — migration `core/0004`. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-16-p7-audit-confirm-merge*`.
+- **LAN acceptance signed off 2026-06-19** — verified on dev: the unified **Vecāki** admin (merged guardians correct, email/phone/is_active edit routes via `change_parent_email`), the fixed menu order with "Parent accounts" gone, and all three billing-confirm paths (per-row list button, change-page button, status dropdown + Save) each emit a `billing_record_confirmed` audit; the group merge emits its audit. **Two live-found bugs fixed during the pass:** (1) the one-click confirm/quick-action buttons were `<form>`s nested inside the admin's changelist/change form (invalid HTML → browser drops them) — rebuilt as bare `<button formaction=… formmethod="post">` riding the surrounding admin form's CSRF (commit `b1d27aa`); (2) a list-triggered agreement quick-action now returns to the list via a validated `next` (commit `7b3311c`).
+- **Explicitly out of P7 (not done by design):** account-without-guardian admin visibility (a `ParentAccount` with no `Guardian` is reachable by direct URL only, not the menu); parent self-service email change with OTP re-verification (deferred from P6).
 
 ### Business workflow gaps
 - agreement generation / manual-signing flow not implemented yet (P5 target)
 - billing / Invoice Ninja sync not implemented yet (P6 target)
-- admin export and operations polish still pending (P7 target)
+- admin **CSV export delivered (P7 Slice B, 2026-06-13)** — staff-only audited member + registration CSV export (safe default + superuser-gated sensitive; UTF-8 BOM + `;` for Latvian Excel; formula-injection guard).
+- admin **review consolidation delivered (P7 Slice C-i, 2026-06-14)** — the registration review+edit flow now lives on the Django admin change page (panels + agreement/training-group modules + a top action bar), with status-aware one-click quick actions on the changelist; the bespoke custom review queue/detail views, URLs, and templates were removed. **Remaining = P7 Slice C-ii** (admin flow polish). **Batch 1 delivered (2026-06-14)** — the three user-prioritised items: (a) Registrations app now at the **top** of the admin left-side menu (`FkAdminSite` via `AdminConfig.default_site`); (b) **agreement-status column** ("Līguma statuss") on the applications changelist; (c) **one-click confirm** of a billing record — top button on the BillingRecord change page + per-row POST button on the billing-records list (replacing the open→dropdown→save dance). Gate: 1252 passed, ruff + mypy clean, no migrations. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-14-p7-cii-admin-quick-wins*`. **Broader C-ii (batch 2)** specced as three plans (`docs/superpowers/{specs,plans}/2026-06-15-p7-cii-batch2*`). **Plan 1 (cross-links) delivered (2026-06-15)** — shared `apps/core/admin_links.py` helper; related-records rows on Member/Guardian/Agreement/BillingRecord change pages + the registrations review block; clickable member column on applications + guardian/agreement columns on billing. Gate: 1267 passed, no migrations. **Plan 2 (visibility) delivered (2026-06-15)** — shared `status_badge` helper + `fk_badges.css`; sync-health badges + filters on billing/agreements (Latvian error tooltips); search/filter/date-drill polish across Document/TrainingGroup/MembershipPlan/Application/Agreement/Billing admins; document active-vs-replaced badge + filter. Gate: 1292 passed, no migrations. **Plan 3 (training-group de-duplication) delivered (2026-06-15)** — case-insensitive unique `TrainingGroup.name` (migration `members/0005`) + `clean()` Latvian form error; `merge_training_groups` admin action (confirmation page → reparent members → bulk-delete spares; gated on delete permission, target validated in-selection) + name search. Gate: 1301 passed. **P7 Slice C-ii is COMPLETE** (batch 1 + batch 2 Plans 1–3); with C-i, **all of P7 Slice C is delivered.**
+
+### Billing gaps (P6 follow-ups, deferred during Slice C live validation 2026-06-09)
+- **Invoice issue/send policy** — **delivered (2026-06-12).** Decision: *scheduled per-installment send*. Push still creates invoices as Draft; a nightly `send_due_invoices` job issues + emails each installment on/after the 1st of its due month (IN bulk `email` action flips Draft→Sent). Gated by `BILLING_AUTOSEND_ENABLED` (**default off** — set true in prod to activate). `BillingInvoice.sent_at` added; daily `billing-send-due-invoices` Schedule registered; per-row error isolation; no-email guardians skipped+logged. **LAN acceptance signed off 2026-06-12** (real IN `in.mplytics.eu`: push→Draft, flag-off no-op, due installment→Sent + parent emailed, idempotent, no-email skip — all pass; test data cleaned up). Before prod activation, disable IN's admin "Invoice Sent" notification, then set `BILLING_AUTOSEND_ENABLED=true`. Spec/plan under `docs/superpowers/`.
+
+### Data integrity gaps
+- **Guardian dedup by email** — **fully landed (Slices A + B1 + B2 + C, 2026-06-10/11).** `Guardian` is 1:1 with `ParentAccount` (Slice A); read-through accessors read `Guardian`/`ParentAccount` only (Slice B1 + B2); the five `guardian_*` columns are dropped (Slice B2, migration `registrations/0010`); locked-profile UX (returning parents see guardian fields read-only + "Rediģēt vecāka datus" unlock toggle) and admin-initiated email change (`change_parent_email` service with uniqueness + `Guardian.email` mirror; `ParentAccount` registered in admin) landed in Slice C (**LAN acceptance signed off 2026-06-11** — lock/unlock, propagation, first-registration-unlocked, admin email change + uniqueness all pass). Parent self-service email change (with OTP re-verification of the new address) remains **deferred**. **Consolidation Plan 1 delivered (2026-06-15)** — the `Guardian.email`/`phone` columns (and the email mirror) are **removed**; they are now read-only `@property` proxies of the linked `ParentAccount` (single source of truth), and `Guardian.parent_account` is **NOT NULL** (migrations `members/0006` data link+merge of orphan/duplicate guardians, `members/0007` schema). Spec/plans: `docs/superpowers/{specs,plans}/2026-06-15-guardian-*`. Gate: 1316 passed. **Plan 2 (unified admin) delivered (2026-06-15)** — single "Vecāki" admin entry (`GuardianAdminForm` edits account email/phone/is_active; email via `change_parent_email`; add disabled; relabel, migration `members/0008`); `ParentAccount` filtered out of the admin menu (still registered); `ParentAccountAdmin` slimmed; redundant "Vecāka konts" cross-link dropped. Gate: 1321 passed. **Guardian/ParentAccount double-bookkeeping fully resolved** (single contact source-of-truth + enforced 1:1 + one admin entry).
 
 ---
 
@@ -216,6 +230,12 @@ Do **not** use archived implementation plans for current planning unless user ex
 - New OCR providers.
 
 ### P5 — Approval-to-agreement flow
+**Status:** complete — all slices delivered and LAN-verified; signed off 2026-06-07
+- Slice A delivered 2026-05-27 — admin review uses Django admin shell (`admin/base_site.html`), thumbnail grid per document kind opens a `<dialog>` lightbox on click, member portrait surfaced, active vs replaced docs distinguished via `<details>` history with per-doc `preview_kind`; OCR readout uses Latvian-labeled `<dl>` + translated confidence chips; approval-ready inspection grouped on one screen. Covers acceptance items 1 + 2 (item 4 was already implemented pre-Slice A via `approved_member_id` early-return). Includes Revision A (admin styling pivot away from fk-* branding + thumbnail/lightbox UX) and Slice A.1 (templated review-action emails with application/portal URL). Manual LAN re-verification still pending.
+- Slice B delivered 2026-05-28 — training-group assignment inline on the review detail page (during approval via a bundled dropdown; post-approval via a Treniņu grupa module with reassign/clear). New `assign_training_group` service. Approve email enriched with the assigned group name when assignment happens at approval time. Currently-assigned-but-inactive groups surface with a `(neaktīva)` marker so existing state is never hidden. No model changes. Item 3 closed.
+- Slice C delivered 2026-05-29 — internal-only Agreement domain (new `apps/agreements/` app): `Agreement` model with `ForeignKey(Member)` + `is_current` flag and partial `UniqueConstraint` enforcing at most one current per member; state machine `generated → sent → signed` with `void` + regenerate-after-void; auto-created inside `approve_application` (now `@transaction.atomic`) honouring the application's `preferred_agreement_signing` (default `electronic`); admin Līgums module on the review-detail page with five POST transitions; parent portal + workspace render Latvian status copy via the `agreement_status_copy` helper; plain-text emails on `sent`, `signed`, and `void` (Slice D will suppress these for the electronic path); Django admin `VIEW ON SITE` link bridges from the read-only Agreement detail to the review-detail page; bidirectional sync invariant keeps `application.preferred_agreement_signing` and `agreement.signing_path` always-equal post-approval; backfill migration creates Agreements for approved Members from before Slice C. DocuSeal reservation fields (`external_*`) on the model stay empty until Slice D. Items 5, 7, 11 closed.
+- Slice D delivered 2026-06-06 — DocuSeal self-hosted adapter + signed-state sync + manual signing tracking (items 6, 8, 9, 10). New `apps/integrations/agreement_platform.py` boundary (stub/docuseal dispatch on `AGREEMENT_PROVIDER_MODE`, exception taxonomy, frozen `SubmissionResult`) + concrete `apps/integrations/docuseal.py` provider (HTTP via `requests`, `X-Auth-Token`, status→exception mapping, HMAC-SHA256 webhook verify). django-q2 jobs create/sync/archive submissions with transient-retry vs terminal-fail classification (`external_state="failed"` + `external_error_code` → Latvian copy via `apps/agreements/messages.py`). Electronic path: optimistic `sent`, sent/signed guardian emails suppressed (DocuSeal notifies), enqueue create; empty guardian email degrades to paper; void enqueues archive. HMAC-verified `submission.completed` webhook (`integrations/docuseal/webhook/`, mounted before the registrations catch-all) drives `sent`/`generated` → `signed`; bad signature 403, all other cases ack 200. Līgums module surfaces the failed-state error + retry and a live-submission DocuSeal link + manual sync button. Migration `0003_agreement_external_error_code`. Closes P5.
+
 **Why fifth**
 - agreement is business basis for billing
 - admin review quality should improve before agreement decisions
@@ -237,6 +257,16 @@ Do **not** use archived implementation plans for current planning unless user ex
 - automatic billing trigger after agreement platform `completed` state
 - Invoice Ninja sync and payment-status visibility
 
+**Status:** Slices A–C delivered (A 2026-06-07, B 2026-06-08, C 2026-06-08). Acceptance items 7, 8, 9 addressed and 1, 2 verified by Slice C. **Code complete + gates green (1113 passed); live-IN end-to-end validation (push + read-back) is the remaining P6 sign-off step.**
+- Slice A delivered 2026-06-07 — local-only billing domain (new `apps/billing/` app): `MembershipPlan` (staff-editable plan config, one active row by convention) + `BillingRecord` (one per `(member, season)`, money snapshotted at creation, draft/confirmed + upfront/installments choices, manual override). Pure sibling-discount engine (`compute_billing_amounts`) derives the discount from the guardian's children (earliest-created full price, rest discounted; opt-out reuses `support_club_instead_of_multi_child_discount`) plus an installment-schedule helper. `agreement_signed` signal emitted from `mark_agreement_signed`; billing connects a receiver in `BillingConfig.ready()` that auto-creates a DRAFT `BillingRecord` on signing (idempotent; no-ops without an active plan). `recompute_billing_record` + admin plan/record surfaces with a `Pārrēķināt no plāna` action. New `preferred_payment_mode` registration field (`Maksājuma veids`). `backfill_billing` management command for pre-existing signed agreements. No Invoice Ninja calls — that is Slice B. Gate after Slice A: 1053 passed, ruff + mypy clean. **Manual LAN smoke confirmed + signed off 2026-06-07** (7/7 acceptance items: plan activation, signing→draft trigger, billing admin surface, recompute action draft-update + confirmed-skip, idempotent `backfill_billing`, parent `Maksājuma veids` render+persist; sibling discount + opt-out via the green discount-engine unit suite). Plan: `docs/superpowers/plans/2026-06-07-p6-slice-a-billing-domain.md`.
+- Slice B delivered 2026-06-08 — admin-confirmed Invoice Ninja push (push-only; payment read-back is Slice C). New `apps/integrations/invoice_platform.py` boundary (stub/`invoiceninja` dispatch on `INVOICE_PROVIDER_MODE`, exception taxonomy, frozen result dataclasses) + `apps/integrations/invoice_ninja.py` provider (HTTP via `requests`, `X-Api-Token`, status→exception map incl. 429→transient, duplicate-invoice-number idempotency recovery). Mapping: Guardian→IN Client, MembershipPlan→IN Product (mirrored, referenced by derived `product_key`), each child's `BillingRecord`→its own invoice stream (no sibling consolidation), upfront=1 invoice / installments=one IN invoice per `derive_installment_schedule()` row, net per line with the sibling discount as a Latvian note. New `BillingInvoice` model (one row per installment) + `external_*` sync fields on `Guardian`/`MembershipPlan`/`BillingRecord`. `push_billing_record` django-q2 job (ensure product → ensure client → materialize → create invoices → roll up; deterministic `{PREFIX}-{record}-{seq}` numbers for idempotency; transient-retry vs terminal-fail with Latvian error copy). `BillingRecordAdmin` "Izrakstīt rēķinus (Invoice Ninja)" confirmed-only action. Gate after Slice B: 1080 passed, ruff + mypy clean. **Manual LAN smoke confirmed + signed off 2026-06-08** (stub provider mode + django-q worker): confirm→push→`synced` with 10 `BillingInvoice` rows, verified IN payload (number/product_key/Latvian label), idempotent re-push, draft skipped, and a testing refinement so already-`synced` records are reported separately rather than re-counted as pushed. Live-IN end-to-end deferred until an instance is provisioned. Plan: `docs/superpowers/plans/2026-06-07-p6-slice-b-invoice-ninja-push.md`.
+- Slice C delivered 2026-06-08 — payment read-back + nightly scheduled sync + sync health (acceptance items 7, 8, 9; verifies 1, 2). `invoice_platform.fetch_invoice_payment` + provider `GET /invoices/{id}` with IN `status_id`→`payment_status` mapping (+ amount-derived fallback) and latest-payment-date extraction; payment-projection fields on `BillingInvoice`/`BillingRecord` (migration `billing/0004`, new `PaymentStatus` choices). `sync_billing_payments` nightly batch sweep (per-row error isolation) + `sync_billing_record_payments` manual per-record sync (terminal-error surface / transient re-raise), rolled up by `roll_up_payment_status`. Nightly django-q2 `Schedule` via idempotent data migration `billing/0005` + configurable `BILLING_PAYMENT_SYNC_HOUR`. Read-back terminal errors land on a dedicated `BillingRecord.payment_error_code` (migration `billing/0006`), separate from the push-side `external_error_code`. Admin: confirmed-only "Pārbaudīt maksājumus (Invoice Ninja)" action, payment columns/filter, read-only `BillingInvoiceInline`. Folded in the deferred Slice-B dedup hardening (`ensure_product` by `product_key`, `ensure_client` by `custom_value1=guardian.pk`) and an honest `backfill_billing` count. Gate: 1114 passed, ruff + mypy clean (240 files). Fixed a pre-existing TZ gap (no `TIME_ZONE`/`USE_TZ` was set → Django default America/Chicago): now `TIME_ZONE="Europe/Riga"` + `USE_TZ=True`, so the nightly hour is interpreted in local time. **Live-validated against a real Invoice Ninja instance (2026-06-09):** push (product/client/invoice create + dedup + dup-number recovery) and read-back (paid/partial/date mapping) both confirmed end-to-end through the django-q worker. **Six stub-hidden bugs found + fixed live:** (1) missing `X-Requested-With`/`Accept` headers (IN returned 200+HTML on errors); (2) dup-number message text; (3) `?include=payments` for the payment date; (4) generic line note + invoice `public_notes` to stop product-note pollution; (5) client/product dedup trusting `rows[0]` from IN's ignored `?custom_value1=`/`?product_key=` filters → narrow with `?filter=` + exact-match client-side; (6) dedup reusing archived/soft-deleted rows → `?status=active` + skip `is_deleted`/`archived_at`. Test suite hardened to never hit live providers from `.env`. Gate: 1126 passed, ruff + mypy clean. **Follow-ups deferred:** invoices push as IN **Draft** (auto-issue vs. staff-send policy); guardian dedup-by-email (repeated registrations create separate guardians → separate clients + no sibling linkage). **Operational note:** wiping IN data requires clearing Django `external_*` ids; restart the `qcluster` worker after task-code changes (no hot-reload). Remaining P6 close-out: confirmation pass on the deployed cloud `:dev` artifact.
+- Installment calendar + per-plan due day delivered 2026-06-09 (completes acceptance item 6) — `derive_installment_schedule` now skips configured break months (per-plan `skip_months`, default July + December) placing N real installments (Jan–Jun + Aug–Nov for a Jan start), each due on a per-plan `payment_due_day` (default 20, clamped to month length); migration `billing/0007`; go-forward only. Gate: 1123 passed. Plan: `docs/superpowers/plans/2026-06-09-p6-installment-calendar-due-day.md`. **Live-IN end-to-end validation (push + read-back) is the remaining P6 sign-off step** — the instance now exists. Plan: `docs/superpowers/plans/2026-06-08-p6-slice-c-payment-readback-sync-health.md`. Design: `docs/superpowers/specs/2026-06-08-p6-slice-c-payment-readback-sync-health-design.md`.
+- Guardian-identity Slice A delivered 2026-06-10 — canonical `Guardian` 1:1 with `ParentAccount`, resolved at initiation and reused at approval; sibling-discount linkage now holds for all go-forward registrations. Gate: 1133 passed, ruff + mypy clean. Plan: `docs/superpowers/plans/2026-06-09-p6-guardian-identity-slice-a.md`. Spec: `docs/superpowers/specs/2026-06-09-p6-canonical-guardian-identity-design.md`. **LAN-acceptance verified 2026-06-10** (live Invoice Ninja); scenarios A–E + H pass — see the AGENTS.md Slice A entry.
+- Concurrent-push dedup fix delivered 2026-06-10 (found during the Slice A LAN acceptance, scenario F) — parallel `push_billing_record` workers for sibling records created **duplicate Invoice Ninja clients + products** via an unlocked check-then-create on the shared guardian/plan. Fixed with `select_for_update`-locked `_ensure_client_id` / `_ensure_product_id` helpers in `apps/integrations/tasks.py`; re-test confirmed one client + one product per parent. Gate: 1137 passed. (Latency follow-up: the outbound IN call runs while the row lock is held — fine at current scale, revisit under load.)
+- Guardian-identity Slice B1 delivered 2026-06-10 — read-through propagation. 5 guardian-read accessors on `RegistrationApplication` (`guardian_name`, `guardian_pid`, `guardian_contact_phone`, `guardian_address`, `guardian_contact_email`); Guardian profile now populated at draft-save; templates, workspace `initial` dict, prefill, phone-sync, and review-notification read via the accessors; `approve_application` no longer copies the snapshot. Editing a guardian's profile now propagates to every application and agreement (agreements read `member.guardian.*` for free). The `guardian_*` columns remain (dual-written); column drop is Slice B2. Gate: 1146 passed, ruff + mypy clean. Plan: `docs/superpowers/plans/2026-06-10-p6-guardian-identity-slice-b1-read-through.md`.
+- Guardian-identity Slice B2 delivered 2026-06-11 — drop guardian columns. The five `guardian_*` columns dropped from `RegistrationApplication` (migration `registrations/0010`); read accessors now read `Guardian`/`ParentAccount` only (no column fallback); read-through is fully landed (B1 + B2). Only Slice C remains (locked-profile UX + admin email change). Gate: 1149 passed, ruff + mypy clean.
+
 ### P7 — Admin operations / export / audit polish
 **Why seventh**
 - builds on earlier workflow completion
@@ -248,8 +278,100 @@ Do **not** use archived implementation plans for current planning unless user ex
 - audit completion
 - document/admin UX polish
 
-### P8 — Calendar + WhatsApp attendance integration
-**Why last**
+### P8 — Agreement lifecycle ✅ COMPLETE (2026-06-30)
+**Why eighth**
+- extends delivered approval-to-agreement flow beyond the initial generated/sent/signed/void states
+- should happen before deeper billing renewal work because amendments and discontinuation can change billing obligations
+
+**Target outcome**
+- staff can amend an active agreement without losing the original history
+- staff can discontinue membership/agreement cleanly with reason, date, audit trail, and parent-visible status
+- agreement replacement/regeneration rules are explicit and safe around already-signed agreements
+- downstream billing behaviour is defined for amendments, discontinuation, and replacements
+- DocuSeal / manual-signing states remain understandable after lifecycle changes
+
+### P9 — Billing plan lifecycle
+**Status:** complete (2026-07-03) — `Agreement` owns explicit `billing_plan` + `first_billing_month`; `MembershipPlan.is_default` + `billing_start_cutoff_day` with single-default DB constraint and `default-is-active` validation; preselected default plan + derived first-billing-month at `create_agreement_for_member`; `mark_agreement_signed` refuses to mutate state without a billing plan; `set_billing_setup` admin action; selected-member `renew_member_billing` action; draft-only `reassign_draft_billing_record` action (blocks confirmed/sent invoices). Three new `AuditEvent` choices: `BILLING_PLAN_ASSIGNED`, `BILLING_RECORD_RENEWED`, `BILLING_RECORD_REASSIGNED`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-02-p9-billing-plan-lifecycle*`. Gate: 1565 passed, ruff + mypy clean, no migrations.
+
+**Why ninth**
+- extends delivered billing instead of changing the signed-agreement trigger ad hoc
+- removes the current "latest active plan wins" ambiguity before renewals matter
+- builds on agreement-lifecycle rules for amendments and discontinuation
+
+**Target outcome**
+- explicit billing-plan assignment for new agreements
+- staff can choose or override the plan before billing-record creation
+- existing members can be renewed into a next-season plan
+- draft billing records can be reassigned safely
+- confirmed/synced invoices are never silently mutated; changes use explicit renewal or adjustment flow
+
+### P10 — Public-site analytics + registration funnel
+**Why tenth**
+- public launch needs basic evidence about what visitors use before more admin-only workflow polish
+- registration funnel visibility helps diagnose drop-off without reading logs or guessing from support messages
+- parent portal ops signals help catch confusing empty/error states without tracking sensitive staff/admin work
+
+**Target outcome**
+- choose an analytics platform through a short comparison against privacy/GDPR posture, funnel/event capability, and ops burden
+- public-site traffic stats are visible: visits, page views, referrers, and top pages
+- registration funnel is visible in aggregate from public visit through registration start, verified access, and application submission
+- parent portal operational usage is visible in aggregate: visits, key CTA usage, empty/error states, and basic page health signals
+- no admin tracking, ad pixels, Google Analytics/Meta pixels, per-user profiling, or custom BI warehouse
+- no personal data in analytics payloads: no names, emails, phone numbers, personal IDs, document metadata, document names, or free-text form values
+- GDPR/privacy posture is documented before production enablement: hosting, cookies, IP handling, retention, DPA/config, and opt-out/consent implications
+
+### P11 — Family admin action hub
+**Why eleventh**
+- staff currently jumps across many Django admin pages to process one family end-to-end
+- all underlying service paths already exist (P5–P8); this is presentation/orchestration only
+- unlocks faster workflow before adding more billing/parent-facing features
+
+**Target outcome**
+- one admin page per family (Guardian) showing applications, agreements, membership, billing/invoices across all children
+- action-needed queue as primary entry point, family hub as drill-down
+- common actions (approve/request-fix/reject, agreement send/sign/retry/sync/void/regenerate/material amendment, membership discontinuation, billing confirm/push/send/sync) available from the hub
+- agreement void and membership discontinuation are clearly separate lanes/actions
+- BillingRecord and BillingInvoice shown as one "Norēķini un rēķini" block grouped by child + season
+- statuses rendered as icon + badge + next-action label, not raw model state strings
+- no new business logic, no new model states, no new service methods
+- deep edits remain on existing admin change pages
+
+### P12 — Parent invoice visibility
+**Why twelfth**
+- builds on Invoice Ninja sync and payment read-back already delivered in P6
+- gives parents self-service visibility before adding more invoice types
+
+**Target outcome**
+- parent portal lists all invoices for the guardian's children
+- invoice rows show member, season or event, amount, due date, sent/payment status, and sync freshness
+- safe Invoice Ninja payment/view link is shown only when available
+- parent access is limited to the verified guardian's own invoices
+
+### P13 — Custom invoices
+**Why thirteenth**
+- extends billing beyond membership dues after parent invoice visibility exists
+- covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
+
+**Target outcome**
+- staff can create one-off invoices for a guardian/member with description, amount, and due date
+- custom invoices use the same Invoice Ninja push, sync-health, send, and payment-status model where possible
+- parent portal shows custom invoices alongside membership invoices
+- creation, push, send, failure, and payment-sync actions stay audited
+
+### P14 — Coaches and training groups
+**Why fourteenth**
+- extends the member/training-group admin model before adding attendance or coach-facing workflows
+- keeps coach data structured instead of burying it in free-text group names
+
+**Target outcome**
+- staff can create and manage coach records
+- one or more coaches can be linked to each training group
+- coach names are visible on training-group and member admin surfaces
+- parent-visible coach info stays optional and explicitly scoped later
+- coach portal, attendance, and messaging remain out of this slice
+
+### P15 — Calendar + WhatsApp attendance integration
+**Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
 
@@ -651,8 +773,137 @@ P7 is complete when all of the following are true:
    - active/replaced document handling
    - admin visibility for sync/error states
 
-### P8 acceptance — Calendar + WhatsApp attendance integration
+### P8 acceptance — Agreement lifecycle ✅ COMPLETE (2026-06-30)
 P8 is complete when all of the following are true:
+
+1. Staff can amend an active agreement while preserving the signed original and lifecycle history.
+2. Staff can discontinue an agreement/member relationship with an effective date, reason, audit event, and parent-visible status.
+3. Regeneration/replacement rules are explicit for generated, sent, signed, voided, amended, and discontinued agreements.
+4. Parent and admin surfaces clearly show the current agreement state and the reason/action needed when applicable.
+5. DocuSeal-backed and manual-signing paths both follow the same internal lifecycle rules.
+6. Billing side effects are defined and safe:
+   - draft records can be adjusted where allowed
+   - confirmed/synced invoices are never silently mutated
+   - credits/adjustments/stop-future-invoices flows are explicit where needed
+7. Audit events cover amendment, discontinuation, replacement, and lifecycle-state changes.
+8. Tests cover:
+   - amendment history preservation
+   - discontinuation flow
+   - replacement/regeneration guards
+   - billing side-effect guards
+   - parent/admin status visibility
+
+### P9 acceptance — Billing plan lifecycle
+P9 is complete when all of the following are true:
+
+1. New agreements do not rely on "latest active plan wins" silently.
+2. Staff can assign or override the billing plan before draft `BillingRecord` creation.
+3. Existing active members can be renewed into a new season/plan in bulk or per member.
+4. Draft billing records can be reassigned or regenerated safely.
+5. Confirmed billing records and pushed Invoice Ninja invoices are never silently mutated.
+6. Any confirmed/synced change path is explicit: renewal, adjustment, credit, or new invoice flow.
+7. Parent-facing billing amounts remain explainable after renewal/plan changes.
+8. Audit events cover plan assignment, renewal, and post-confirmation adjustments where applicable.
+9. Tests cover:
+   - new-agreement plan assignment
+   - renewal creation
+   - draft reassignment
+   - confirmed/synced no-silent-mutation guard
+
+### P10 acceptance — Public-site analytics + registration funnel
+P10 is complete when all of the following are true:
+
+1. Platform comparison selects an analytics tool against three blocker-level constraints:
+   - GDPR/privacy posture: EU/self-host option, cookie/IP handling, retention, DPA/config path
+   - funnel/event power: public traffic, registration funnel, and parent portal ops events are practical
+   - ops burden: simple enough to operate without a custom analytics stack
+2. Public-site traffic stats are visible:
+   - visits
+   - page views
+   - referrers
+   - top pages
+3. Registration funnel is visible in aggregate:
+   - public visit
+   - registration start
+   - verified access
+   - application submitted
+4. Parent portal operational usage is visible in aggregate:
+   - portal visits
+   - key CTA usage
+   - empty/error-state frequency
+   - basic page health signals where the chosen platform supports them simply
+5. Scope boundaries are enforced:
+   - no admin tracking
+   - no ad/tracking pixels such as Google Analytics or Meta Pixel
+   - no per-user behaviour profiling
+   - no custom BI warehouse or bespoke dashboard unless the selected platform provides it natively
+6. Analytics payloads never include sensitive values:
+   - no names
+   - no emails
+   - no phone numbers
+   - no personal IDs
+   - no document metadata or filenames
+   - no free-text form values
+7. GDPR/privacy posture is documented before production enablement:
+   - hosting model
+   - cookie use or cookie-free mode
+   - IP anonymization / minimization
+   - retention
+   - DPA or self-host responsibility
+   - consent/notice implications
+8. Tests or config checks cover:
+   - event emission boundaries
+   - public/registration/parent-portal events only
+   - PII guardrails where practical
+
+### P11 acceptance — Family admin action hub
+P11 is complete when all of the following are true:
+
+1. Staff can open one Guardian/family and see the full current state across application, agreement, membership, and billing lanes on one page.
+2. Staff can complete the normal workflow (approve application → send agreement → mark signed → confirm billing → push invoices) from the hub without navigating to deep admin change pages.
+3. The action-needed queue shows all families with pending actions, ordered by urgency.
+4. Statuses are rendered as icon + badge + next-action label, not raw model state strings.
+5. Agreement void and membership discontinuation are clearly separate actions in separate lanes.
+6. Billing is shown as one unified "Norēķini un rēķini" block grouped by child + season, with expandable invoice rows.
+7. LAN acceptance proves staff can understand a family's status and complete the normal workflow in under ~30 seconds.
+8. All hub actions reuse existing service paths — no new business logic.
+9. Tests cover queue ordering/filtering, hub page rendering, each hub action triggering the correct service, void-vs-discontinuation separation, billing block grouping, and permission checks.
+
+### P12 acceptance — Parent invoice visibility
+P12 is complete when all of the following are true:
+
+1. Parent portal lists every invoice linked to the verified guardian's members.
+2. Membership invoices show member, season, installment sequence where applicable, due date, amount, sent status, payment status, and last sync time.
+3. Custom/non-membership invoice rows have a clear label and do not masquerade as membership dues.
+4. Invoice Ninja payment/view links are shown only when a safe external URL or portal URL is available.
+5. Authorization prevents one guardian from seeing another guardian's invoices.
+6. Empty/error states are parent-friendly and Latvian.
+7. Tests cover ownership, status display, empty state, and mixed paid/unpaid invoices.
+
+### P13 acceptance — Custom invoices
+P13 is complete when all of the following are true:
+
+1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
+2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
+3. Custom invoices reuse existing sync-health, send, and payment-status visibility where possible.
+4. Parent portal shows custom invoices alongside membership invoices with a distinct label.
+5. Confirmed/sent custom invoices are not silently mutated; corrections use explicit adjustment/credit/reissue flow.
+6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
+7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
+
+### P14 acceptance — Coaches and training groups
+P14 is complete when all of the following are true:
+
+1. Staff can create and edit coach records in admin.
+2. Training groups can have one or more linked coaches.
+3. Member and training-group admin views show linked coach names clearly.
+4. Search/filter support helps staff find groups by coach where practical.
+5. Coach data is not exposed to parents unless explicitly enabled in a later slice.
+6. Coach portal, attendance, and messaging are not introduced in this milestone.
+7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
+
+### P15 acceptance — Calendar + WhatsApp attendance integration
+P15 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -699,9 +950,15 @@ Remaining focus:
 - Invoice Ninja orchestration
 - sibling discount rules
 - payment visibility and retry paths
+- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
+- billing plan lifecycle and renewals (P9)
+- parent invoice visibility (P12)
+- custom one-off invoices (P13)
+- coaches linked to training groups (P14)
 
 ### M5 — Admin operations completion
 Remaining focus:
+- family admin action hub (P11)
 - export
 - filters/search polish
 - document/admin operations polish
@@ -713,14 +970,22 @@ Delivered:
 - deployment runbook: `docs/deployment.md`.
 
 Remaining focus:
+- public-site analytics and registration funnel visibility (P10)
 - prod environment / second host (same image, `:prod` floating tag, separate `.env`)
 - recovery/backup notes (today: ad-hoc `pg_dump`; need scheduled job + off-host shipping)
 - integration configuration docs (Invoice Ninja, SMTP provider choice)
 - final security checklist (CSP, rate-limit, fail2ban, audit-log review)
 
 ### Future / post-MVP
-- calendar integration
-- WhatsApp attendance polling
+- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
+- billing plan lifecycle and renewals (P9)
+- public-site analytics and registration funnel visibility (P10)
+- family admin action hub (P11)
+- parent invoice visibility (P12)
+- custom one-off invoices (P13)
+- coaches linked to training groups (P14)
+- calendar integration (P15)
+- WhatsApp attendance polling (P15)
 
 ---
 

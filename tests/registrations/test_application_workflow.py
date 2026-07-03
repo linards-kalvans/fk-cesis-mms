@@ -71,7 +71,6 @@ class TestCreateOrUpdateDraft:
         )
         assert app.parent_account is None
         assert app.claimed_email == "newparent@example.com"
-        assert app.guardian_email == "newparent@example.com"
 
     def test_draft_creation_links_existing_parent_account(self):
         """Kept bespoke: exercises account-linking logic with a specific returning email."""
@@ -469,7 +468,7 @@ class TestGetApplicationPrefill:
             email="prefill@example.com",
             phone="+37123232323",
         )
-        # First application
+        # First application (verified path — guardian data lives on Guardian row)
         create_or_update_draft(
             data={
                 "guardian_email": "prefill@example.com",
@@ -482,8 +481,9 @@ class TestGetApplicationPrefill:
                 "member_birth_date": "2025-01-15",
             },
             files={},
+            verified_account=acct,
         )
-        # Second (latest) application
+        # Second (latest) application (verified path)
         create_or_update_draft(
             data={
                 "guardian_email": "prefill@example.com",
@@ -496,11 +496,12 @@ class TestGetApplicationPrefill:
                 "member_birth_date": "2025-06-20",
             },
             files={},
+            verified_account=acct,
         )
 
         prefill = get_application_prefill(acct)
         assert isinstance(prefill, dict)
-        # Should contain guardian data from latest application
+        # Should contain guardian data from latest application (via Guardian row)
         assert prefill.get("guardian_full_name") == "Updated Name"
         assert prefill.get("guardian_email") == "prefill@example.com"
 
