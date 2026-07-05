@@ -164,13 +164,10 @@ class TestRuntimeContractDoc:
         return _read_all(REPO_ROOT / "docs" / "runtime-contract.md")
 
     def test_registry_image_anchor(self):
-        """Must document the registry image name."""
+        """Must document the GHCR registry image name."""
         content = self._content()
-        assert "codeberg.org" in content, (
-            "runtime-contract.md must mention the Codeberg registry image"
-        )
-        assert "fk-cesis-mms" in content, (
-            "runtime-contract.md must name the fk-cesis-mms image"
+        assert "ghcr.io/linards-kalvans/fk-cesis-mms" in content, (
+            "runtime-contract.md must mention the GHCR image ghcr.io/linards-kalvans/fk-cesis-mms"
         )
 
     def test_tag_model_anchors(self):
@@ -285,29 +282,60 @@ class TestLocalDockerSmokeDoc:
 # .woodpecker.yml — CI builds images, deploys manually
 # ---------------------------------------------------------------------------
 
-class TestWoodpeckerCIManualDeploy:
-    """.woodpecker.yml must build/push images and leave deployment manual."""
+class TestGitHubActionsCIManualDeploy:
+    """GitHub Actions workflow must build/push to GHCR; deploy stays manual."""
+
+    @property
+    def workflow_path(self) -> Path:
+        return REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
     @property
     def content(self) -> str:
-        return _read_all(REPO_ROOT / ".woodpecker.yml")
+        return _read_all(self.workflow_path)
 
-    def test_build_and_push_pipeline_preserved(self):
-        """Build/publish pipeline must still be present (build-and-push, prepare-tags)."""
-        assert "build-and-push" in self.content, (
-            ".woodpecker.yml must still contain build-and-push step"
+    def test_workflow_file_exists(self):
+        """.github/workflows/ci.yml must exist."""
+        assert self.workflow_path.is_file(), (
+            ".github/workflows/ci.yml must exist"
         )
-        assert "prepare-tags" in self.content, (
-            ".woodpecker.yml must still contain prepare-tags step — dev and main"
+
+    def test_woodpecker_removed(self):
+        """.woodpecker.yml must no longer exist."""
+        assert not (REPO_ROOT / ".woodpecker.yml").is_file(), (
+            ".woodpecker.yml must be removed after GitHub Actions migration"
+        )
+
+    def test_build_and_push_job_present(self):
+        """Workflow must contain a build-and-push job."""
+        assert "build-and-push" in self.content, (
+            ".github/workflows/ci.yml must contain build-and-push job"
+        )
+
+    def test_docker_build_push_action(self):
+        """Workflow must use docker/build-push-action."""
+        assert "docker/build-push-action" in self.content, (
+            ".github/workflows/ci.yml must use docker/build-push-action"
+        )
+
+    def test_ghcr_image_target(self):
+        """Workflow must push to ghcr.io/linards-kalvans/fk-cesis-mms."""
+        assert "ghcr.io/linards-kalvans/fk-cesis-mms" in self.content, (
+            ".github/workflows/ci.yml must target ghcr.io/linards-kalvans/fk-cesis-mms"
+        )
+
+    def test_push_gated_on_non_pr(self):
+        """Build/push must be gated on not being a pull request."""
+        assert "github.event_name != 'pull_request'" in self.content, (
+            ".github/workflows/ci.yml must gate push on github.event_name != 'pull_request'"
         )
 
     def test_deploy_notify_steps_removed(self):
         """Deploy webhook steps must be absent while deployment is manual."""
-        assert "notify-dev:" not in self.content, (
-            ".woodpecker.yml must not call the dev deploy webhook"
+        assert "notify-dev" not in self.content, (
+            ".github/workflows/ci.yml must not call the dev deploy webhook"
         )
-        assert "notify-prod:" not in self.content, (
-            ".woodpecker.yml must not call the prod deploy webhook"
+        assert "notify-prod" not in self.content, (
+            ".github/workflows/ci.yml must not call the prod deploy webhook"
         )
 
     def test_deploy_webhook_secrets_removed(self):
@@ -320,7 +348,7 @@ class TestWoodpeckerCIManualDeploy:
         ]
         for secret_name in forbidden:
             assert secret_name not in self.content, (
-                f".woodpecker.yml must not reference {secret_name}"
+                f".github/workflows/ci.yml must not reference {secret_name}"
             )
 
 

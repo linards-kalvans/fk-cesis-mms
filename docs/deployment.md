@@ -26,7 +26,7 @@ The `fk-cesis` repository owns:
 
 ## Image contract
 
-- Registry image: `codeberg.org/linards-kalvans/fk-cesis-mms`
+- Registry image: `ghcr.io/linards-kalvans/fk-cesis-mms`
 - Dev floating tag: `dev`
 - Production floating tag: `main`
 - Immutable rollback tags: `<major>.<minor>`
