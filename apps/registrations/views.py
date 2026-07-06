@@ -311,32 +311,6 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             get_current_agreement(application.approved_member)
         )
 
-    ocr_decrypted_summaries: dict[str, list[tuple[str, str]] | None] = {}
-    for doc in application.documents.filter(deleted_at__isnull=True).select_related("extraction"):
-        extraction = getattr(doc, "extraction", None)
-        if extraction is None or not extraction.encrypted_summary:
-            continue
-        try:
-            summary = decrypt_json(extraction.encrypted_summary)
-            ocr_decrypted_summaries[doc.kind] = parse_ocr_summary(str(summary))
-        except Exception:
-            ocr_decrypted_summaries[doc.kind] = None
-
-    import json as _json
-
-    pending_docs_qs = application.documents.filter(
-        deleted_at__isnull=True,
-        ocr_status=Document.OcrStatus.PENDING,
-    )
-    pending_by_kind = {doc.kind: doc.id for doc in pending_docs_qs}
-    pending_document_ids_csv = ",".join(str(i) for i in pending_by_kind.values())
-    pending_by_kind_json = _json.dumps(pending_by_kind)
-
-    document_bound_fields = {
-        kind: form[field_name]
-        for kind, field_name in FIELD_NAME_BY_KIND.items()
-    }
-
     return render(
         request,
         "registrations/application_workspace.html",
