@@ -6,8 +6,16 @@ errors keep using error_summary.html.
 Parameters:
   title — Latvian heading copy.
   body  — Latvian explanatory / next-step copy (optional).
+
+Analytics parameters (optional, P10):
+  analytics_impression — data-analytics-impression value (impression event)
+  analytics_page_area  — data-analytics-page-area on the wrapper div
+  analytics_error_kind — data-analytics-error-kind on the wrapper div
 {% endcomment %}
-<div class="fk-error-state" role="alert" data-error-state>
+<div class="fk-error-state" role="alert" data-error-state
+     {% if analytics_impression %}data-analytics-impression="{{ analytics_impression }}"{% endif %}
+     {% if analytics_page_area %}data-analytics-page-area="{{ analytics_page_area }}"{% endif %}
+     {% if analytics_error_kind %}data-analytics-error-kind="{{ analytics_error_kind }}"{% endif %}>
   {% if title %}<p class="fk-error-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-error-state__body">{{ body }}</p>{% endif %}
 </div>

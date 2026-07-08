@@ -44,6 +44,11 @@
   {% endif %}
 </section>
 
+{% if form.errors %}
+<div data-analytics-impression="application_validation_error_summary_shown"
+     data-analytics-page-area="application"
+     data-analytics-error-kind="validation_summary"></div>
+{% endif %}
 {% include "parent_ui/includes/error_summary.html" with items=form.error_summary_items %}
 
 {% if workspace_mode == "editable" %}
@@ -217,7 +222,7 @@ document.addEventListener('DOMContentLoaded',function(){
         <p class="fk-fine-print">Iesniedzot pieteikumu, apstiprināt, ka ievadītie dati ir patiesi un dokumenti ir augšupielādēti pieteikuma sagatavošanai.</p>
         <div class="fk-wizard-nav fk-wizard-nav--sticky" style="margin-top:22px;">
           <button type="button" data-wizard-prev class="fk-button fk-button--secondary">← Atpakaļ</button>
-          <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--primary fk-button--full">Iesniegt pieteikumu</button>
+          <button type="submit" name="submit_action" value="submit" class="fk-button fk-button--primary fk-button--full" data-analytics-event="cta_submit_application" data-analytics-page-area="application" data-analytics-event-source="review_step" data-analytics-application-status="{{ application.status }}">Iesniegt pieteikumu</button>
         </div>
       </div>
     </section>

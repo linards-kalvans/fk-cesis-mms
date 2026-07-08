@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.documents",
     "apps.integrations",
     "apps.addresses",
+    "apps.analytics",
     # Background-job runner (P3.5)
     "django_q",
 ]
@@ -222,6 +223,16 @@ BILLING_PAYMENT_SYNC_HOUR = int(os.environ.get("BILLING_PAYMENT_SYNC_HOUR", "3")
 AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "730"))
 # Local-time hour for the nightly audit prune (offset from billing 3/4).
 AUDIT_PRUNE_HOUR = int(os.environ.get("AUDIT_PRUNE_HOUR", "2"))
+
+# Analytics (P10). Disabled by default; enable browser/server channels separately.
+ANALYTICS_PROVIDER = os.environ.get("ANALYTICS_PROVIDER") or "stub"
+ANALYTICS_BROWSER_ENABLED = os.environ.get("ANALYTICS_BROWSER_ENABLED", "false").lower() in {"1", "true", "yes"}
+ANALYTICS_SERVER_ENABLED = os.environ.get("ANALYTICS_SERVER_ENABLED", "false").lower() in {"1", "true", "yes"}
+ANALYTICS_DOMAIN = os.environ.get("ANALYTICS_DOMAIN", "")
+ANALYTICS_SITE_ID = os.environ.get("ANALYTICS_SITE_ID", "")
+ANALYTICS_API_URL = os.environ.get("ANALYTICS_API_URL", "")
+ANALYTICS_API_KEY = os.environ.get("ANALYTICS_API_KEY", "")
+ANALYTICS_TIMEOUT_SECONDS = float(os.environ.get("ANALYTICS_TIMEOUT_SECONDS", "2"))
 
 # Document upload constraints (used by the async upload endpoint, P3.5).
 DOCUMENT_UPLOAD_MAX_BYTES = int(

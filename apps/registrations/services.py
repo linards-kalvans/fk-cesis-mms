@@ -377,6 +377,7 @@ def create_or_update_draft(
     application: RegistrationApplication | None = None,
     verified_account: ParentAccount | None = None,
     reusable_guardian_document: Document | None = None,
+    referral_code: str = "",
 ) -> RegistrationApplication:
     """Create or update a draft registration application.
 
@@ -387,6 +388,10 @@ def create_or_update_draft(
     When creating a new application with a reusable guardian document
     from a prior app, the document is copied and field_sources are set
     from the prior OCR extraction.
+
+    `referral_code` is persisted ONLY on the first save of a brand-new
+    application (P10): subsequent saves of an existing application ignore
+    the value so the attribution can never be mutated via the form.
     """
     email = str(data.get("guardian_email", "")).strip().lower()
     if not email:
@@ -395,6 +400,7 @@ def create_or_update_draft(
     if application is None:
         application = RegistrationApplication()
         application.claimed_email = email
+        application.referral_code = referral_code
     else:
         if application.parent_account_id is not None and application.claimed_email.lower() != email:
             raise ValueError("application email cannot change verified owner")

@@ -306,19 +306,21 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - confirmed/synced invoices are never silently mutated; changes use explicit renewal or adjustment flow
 
 ### P10 — Public-site analytics + registration funnel
+**Status:** complete (2026-07-08) — Plausible-first privacy-aware analytics boundary, parent-only browser hooks, server milestone events, and referral-code attribution delivered. Provider/dashboard live smoke remains required before production enablement.
+
 **Why tenth**
 - public launch needs basic evidence about what visitors use before more admin-only workflow polish
 - registration funnel visibility helps diagnose drop-off without reading logs or guessing from support messages
 - parent portal ops signals help catch confusing empty/error states without tracking sensitive staff/admin work
 
-**Target outcome**
-- choose an analytics platform through a short comparison against privacy/GDPR posture, funnel/event capability, and ops burden
-- public-site traffic stats are visible: visits, page views, referrers, and top pages
-- registration funnel is visible in aggregate from public visit through registration start, verified access, and application submission
-- parent portal operational usage is visible in aggregate: visits, key CTA usage, empty/error states, and basic page health signals
-- no admin tracking, ad pixels, Google Analytics/Meta pixels, per-user profiling, or custom BI warehouse
-- no personal data in analytics payloads: no names, emails, phone numbers, personal IDs, document metadata, document names, or free-text form values
-- GDPR/privacy posture is documented before production enablement: hosting, cookies, IP handling, retention, DPA/config, and opt-out/consent implications
+**Delivered outcome**
+- Platform comparison selected Plausible-first (`stub` + `plausible` provider modes), with Umami as fallback and Matomo/PostHog rejected as too heavy/broad for P10.
+- Browser analytics and server analytics are independently flag-gated (`ANALYTICS_BROWSER_ENABLED`, `ANALYTICS_SERVER_ENABLED`) and disabled by default.
+- Parent-only browser instrumentation emits fixed page/CTA/empty/error/validation hooks; admin pages never render analytics scripts.
+- Server milestones emit `registration_start`, `email_verified`, and `application_submitted` without blocking user flow on provider failure.
+- Referral attribution supports `/register/?ref=coach-a`, sanitizes to `[a-z0-9_-]` (max 64), consumes the session after first application creation, persists `RegistrationApplication.referral_code`, and sends only the safe `referral_code` property.
+- Payloads are allowlist-only and exclude names, emails, phone numbers, personal IDs, document metadata/filenames, free-text form values, and model PKs.
+- GDPR/privacy posture and production enablement checklist are documented in `docs/analytics.md`; live provider/dashboard smoke remains required before enabling in production.
 
 ### P11 — Family admin action hub
 **Why eleventh**
@@ -970,9 +972,9 @@ Remaining focus:
 Delivered:
 - two-channel deployment pipeline (2026-05-26, CI migrated to GitHub Actions 2026-07-03): containerized stack (`Dockerfile`, `compose.yaml` — `web` + `qcluster` + `postgres` 18, non-root UID 10001, whitenoise static, `/healthz` probe, configurable host port). Branch strategy: `dev` → floating `:dev` (dev server auto-pulls); `main` → floating `:main` plus immutable `:<major>.<minor>` from the `VERSION` file (prod server auto-pulls `:main`, can pin to a `:<X.Y>` for rollback). GitHub Actions CI orchestrates lint → test → branch-specific build/push to GHCR; deployment remains manual. All host-side services run as the unprivileged `fkmms` user (UID 10001 matches in-container `app`).
 - deployment runbook: `docs/deployment.md`.
+- public-site analytics and registration funnel visibility (P10) — code/docs delivered; production enablement still needs provider setup + dashboard smoke.
 
 Remaining focus:
-- public-site analytics and registration funnel visibility (P10)
 - prod environment / second host (same image, `:prod` floating tag, separate `.env`)
 - recovery/backup notes (today: ad-hoc `pg_dump`; need scheduled job + off-host shipping)
 - integration configuration docs (Invoice Ninja, SMTP provider choice)
@@ -981,7 +983,6 @@ Remaining focus:
 ### Future / post-MVP
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- public-site analytics and registration funnel visibility (P10)
 - family admin action hub (P11)
 - parent invoice visibility (P12)
 - custom one-off invoices (P13)
