@@ -90,6 +90,7 @@ class RegistrationApplication(TimeStampedModel):
         choices=PaymentMode.choices,
         blank=True,
     )
+    referral_code = models.CharField(max_length=64, blank=True, default="")
 
     # Field source classification (JSON)
     field_sources = models.JSONField(default=dict, blank=True)

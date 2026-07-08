@@ -11,11 +11,24 @@ Both cta_url and cta_label must be provided for the CTA anchor to render;
 either alone is ignored. cta_url must be a server-resolved URL (e.g. via
 Django's {% url %} tag); user-controlled values must not be passed because
 Django's auto-escaping does not block javascript: URIs in href attributes.
+
+Analytics parameters (optional, P10):
+  analytics_impression     — data-analytics-impression value (impression event)
+  analytics_cta_event      — data-analytics-event on the CTA anchor (click event)
+  analytics_page_area      — data-analytics-page-area shared by both
+  analytics_event_source   — data-analytics-event-source on the CTA anchor
+  analytics_error_kind     — data-analytics-error-kind on the wrapper div
 {% endcomment %}
-<div class="fk-empty-state" data-empty-state>
+<div class="fk-empty-state" data-empty-state
+     {% if analytics_impression %}data-analytics-impression="{{ analytics_impression }}"{% endif %}
+     {% if analytics_page_area %}data-analytics-page-area="{{ analytics_page_area }}"{% endif %}
+     {% if analytics_error_kind %}data-analytics-error-kind="{{ analytics_error_kind }}"{% endif %}>
   {% if title %}<p class="fk-empty-state__title">{{ title }}</p>{% endif %}
   {% if body %}<p class="fk-empty-state__body">{{ body }}</p>{% endif %}
   {% if cta_url and cta_label %}
-    <a href="{{ cta_url }}" class="fk-button fk-button--primary fk-button--full fk-empty-state__cta">{{ cta_label }}</a>
+    <a href="{{ cta_url }}" class="fk-button fk-button--primary fk-button--full fk-empty-state__cta"
+       {% if analytics_cta_event %}data-analytics-event="{{ analytics_cta_event }}"{% endif %}
+       {% if analytics_page_area %}data-analytics-page-area="{{ analytics_page_area }}"{% endif %}
+       {% if analytics_event_source %}data-analytics-event-source="{{ analytics_event_source }}"{% endif %}>{{ cta_label }}</a>
   {% endif %}
 </div>

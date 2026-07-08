@@ -25,6 +25,8 @@ from apps.agreements.presentation import (
 from apps.agreements.services import (
     get_current_agreement,
 )
+from apps.analytics import services as analytics_services
+from apps.analytics.sanitize import sanitize_referral_code
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.name_normalization import normalize_latvian_name
@@ -64,6 +66,9 @@ from apps.registrations.services import (
     get_application_prefill,
     submit_application,
 )
+
+
+REFERRAL_SESSION_KEY = "registration_referral_code"
 
 
 def _has_reusable_guardian_document(account: ParentAccount) -> bool:
@@ -161,11 +166,26 @@ def new_application(request: HttpRequest) -> HttpResponse:
             has_existing_document=has_existing,
         )
         if form.is_valid():
+            # Defence in depth: re-sanitize at the persistence boundary so a
+            # polluted session value (some other code path wrote it, or it
+            # predates the /register/?ref= sanitizer) cannot land on
+            # RegistrationApplication.referral_code.
+            referral = sanitize_referral_code(
+                request.session.get(REFERRAL_SESSION_KEY, "")
+            )
             application = create_or_update_draft(
                 data=form.cleaned_data,
                 files=request.FILES,
                 verified_account=account,
                 reusable_guardian_document=reusable_doc if has_existing else None,
+                referral_code=referral,
+            )
+            # Session referral is single-use: consume it so a later "start new
+            # registration" in the same browser does not inherit stale attribution.
+            request.session.pop(REFERRAL_SESSION_KEY, None)
+            analytics_services.track_registration_start(
+                request,
+                referral_code=application.referral_code,
             )
             return redirect("registrations:application-workspace", application_id=application.id)
         return render(
@@ -182,11 +202,23 @@ def new_application(request: HttpRequest) -> HttpResponse:
     # "New registration" must be unconditional — continuing an existing draft
     # is the parent portal's job, not this route's.
     prefill = get_application_prefill(account)
+    # Defence in depth: re-sanitize at the persistence boundary (see POST).
+    referral = sanitize_referral_code(
+        request.session.get(REFERRAL_SESSION_KEY, "")
+    )
     application = create_or_update_draft(
         data=prefill,
         files={},
         verified_account=account,
         reusable_guardian_document=reusable_doc if has_existing else None,
+        referral_code=referral,
+    )
+    # Session referral is single-use: consume it so a later "start new
+    # registration" in the same browser does not inherit stale attribution.
+    request.session.pop(REFERRAL_SESSION_KEY, None)
+    analytics_services.track_registration_start(
+        request,
+        referral_code=application.referral_code,
     )
     return redirect(
         "registrations:application-workspace", application_id=application.id
@@ -250,6 +282,11 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 )
             if submit_requested:
                 submit_application(application, account)
+                analytics_services.track_application_submitted(
+                    request,
+                    referral_code=application.referral_code,
+                    application_status=application.status,
+                )
                 return redirect("registrations:parent-portal")
             return redirect("registrations:application-workspace", application_id=application.id)
         elif is_ajax:
@@ -369,6 +406,17 @@ def start_registration(request: HttpRequest) -> HttpResponse:
     """
     account = _current_parent_account(request)
 
+    # Capture referral code from `?ref=` for analytics attribution (P10).
+    # A valid code is stored in the session; an explicit invalid ref
+    # clears any previously-stored code so stale attribution does not
+    # leak forward.
+    if request.method == "GET":
+        ref = sanitize_referral_code(request.GET.get("ref", ""))
+        if ref:
+            request.session[REFERRAL_SESSION_KEY] = ref
+        elif "ref" in request.GET:
+            request.session.pop(REFERRAL_SESSION_KEY, None)
+
     if request.method == "POST":
         email = request.POST.get("email", "").strip().lower()
         if not email:
@@ -432,6 +480,11 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
             verified_account=account,
         )
         submit_application(application, account)
+        analytics_services.track_application_submitted(
+            request,
+            referral_code=application.referral_code,
+            application_status=application.status,
+        )
         return redirect("registrations:parent-portal")
 
     return render(

@@ -33,7 +33,11 @@
                autocomplete="email"
                value="{{ form.email.value|default:'' }}">
       </div>
-      <button type="submit" class="fk-button fk-button--primary fk-button--full">Turpināt</button>
+      <button type="submit"
+              class="fk-button fk-button--primary fk-button--full"
+              data-analytics-event="cta_start_registration"
+              data-analytics-page-area="registration"
+              data-analytics-event-source="email_entry">Turpināt</button>
     </form>
   </div>
 </section>

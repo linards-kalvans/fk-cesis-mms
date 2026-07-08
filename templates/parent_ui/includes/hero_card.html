@@ -17,8 +17,8 @@
     <h2>{% if greeting_name %}Sveiks/-a, {{ greeting_name }}!{% else %}Sveiks!{% endif %}</h2>
     <p>Pārvaldi savu bērnu pieteikumus FK Cēsis viegli un ātri. Turpini iesākto vai sāc jaunu reģistrāciju.</p>
     <div class="fk-hero-actions">
-      {% if primary_application %}<a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button fk-button--primary">Turpināt pieteikumu</a>{% endif %}
-      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--red">＋ Sākt jaunu reģistrāciju</a>
+      {% if primary_application %}<a href="{% url 'registrations:application-workspace' primary_application.pk %}" class="fk-button fk-button--primary" data-analytics-event="cta_continue_application" data-analytics-page-area="portal" data-analytics-event-source="hero">Turpināt pieteikumu</a>{% endif %}
+      <a href="{% url 'registrations:new-application' %}" class="fk-button fk-button--red" data-analytics-event="cta_new_application" data-analytics-page-area="portal" data-analytics-event-source="hero">＋ Sākt jaunu reģistrāciju</a>
     </div>
   </div>
   <aside class="fk-info-card">

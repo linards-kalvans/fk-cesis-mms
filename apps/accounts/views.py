@@ -19,6 +19,7 @@ from apps.accounts.services import (
     verify_one_time_code,
 )
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
+from apps.analytics import services as analytics_services
 
 
 def _debug_verify_url_for_request(request, raw_token: str) -> str:
@@ -122,6 +123,10 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
         request.session[PARENT_ACCOUNT_SESSION_KEY] = account.pk
         # Clear pending
         del request.session["pending_verification_email"]
+        analytics_services.track_email_verified(
+            request,
+            referral_code=request.session.get("registration_referral_code", ""),
+        )
         return redirect("registrations:parent-portal")
 
     # GET — show form only if pending email exists

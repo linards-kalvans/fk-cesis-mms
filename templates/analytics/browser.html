@@ -1,0 +1,22 @@
+{% load static %}
+{% if analytics_browser_enabled %}
+  {% if analytics_provider == "plausible" %}
+    <script defer data-domain="{{ analytics_domain }}" src="{{ analytics_api_url }}/js/script.js" data-analytics-browser></script>
+    <script data-analytics-browser>window.plausible = window.plausible || function(){(window.plausible.q=window.plausible.q||[]).push(arguments)}</script>
+  {% elif analytics_provider == "umami" %}
+    <script defer src="{{ analytics_api_url }}/script.js" data-website-id="{{ analytics_site_id }}" data-analytics-browser></script>
+    <script data-analytics-browser>window.plausible = window.plausible || function(name, options){if(window.umami && typeof window.umami.track === "function"){window.umami.track(name, (options && options.props) || {})}}</script>
+  {% elif analytics_provider == "stub" %}
+    <script data-analytics-browser>window.plausible = window.plausible || function(){}</script>
+  {% endif %}
+  {% if analytics_referral_code %}
+    {% comment %}
+    Bootstrap a base props object for the browser tracker. The value is
+    sanitised server-side (a-z, 0-9, dash, underscore only) before reaching
+    this template, and `escapejs` produces a JS-string-safe embedding; the
+    surrounding <script> tag receives the standard HTML auto-escape.
+    {% endcomment %}
+    <script data-analytics-browser>window.fkAnalyticsBaseProps = window.fkAnalyticsBaseProps || {}; window.fkAnalyticsBaseProps.referral_code = "{{ analytics_referral_code|escapejs }}";</script>
+  {% endif %}
+  <script src="{% static 'js/analytics_events.js' %}" defer data-analytics-browser></script>
+{% endif %}

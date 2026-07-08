@@ -8,6 +8,8 @@
 <h1 class="fk-page-title">Mani pieteikumi</h1>
 <p class="fk-page-intro">Pārskatiet un turpiniet — šeit redzams katra pieteikuma statuss un nākamais solis.</p>
 
+<div data-analytics-impression="portal_visit" data-analytics-page-area="portal" data-analytics-event-source="portal_page"></div>
+
 {% include "parent_ui/includes/hero_card.html" with variant="portal" primary_application=primary_application %}
 
 {% if applications %}
@@ -77,9 +79,9 @@
 
     <div class="fk-app-actions">
       {% if app.status == 'draft' or app.status == 'fix_requested' %}
-        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary fk-button--full">Turpināt pieteikumu</a>
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--primary fk-button--full" data-analytics-event="cta_continue_application" data-analytics-page-area="portal" data-analytics-event-source="application_card" data-analytics-application-status="{{ app.status }}">Turpināt pieteikumu</a>
       {% else %}
-        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary fk-button--full">Skatīt pieteikumu</a>
+        <a href="{% url 'registrations:application-workspace' app.pk %}" class="fk-button fk-button--secondary fk-button--full" data-analytics-event="cta_continue_application" data-analytics-page-area="portal" data-analytics-event-source="application_card" data-analytics-application-status="{{ app.status }}">Skatīt pieteikumu</a>
       {% endif %}
     </div>
   </article>
@@ -88,7 +90,7 @@
 
 {% else %}
 {% url 'registrations:new-application' as new_application_url %}
-{% include "parent_ui/includes/empty_state.html" with title="Nav pieteikumu" body="Jums vēl nav neviena pieteikuma." cta_url=new_application_url cta_label="Sākt jaunu reģistrāciju" %}
+{% include "parent_ui/includes/empty_state.html" with title="Nav pieteikumu" body="Jums vēl nav neviena pieteikuma." cta_url=new_application_url cta_label="Sākt jaunu reģistrāciju" analytics_impression="portal_empty_state_shown" analytics_cta_event="cta_new_application" analytics_page_area="portal" analytics_event_source="empty_state" analytics_error_kind="empty_state" %}
 {% endif %}
 
 <div class="fk-helper-card">
@@ -99,6 +101,6 @@
       <p>Pārliecinies, ka esi reģistrējies ar to pašu e-pasta adresi, ko izmantoji pieteikuma izveidē.</p>
     </div>
   </div>
-  <a href="{% url 'registrations:start-registration' %}" class="fk-button fk-button--secondary fk-button--full">✉ Pārbaudīt citu e-pastu</a>
+  <a href="{% url 'registrations:start-registration' %}" class="fk-button fk-button--secondary fk-button--full" data-analytics-event="cta_start_registration" data-analytics-page-area="portal" data-analytics-event-source="check_other_email">✉ Pārbaudīt citu e-pastu</a>
 </div>
 {% endblock %}
