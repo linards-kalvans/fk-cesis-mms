@@ -91,19 +91,21 @@ class TestKitSizeCollapseFormContract:
 class TestKitSizeChoiceOrdering:
     """Active shirt options sort naturally; inactive options are excluded."""
 
-    def test_choices_sort_xs_s_m_and_exclude_inactive(self):
+    def test_choices_sort_numeric_sizes_before_tshirt_sizes_and_exclude_inactive(self):
         from apps.members.models import KitSizeOption
         from apps.registrations.forms import RegistrationApplicationForm
 
         KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="M", is_active=True)
         KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="XS", is_active=True)
         KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="S", is_active=True)
+        KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="122", is_active=True)
+        KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="116", is_active=True)
         KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="L", is_active=False)
 
         form = RegistrationApplicationForm()
         labels = [label for _, label in form.fields["member_kit_size_shirt"].choices]
 
-        assert labels == ["XS", "S", "M"]
+        assert labels == ["116", "122", "XS", "S", "M"]
 
 
 # ---------------------------------------------------------------------------
