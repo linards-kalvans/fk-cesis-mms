@@ -20,12 +20,14 @@ _KIT_SIZE_ORDER = {
 
 
 def kit_size_sort_key(label: str) -> tuple[int, int | str]:
-    """Sort key for kit-size labels: known sizes in fixed order, unknowns after."""
+    """Sort key for kit-size labels: numeric child sizes, then t-shirt sizes."""
     normalized = label.strip().upper()
+    if normalized.isdecimal():
+        return (0, int(normalized))
     known = _KIT_SIZE_ORDER.get(normalized)
     if known is not None:
-        return (0, known)
-    return (1, normalized)
+        return (1, known)
+    return (2, normalized)
 
 
 class KitSizeOption(models.Model):

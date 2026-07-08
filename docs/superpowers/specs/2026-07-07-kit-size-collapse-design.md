@@ -12,7 +12,7 @@ The parent registration flow currently asks for separate shirt and shorts sizes.
 - Show one parent-facing kit-size field labelled **Formas izmērs**.
 - Require only that one kit-size field before submission.
 - Preserve existing application data by treating the old shirt-size value as the new single kit-size value.
-- Order active kit-size choices naturally: `XS`, `S`, `M`, `L`, `XL`, then numbered `2XL`, `3XL`, etc., with unknown labels after known labels.
+- Order active kit-size choices naturally: numeric child sizes first (`116`, `122`, ..., `146`), then t-shirt sizes (`XS`, `S`, `M`, `L`, `XL`), with unknown labels after known labels.
 - Keep the change small and compatible with existing registration flow tests and data.
 
 ## Non-goals
@@ -55,15 +55,15 @@ Why: this is the smallest safe change. Existing rows already have shirt-size dat
 
 Implement a small local sort helper for kit-size labels. Known order:
 
-`XXS`, `XS`, `S`, `M`, `L`, `XL`, `2XL`, `3XL`, `4XL`, `5XL`
+numeric labels first by numeric value, then `XXS`, `XS`, `S`, `M`, `L`, `XL`, `2XL`, `3XL`, `4XL`, `5XL`
 
-Labels not in the known map sort after known sizes, alphabetically case-insensitive. This avoids adding dependencies or a new ordering column for now.
+Labels not in the known map sort after numeric and known t-shirt sizes, alphabetically case-insensitive. This avoids adding dependencies or a new ordering column for now.
 
 ## Tests
 
 - Form contract: one kit-size field in the member section; old shorts field absent from parent form section/order.
 - Submit validation: missing canonical kit size raises; shorts not required.
-- Choice ordering: active options sort `XS`, `S`, `M`, with inactive options excluded.
+- Choice ordering: active options sort numeric sizes before t-shirt sizes (for example `116`, `122`, `XS`, `S`, `M`), with inactive options excluded.
 - Draft save: canonical field persists selected option without requiring shorts.
 - Existing compatibility tests updated to post only the canonical field where they exercise parent forms.
 
@@ -72,5 +72,5 @@ Labels not in the known map sort after known sizes, alphabetically case-insensit
 - Parent workspace renders **Formas izmērs** once and does not render **Krekla izmērs** or **Šortu izmērs**.
 - Parent submit succeeds when all existing required fields plus single kit size are present.
 - Parent submit fails when single kit size is absent.
-- Kit choices show `XS` before `S` before `M`.
+- Kit choices show numeric sizes before t-shirt sizes, and `XS` before `S` before `M` within t-shirt sizes.
 - Full verification passes: `uv run pytest -q`, `uv run ruff check .`, `uv run mypy .`.

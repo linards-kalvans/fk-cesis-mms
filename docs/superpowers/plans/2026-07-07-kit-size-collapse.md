@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Collapse separate shirt/shorts kit-size selection into one parent-facing **Formas izmērs** field and sort sizes naturally.
+**Goal:** Collapse separate shirt/shorts kit-size selection into one parent-facing **Formas izmērs** field and sort numeric child sizes before t-shirt sizes.
 
 **Architecture:** Reuse `RegistrationApplication.member_kit_size_shirt` as the canonical stored kit size. Keep legacy `member_kit_size_shorts` in the database for compatibility, but remove it from the parent form, validation, and current save path. Add a tiny local sort helper for size labels; no dependency or schema cleanup yet.
 
@@ -116,7 +116,7 @@ Use existing `pytest` + `pytest-django` tests. Write/adjust tests before impleme
    - Visible label is `Formas izmērs`.
 
 2. Choice ordering
-   - Active options with labels `M`, `XS`, `S` render as `XS`, `S`, `M`.
+   - Active options with labels `M`, `XS`, `S`, `122`, `116` render as `116`, `122`, `XS`, `S`, `M`.
    - Inactive options are excluded.
 
 3. Draft persistence
@@ -150,8 +150,8 @@ Use existing `pytest` + `pytest-django` tests. Write/adjust tests before impleme
 
 ### Unit: choice sorting
 
-- Given active shirt options `M`, `XS`, `S`, the field choices are ordered `XS`, `S`, `M`.
-- Unknown labels sort after known labels alphabetically.
+- Given active shirt options `M`, `XS`, `S`, `122`, `116`, the field choices are ordered `116`, `122`, `XS`, `S`, `M`.
+- Unknown labels sort after numeric and known t-shirt labels alphabetically.
 
 ### Unit: draft save
 
@@ -216,11 +216,13 @@ def test_kit_size_choices_sort_naturally_and_exclude_inactive(self):
     KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="M", is_active=True)
     KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="XS", is_active=True)
     KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="S", is_active=True)
+    KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="122", is_active=True)
+    KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="116", is_active=True)
     KitSizeOption.objects.create(kind=KitSizeOption.Kind.SHIRT, label="L", is_active=False)
 
     form = RegistrationApplicationForm()
 
-    assert [label for _, label in form.fields["member_kit_size_shirt"].choices] == ["XS", "S", "M"]
+    assert [label for _, label in form.fields["member_kit_size_shirt"].choices] == ["116", "122", "XS", "S", "M"]
 ```
 
 - [ ] **Step 3: Run red tests**
@@ -260,10 +262,12 @@ _KIT_SIZE_ORDER = {
 
 def kit_size_sort_key(label: str) -> tuple[int, int | str]:
     normalized = label.strip().upper()
+    if normalized.isdecimal():
+        return (0, int(normalized))
     known = _KIT_SIZE_ORDER.get(normalized)
     if known is not None:
-        return (0, known)
-    return (1, normalized)
+        return (1, known)
+    return (2, normalized)
 ```
 
 - [ ] **Step 2: Collapse form fields**
