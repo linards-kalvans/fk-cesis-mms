@@ -76,7 +76,6 @@ def submit_payload(kit_sizes, parent_account):
         "member_birth_date": "2025-01-01",
         "member_same_address_as_guardian": True,
         "member_kit_size_shirt": shirt_pk,
-        "member_kit_size_shorts": shorts_pk,
         "preferred_agreement_signing": "paper",
     }
 

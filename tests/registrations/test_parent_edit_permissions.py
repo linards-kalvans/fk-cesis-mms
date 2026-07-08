@@ -463,7 +463,6 @@ class TestFixRequestedDraftSavePreservesStatus:
                 "guardian_full_name": "Updated Guardian",
                 "guardian_email": parent_account.email,
                 "member_kit_size_shirt": app.member_kit_size_shirt_id,
-                "member_kit_size_shorts": app.member_kit_size_shorts_id,
                 "submit_action": "save_draft",
             },
         )

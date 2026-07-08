@@ -46,7 +46,6 @@ class TestRegistrationApplicationFormFields:
             "member_actual_address",
             "member_same_address_as_guardian",
             "member_kit_size_shirt",
-            "member_kit_size_shorts",
             "preferred_agreement_signing",
             "support_club_instead_of_multi_child_discount",
         ],
@@ -618,7 +617,7 @@ class TestGroupedFormContract:
          guardian_phone, guardian_declared_address
       2. member — member_full_name, member_personal_id, member_birth_date,
          member_actual_address, member_same_address_as_guardian,
-         member_kit_size_shirt, member_kit_size_shorts
+         member_kit_size_shirt
       3. documents — guardian_identity_document, member_identity_document,
          member_portrait_document
       4. agreement — preferred_agreement_signing,
@@ -675,7 +674,7 @@ class TestGroupedFormContract:
     def test_member_section_fields(self):
         """Member section must contain: member_full_name, member_personal_id,
         member_birth_date, member_actual_address, member_same_address_as_guardian,
-        member_kit_size_shirt, member_kit_size_shorts.
+        member_kit_size_shirt.
 
         Slice D — member_portrait_document moved to the documents section.
         """
@@ -692,7 +691,6 @@ class TestGroupedFormContract:
             "member_same_address_as_guardian",
             "member_actual_address",
             "member_kit_size_shirt",
-            "member_kit_size_shorts",
         )
         assert member_fields == expected, (
             f"Member section fields must be {expected}, got {member_fields}."
@@ -768,7 +766,7 @@ class TestGroupedFormContract:
         expected_counts = {
             "documents": 3,
             "guardian": 5,
-            "member": 7,
+            "member": 6,
             "agreement": 3,
         }
         for name, fields in sections:

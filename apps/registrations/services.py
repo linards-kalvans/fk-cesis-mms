@@ -452,24 +452,15 @@ def create_or_update_draft(
         payment_mode = "installments"
     application.preferred_payment_mode = payment_mode
 
-    # Kit sizes — FK to KitSizeOption
-    shirt_id = data.get("member_kit_size_shirt")
-    if shirt_id is not None:
+    # Kit size — member_kit_size_shirt is the canonical single "Formas izmērs" field.
+    kit_size_id = data.get("member_kit_size_shirt")
+    if kit_size_id is not None:
         try:
-            application.member_kit_size_shirt = KitSizeOption.objects.get(pk=shirt_id)
+            application.member_kit_size_shirt = KitSizeOption.objects.get(pk=kit_size_id)
         except (KitSizeOption.DoesNotExist, ValueError, TypeError):
             application.member_kit_size_shirt = None
     else:
         application.member_kit_size_shirt = None
-
-    shorts_id = data.get("member_kit_size_shorts")
-    if shorts_id is not None:
-        try:
-            application.member_kit_size_shorts = KitSizeOption.objects.get(pk=shorts_id)
-        except (KitSizeOption.DoesNotExist, ValueError, TypeError):
-            application.member_kit_size_shorts = None
-    else:
-        application.member_kit_size_shorts = None
 
     # Same-address logic
     _apply_same_address_logic(application, data)
@@ -602,9 +593,7 @@ def _require_active_member_portrait_document(application: RegistrationApplicatio
 
 def _require_valid_kit_sizes(application: RegistrationApplication) -> None:
     if application.member_kit_size_shirt_id is None:
-        raise ValueError("member kit size shirt is required before submit")
-    if application.member_kit_size_shorts_id is None:
-        raise ValueError("member kit size shorts is required before submit")
+        raise ValueError("member kit size is required before submit")
 
 
 def submit_application(

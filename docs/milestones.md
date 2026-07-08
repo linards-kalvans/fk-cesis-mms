@@ -332,6 +332,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - common actions (approve/request-fix/reject, agreement send/sign/retry/sync/void/regenerate/material amendment, membership discontinuation, billing confirm/push/send/sync) available from the hub
 - agreement void and membership discontinuation are clearly separate lanes/actions
 - BillingRecord and BillingInvoice shown as one "Norēķini un rēķini" block grouped by child + season
+- admin family/member kit-size controls show one form-size field instead of separate shirt/shorts values
 - statuses rendered as icon + badge + next-action label, not raw model state strings
 - no new business logic, no new model states, no new service methods
 - deep edits remain on existing admin change pages
@@ -865,9 +866,10 @@ P11 is complete when all of the following are true:
 4. Statuses are rendered as icon + badge + next-action label, not raw model state strings.
 5. Agreement void and membership discontinuation are clearly separate actions in separate lanes.
 6. Billing is shown as one unified "Norēķini un rēķini" block grouped by child + season, with expandable invoice rows.
-7. LAN acceptance proves staff can understand a family's status and complete the normal workflow in under ~30 seconds.
-8. All hub actions reuse existing service paths — no new business logic.
-9. Tests cover queue ordering/filtering, hub page rendering, each hub action triggering the correct service, void-vs-discontinuation separation, billing block grouping, and permission checks.
+7. Admin family/member kit-size controls expose one form-size value, not separate shirt/shorts values.
+8. LAN acceptance proves staff can understand a family's status and complete the normal workflow in under ~30 seconds.
+9. All hub actions reuse existing service paths — no new business logic.
+10. Tests cover queue ordering/filtering, hub page rendering, each hub action triggering the correct service, void-vs-discontinuation separation, billing block grouping, kit-size admin display, and permission checks.
 
 ### P12 acceptance — Parent invoice visibility
 P12 is complete when all of the following are true:

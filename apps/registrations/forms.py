@@ -38,7 +38,6 @@ class RegistrationApplicationForm(forms.Form):
                 "member_same_address_as_guardian",
                 "member_actual_address",
                 "member_kit_size_shirt",
-                "member_kit_size_shorts",
             ),
         ),
         (
@@ -70,8 +69,7 @@ class RegistrationApplicationForm(forms.Form):
     )
     member_actual_address = forms.CharField(max_length=255, required=False, label="Bērna faktiskā adrese")
     member_same_address_as_guardian = forms.BooleanField(required=False, label="Adrese tāda pati kā vecāka")
-    member_kit_size_shirt = forms.ChoiceField(required=False, label="Krekla izmērs")
-    member_kit_size_shorts = forms.ChoiceField(required=False, label="Šortu izmērs")
+    member_kit_size_shirt = forms.ChoiceField(required=False, label="Formas izmērs")
     preferred_agreement_signing = forms.ChoiceField(required=False, label="Līguma parakstīšanas veids")
     support_club_instead_of_multi_child_discount = forms.BooleanField(required=False, label="Nepiemērot Līgumā noteiktās atlaides - Vēlos atbalstīt klubu")
     preferred_payment_mode = forms.ChoiceField(required=False, label="Maksājuma veids")
@@ -93,7 +91,6 @@ class RegistrationApplicationForm(forms.Form):
         "member_actual_address",
         "member_same_address_as_guardian",
         "member_kit_size_shirt",
-        "member_kit_size_shorts",
         "preferred_agreement_signing",
     )
 
@@ -110,13 +107,14 @@ class RegistrationApplicationForm(forms.Form):
         self.has_existing_document = has_existing_document
         self.guardian_profile_locked = guardian_profile_locked
 
-        # Populate kit size choices from database
-        from apps.members.models import KitSizeOption
+        # Populate kit size choices from database (active shirt options, natural size order).
+        from apps.members.models import KitSizeOption, kit_size_sort_key
 
-        shirt_opts = [(str(o.pk), o.label) for o in KitSizeOption.objects.filter(kind=KitSizeOption.Kind.SHIRT, is_active=True)]
-        shorts_opts = [(str(o.pk), o.label) for o in KitSizeOption.objects.filter(kind=KitSizeOption.Kind.SHORTS, is_active=True)]
-        self.fields["member_kit_size_shirt"].choices = shirt_opts
-        self.fields["member_kit_size_shorts"].choices = shorts_opts
+        kit_opts = sorted(
+            KitSizeOption.objects.filter(kind=KitSizeOption.Kind.SHIRT, is_active=True),
+            key=lambda option: kit_size_sort_key(option.label),
+        )
+        self.fields["member_kit_size_shirt"].choices = [(str(o.pk), o.label) for o in kit_opts]
 
         # Populate agreement signing choices
         from apps.registrations.models import RegistrationApplication
@@ -175,7 +173,6 @@ class RegistrationApplicationForm(forms.Form):
             "member_birth_date": "member",
             "member_actual_address": "member",
             "member_kit_size_shirt": "member",
-            "member_kit_size_shorts": "member",
             "preferred_agreement_signing": "agreement",
             # Note: member_same_address_as_guardian is intentionally absent from
             # the step-gating map. Leaving the checkbox unchecked is a valid

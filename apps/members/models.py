@@ -5,6 +5,29 @@ from django.db import models
 from django.db.models.functions import Lower
 
 
+_KIT_SIZE_ORDER = {
+    "XXS": 0,
+    "XS": 1,
+    "S": 2,
+    "M": 3,
+    "L": 4,
+    "XL": 5,
+    "2XL": 6,
+    "3XL": 7,
+    "4XL": 8,
+    "5XL": 9,
+}
+
+
+def kit_size_sort_key(label: str) -> tuple[int, int | str]:
+    """Sort key for kit-size labels: known sizes in fixed order, unknowns after."""
+    normalized = label.strip().upper()
+    known = _KIT_SIZE_ORDER.get(normalized)
+    if known is not None:
+        return (0, known)
+    return (1, normalized)
+
+
 class KitSizeOption(models.Model):
     """Admin-managed kit size lookup model."""
 
