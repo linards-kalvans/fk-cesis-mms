@@ -45,6 +45,12 @@ class Agreement(TimeStampedModel):
         choices=SigningPath.choices,
         default=SigningPath.ELECTRONIC,
     )
+    agreement_number = models.CharField(
+        max_length=32,
+        unique=True,
+        null=True,
+        blank=True,
+    )
 
     # Lifecycle timestamps
     generated_at = models.DateTimeField()

@@ -323,6 +323,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - GDPR/privacy posture and production enablement checklist are documented in `docs/analytics.md`; live provider/dashboard smoke remains required before enabling in production.
 
 ### P11 — Family admin action hub
+**Status:** dev complete (2026-07-09) — family action queue + Guardian family hub delivered inside Django admin. Staff can review family lanes, approve/request-fix/reject applications, send/sign/retry/sync/void/regenerate agreements, start minor/material amendments, discontinue memberships with invoice selection, confirm/push/sync billing, and inspect the unified `Norēķini un rēķini` block with invoice rows. Statuses render as icon + badge + next-action labels. Agreement billing-plan setup is available before signing, the Guardian changelist shows a next-action column and sorts action-needed families first, DocuSeal agreement PDFs can be opened through a staff-only Family hub proxy once a submission exists, and kit size appears as one canonical **Formas izmērs** value; legacy shorts values stay hidden here. Verification: `uv run pytest -q` → 1680 passed, `uv run ruff check .` → clean, `uv run mypy .` → clean, `uv run python manage.py makemigrations --check` → no changes. LAN acceptance remains pending before final P11 sign-off.
+
 **Why eleventh**
 - staff currently jumps across many Django admin pages to process one family end-to-end
 - all underlying service paths already exist (P5–P8); this is presentation/orchestration only

@@ -19,11 +19,15 @@ This is slow, error-prone, and makes statuses hard to read at a glance. Staff ca
 - One page per family (Guardian) that shows the full current state across all lanes:
   applications, agreements, membership, billing/invoices.
 - Staff can complete the most common workflow actions from that single page without navigating
-  to deep admin change pages.
+  to deep admin change pages, including choosing the agreement billing plan before signing.
 - Statuses are translated from raw model states into clear icon + badge + next-action cues,
   so staff understand where each lane stands in under ~30 seconds.
 - The action queue (what needs attention across all families) is the primary entry point;
-  the per-family hub is the drill-down.
+  the per-family hub is the drill-down. The Guardian/parent changelist also shows the next
+  missing action and sorts action-needed families first by default.
+- The hub and the family/admin member controls expose kit-size as a single canonical value
+  (`Formas izmērs`). The legacy `Šortu izmērs` field is hidden in hub surfaces and never
+  rendered here — the shirt field is the only kit-size staff value.
 - No new business logic in the first slice. Every action reuses an existing service path.
 
 ## 3. Non-goals (first milestone)
@@ -226,11 +230,13 @@ P11 is complete when all of the following are true:
 
 1. Staff can open one Guardian/family and see the full current state across application,
    agreement, membership, and billing lanes on one page.
-2. Staff can complete the normal workflow (approve application → send agreement → mark
-   signed → confirm billing → push invoices) from the hub without navigating to deep
-   admin change pages.
+2. Staff can complete the normal workflow (approve application → send agreement → choose
+   billing plan/month → mark signed → confirm billing → push invoices) from the hub without
+   navigating to deep admin change pages.
 3. The action-needed queue shows all families with pending actions, ordered by urgency.
 4. Statuses are rendered as icon + badge + next-action label, not raw model state strings.
+   The Guardian changelist has a dedicated next-action column and orders action-needed
+   families first by default.
 5. Agreement void and membership discontinuation are clearly separate actions in separate
    lanes.
 6. Billing is shown as one unified "Norēķini un rēķini" block grouped by child + season,
@@ -238,14 +244,19 @@ P11 is complete when all of the following are true:
 7. LAN acceptance proves staff can understand a family's status and complete the normal
    workflow in under ~30 seconds.
 8. All hub actions reuse existing service paths — no new business logic.
-9. Tests cover:
-   - queue ordering and filtering
-   - hub page renders all lanes for a family
-   - each hub action triggers the correct existing service
-   - agreement void does not discontinue membership
-   - membership discontinuation does not void agreement
-   - billing block groups by child + season correctly
-   - permission checks (staff-only)
+9. Kit-size is shown in the hub as a single canonical `Formas izmērs` value (per child).
+   The legacy shorts field, the label `Šortu izmērs`, and the column `member_kit_size_shorts`
+   are never rendered on hub surfaces — only the shirt/canonical field is.
+10. Tests cover:
+    - queue ordering and filtering
+    - hub page renders all lanes for a family
+    - each hub action triggers the correct existing service
+    - agreement void does not discontinue membership
+    - membership discontinuation does not void agreement
+    - billing block groups by child + season correctly
+    - permission checks (staff-only)
+    - kit-size admin display: hub shows `Formas izmērs` label and the canonical shirt value,
+      and never shows `Šortu izmērs` or `member_kit_size_shorts` in rendered HTML
 
 ## 12. Tests and documentation scope
 
@@ -258,6 +269,11 @@ P11 is complete when all of the following are true:
 - New test file: `tests/admin_hub/test_billing_block.py` — grouping, expandable rows,
   error badges.
 - Operator guide update: `docs/admin-hub.md` — how staff uses the hub, what each lane
-  means, what actions are available, what requires deep admin pages.
+  means, what actions are available, what requires deep admin pages. The guide must call
+  out the kit-size rule: `Formas izmērs` is the only canonical value, shorts values are
+  legacy and hidden in the hub.
+- New test: kit-size admin display coverage under `tests/admin_hub/test_family_hub_page.py`
+  (or its successor) — assert the rendered hub contains `Formas izmērs` and the selected
+  shirt label, and does not contain `Šortu izmērs` or `member_kit_size_shorts`.
 - No changes to parent-facing surfaces.
 - No changes to existing admin change pages (they remain for deep edits).

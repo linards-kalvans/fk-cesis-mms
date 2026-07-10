@@ -40,6 +40,13 @@ class SubmissionResult:
     external_state: str  # "pending" | "completed" | "archived"
 
 
+@dataclass(frozen=True)
+class DocumentResult:
+    filename: str
+    url: str
+    content_type: str
+
+
 def _stub_create(agreement) -> SubmissionResult:
     return SubmissionResult(
         external_id=f"stub-{agreement.id}",
@@ -54,6 +61,16 @@ def _stub_sync(external_id: str) -> SubmissionResult:
         external_url=f"https://stub.invalid/{external_id}",
         external_state="completed",
     )
+
+
+def _stub_documents(external_id: str) -> list[DocumentResult]:
+    return [
+        DocumentResult(
+            filename=f"agreement-{external_id}.pdf",
+            url=f"https://stub.invalid/{external_id}/agreement.pdf",
+            content_type="application/pdf",
+        )
+    ]
 
 
 def _mode() -> str:
@@ -101,3 +118,14 @@ def verify_webhook_signature(raw_body: bytes, signature_header: str) -> bool:
     from apps.integrations import docuseal
 
     return docuseal.verify_webhook_signature(raw_body, signature_header)
+
+
+def list_submission_documents(external_id: str) -> list[DocumentResult]:
+    mode = _mode()
+    if mode == "stub":
+        return _stub_documents(external_id)
+    if mode == "docuseal":
+        from apps.integrations import docuseal
+
+        return docuseal.list_submission_documents(external_id)
+    raise AgreementPlatformConfigError(f"unknown agreement provider mode: {mode}")

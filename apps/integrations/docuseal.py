@@ -19,6 +19,7 @@ from apps.integrations.agreement_platform import (
     AgreementPlatformConfigError,
     AgreementPlatformNotFoundError,
     AgreementPlatformTransientError,
+    DocumentResult,
     SubmissionResult,
 )
 
@@ -56,19 +57,25 @@ def _build_submitter(agreement) -> dict:
 def _build_field_payload(agreement) -> dict:
     # agreement_date is intentionally omitted: the DocuSeal template
     # auto-fills the current date on that field, so we must not send it.
+    if not agreement.agreement_number:
+        raise AgreementPlatformConfigError("agreement number is missing")
     member = agreement.member
     guardian = member.guardian
+    application = getattr(member, "source_application", None)
+    child_address = getattr(application, "member_actual_address", "")
     return {
+        "agreement_number": agreement.agreement_number,
         "child_name": member.full_name,
         "child_personal_id": member.personal_id,
         "child_birth_date": (
-            member.birth_date.isoformat() if member.birth_date else ""
+            member.birth_date.strftime("%d.%m.%Y") if member.birth_date else ""
         ),
+        "child_address": child_address,
         "guardian_name": guardian.full_name,
         "guardian_personal_id": guardian.personal_id,
         "guardian_address": guardian.address,
-        "email": guardian.email,
-        "phone": guardian.phone,
+        "guardian_email": guardian.email,
+        "guardian_phone": guardian.phone,
     }
 
 
@@ -154,6 +161,34 @@ def sync_submission(external_id: str) -> SubmissionResult:
 def archive_submission(external_id: str) -> None:
     api_url, api_key, _ = _require_config()
     _request("DELETE", f"{api_url}/submissions/{external_id}", api_key)
+
+
+def list_submission_documents(external_id: str) -> list[DocumentResult]:
+    api_url, api_key, _ = _require_config()
+    resp = _request(
+        "GET", f"{api_url}/submissions/{external_id}/documents", api_key
+    )
+    payload = resp.json()
+    if not isinstance(payload, dict):
+        return []
+    raw_docs = payload.get("documents")
+    if not isinstance(raw_docs, list):
+        return []
+    results: list[DocumentResult] = []
+    for item in raw_docs:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        if not url:
+            continue
+        results.append(
+            DocumentResult(
+                filename=str(item.get("filename", "")),
+                url=url,
+                content_type=str(item.get("content_type", "")),
+            )
+        )
+    return results
 
 
 _WEBHOOK_TOLERANCE_SECONDS = 300

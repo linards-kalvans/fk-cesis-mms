@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import cast
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -28,6 +29,69 @@ def get_current_agreement(member: Member) -> Agreement | None:
     )
 
 
+_MAX_NUMBER_ATTEMPTS = 5
+
+
+def _agreement_number_prefix() -> str:
+    prefix = str(getattr(settings, "AGREEMENT_NUMBER_PREFIX", "FKC") or "FKC").strip()
+    return prefix or "FKC"
+
+
+def _local_year_bounds(year: int) -> tuple[datetime, datetime]:
+    tz = timezone.get_current_timezone()
+    start = timezone.make_aware(datetime(year, 1, 1), tz)
+    end = timezone.make_aware(datetime(year + 1, 1, 1), tz)
+    return start, end
+
+
+def _next_agreement_sequence_for_year(year: int) -> int:
+    """Return the next free sequence number for ``year`` (1-based).
+
+    Scans all non-null ``agreement_number`` values whose ``generated_at``
+    falls in the local-year window and returns ``max(sequence) + 1``. Numbers
+    that do not end in a parseable integer are ignored (backfilled / legacy
+    rows are never allowed to poison the next-sequence calculation)."""
+    start, end = _local_year_bounds(year)
+    numbers = Agreement.objects.filter(
+        generated_at__gte=start,
+        generated_at__lt=end,
+        agreement_number__isnull=False,
+    ).values_list("agreement_number", flat=True)
+    max_sequence = 0
+    for number in numbers:
+        try:
+            sequence = int(str(number).rsplit("-", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        max_sequence = max(max_sequence, sequence)
+    return max_sequence + 1
+
+
+def _assign_agreement_number(agreement: Agreement) -> Agreement:
+    """Allocate and persist a unique ``agreement_number`` for ``agreement``.
+
+    The save runs inside a nested ``transaction.atomic()`` so a uniqueness
+    collision (parallel worker stole the number) only rolls back the nested
+    save, not the caller's transaction. Up to ``_MAX_NUMBER_ATTEMPTS``
+    retries on ``IntegrityError``; if every attempt collides, surface a final
+    ``IntegrityError`` (the underlying constraint, not a wrapped exception)."""
+    if agreement.agreement_number:
+        return agreement
+    year = timezone.localtime(agreement.generated_at).year
+    prefix = _agreement_number_prefix()
+    for _attempt in range(_MAX_NUMBER_ATTEMPTS):
+        sequence = _next_agreement_sequence_for_year(year)
+        agreement.agreement_number = f"{prefix}-{year}-{sequence:03d}"
+        try:
+            with transaction.atomic():
+                agreement.save(update_fields=["agreement_number"])
+        except IntegrityError:
+            agreement.agreement_number = None
+            continue
+        return agreement
+    raise IntegrityError("could not allocate unique agreement number")
+
+
 def create_agreement_for_member(
     member: Member,
     signing_path: str,
@@ -40,7 +104,12 @@ def create_agreement_for_member(
     the corresponding first billing month (cutoff-day derived). Staff can
     override either field via the admin ``set_billing_setup`` action before
     signing. ``mark_agreement_signed`` raises if ``billing_plan`` is missing.
-    """
+
+    The fresh-create path runs inside ``transaction.atomic()`` and snapshots
+    ``timezone.now()`` exactly once, so the year used for the agreement
+    number allocation matches the row's ``generated_at`` (a single
+    ``now()`` round-trip; monkeypatched in tests via
+    ``apps.agreements.services.timezone.now``)."""
     current = get_current_agreement(member)
     if current is not None and current.state != Agreement.State.VOID:
         return current
@@ -59,16 +128,16 @@ def create_agreement_for_member(
     first_billing_month = (
         derive_first_billing_month(default_plan) if default_plan is not None else ""
     )
-    return cast(
-        "Agreement",
-        Agreement.objects.create(
+    with transaction.atomic():
+        agreement = Agreement.objects.create(
             member=member,
             signing_path=signing_path,
             generated_at=timezone.now(),
             billing_plan=default_plan,
             first_billing_month=first_billing_month,
-        ),
-    )
+        )
+        _assign_agreement_number(agreement)
+    return cast(Agreement, agreement)
 
 
 def mark_agreement_sent(
@@ -347,6 +416,7 @@ def start_material_amendment(
             billing_plan=agreement.billing_plan,
             first_billing_month=agreement.first_billing_month,
         )
+        _assign_agreement_number(new_agreement)
 
     record_audit_event(
         action=str(AuditEvent.Action.AGREEMENT_MATERIAL_AMENDMENT_STARTED),
