@@ -93,6 +93,49 @@
 {% include "parent_ui/includes/empty_state.html" with title="Nav pieteikumu" body="Jums vēl nav neviena pieteikuma." cta_url=new_application_url cta_label="Sākt jaunu reģistrāciju" analytics_impression="portal_empty_state_shown" analytics_cta_event="cta_new_application" analytics_page_area="portal" analytics_event_source="empty_state" analytics_error_kind="empty_state" %}
 {% endif %}
 
+<div class="fk-section-head">
+  <h2>Mani rēķini</h2>
+</div>
+
+{% if invoice_groups %}
+<section class="fk-invoice-groups">
+  {% for group in invoice_groups %}
+  <article class="fk-invoice-card">
+    <header class="fk-invoice-head">
+      <h3 class="fk-invoice-name">{{ group.member_name }}</h3>
+      <div class="fk-invoice-meta">
+        <span>Sezona: {{ group.season }}</span>
+        <span>Kopā: {{ group.final_amount }} {{ group.currency }}</span>
+      </div>
+    </header>
+    <ul class="fk-invoice-list">
+      {% for row in group.rows %}
+      <li class="fk-invoice-row">
+        <div class="fk-invoice-cell fk-invoice-cell--seq"><strong>#{{ row.sequence }}</strong></div>
+        <div class="fk-invoice-cell fk-invoice-cell--date">{{ row.due_date }}</div>
+        <div class="fk-invoice-cell fk-invoice-cell--amount">{{ row.amount }} {{ group.currency }}</div>
+        <div class="fk-invoice-cell fk-invoice-cell--sent">{{ row.sent_status }}</div>
+        <div class="fk-invoice-cell fk-invoice-cell--status">{{ row.payment_status }}</div>
+        <div class="fk-invoice-cell fk-invoice-cell--sync">
+          {% if row.last_synced_at %}{{ row.last_synced_at|date:"d.m.Y H:i" }}{% else %}Vēl nav sinhronizēts{% endif %}
+        </div>
+        <div class="fk-invoice-cell fk-invoice-cell--open">
+          {% if row.open_url %}
+            <a class="fk-button fk-button--secondary fk-button--small" href="{{ row.open_url }}">Atvērt rēķinu</a>
+          {% else %}
+            <span class="fk-invoice-muted">Saite būs pieejama pēc maksājuma sinhronizācijas.</span>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</section>
+{% else %}
+{% include "parent_ui/includes/empty_state.html" with title="Nav rēķinu" body="Šobrīd nav izsūtītu rēķinu." %}
+{% endif %}
+
 <div class="fk-helper-card">
   <div class="fk-helper-copy">
     <div class="fk-helper-icon">ⓘ</div>

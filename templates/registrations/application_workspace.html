@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded',function(){
       {% for bound_field in bound_fields %}
         <p><strong>{{ bound_field.label }}:</strong>
           {% if section_name == "member" and bound_field.name == "member_birth_date" %}
-            {{ application.member_birth_date|date:"Y-m-d" }}
+            {{ application.member_birth_date|date:"d.m.Y" }}
           {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
             {{ bound_field.value|yesno:"Jā,Nē" }}
           {% elif bound_field.name == "guardian_email" %}

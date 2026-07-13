@@ -97,7 +97,7 @@ class TestSubmitRegistrationView:
         app = draft_with_documents
         resp = verified_client.post(
             f"/applications/{app.pk}/submit/",
-            data=submit_payload,
+            data={**submit_payload, "member_birth_date": "01.01.2025"},
         )
         # Successful submit redirects to parent portal
         assert resp.status_code == 302
@@ -463,6 +463,7 @@ class TestFixRequestedDraftSavePreservesStatus:
                 "guardian_full_name": "Updated Guardian",
                 "guardian_email": parent_account.email,
                 "member_kit_size_shirt": app.member_kit_size_shirt_id,
+                "member_birth_date": "01.01.2025",
                 "submit_action": "save_draft",
             },
         )

@@ -28,4 +28,10 @@ urlpatterns = [
         name="document-ocr-status",
     ),
     path("portal/", views.parent_portal, name="parent-portal"),
+    # P12: ownership-scoped proxy redirect to a stored Invoice Ninja invoice URL.
+    path(
+        "portal/invoices/<int:invoice_id>/open/",
+        views.open_parent_invoice,
+        name="parent-invoice-open",
+    ),
 ]

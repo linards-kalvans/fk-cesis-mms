@@ -36,8 +36,8 @@ This is slow, error-prone, and makes statuses hard to read at a glance. Staff ca
 - No inline editing of parent/member/application fields (deep edits stay on existing admin
   change pages).
 - No parent-facing invoice visibility (that is P12).
-- No custom invoice creation (that is P13).
-- No coach portal, attendance, calendar, or WhatsApp (that is P14 / P15).
+- No custom invoice creation (that is P14).
+- No coach portal, attendance, calendar, or WhatsApp (that is P15 / P16).
 - No SPA or API rewrite. The hub is a server-rendered page inside the Django admin shell.
 
 ## 4. Proposed UX

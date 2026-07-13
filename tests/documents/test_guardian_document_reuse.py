@@ -117,7 +117,7 @@ class TestGuardianReuseFieldSources:
                 "guardian_declared_address": "Riga 2",
                 "member_full_name": "New Child",
                 "member_personal_id": "010125-22222",
-                "member_birth_date": "2025-06-01",
+                "member_birth_date": "01.06.2025",
             },
             follow=False,
         )
@@ -157,7 +157,7 @@ class TestGuardianReuseFieldSources:
                 "guardian_declared_address": "Riga 3",
                 "member_full_name": "NoReuse Child",
                 "member_personal_id": "010125-23232",
-                "member_birth_date": "2025-06-01",
+                "member_birth_date": "01.06.2025",
             },
             follow=False,
         )
@@ -214,7 +214,7 @@ class TestGuardianReuseOcrFieldSources:
                 "guardian_declared_address": "Riga 4",
                 "member_full_name": "OCR Fields Child",
                 "member_personal_id": "010125-24242",
-                "member_birth_date": "2025-06-01",
+                "member_birth_date": "01.06.2025",
             },
             follow=False,
         )
@@ -254,7 +254,7 @@ class TestGuardianReuseOcrFieldSources:
                 "guardian_declared_address": "Riga 23",
                 "member_full_name": "Reuse Submit Child",
                 "member_personal_id": "010125-23232",
-                "member_birth_date": "2025-06-01",
+                "member_birth_date": "01.06.2025",
             },
             follow=False,
         )
@@ -271,7 +271,7 @@ class TestGuardianReuseOcrFieldSources:
                 "guardian_declared_address": "Riga 23",
                 "member_full_name": "Reuse Submit Child",
                 "member_personal_id": "010125-23232",
-                "member_birth_date": "2025-06-01",
+                "member_birth_date": "01.06.2025",
                 "member_same_address_as_guardian": True,
                 "member_kit_size_shirt": kit["shirt"].pk,
                 "member_kit_size_shorts": kit["shorts"].pk,

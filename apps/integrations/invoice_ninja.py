@@ -296,12 +296,39 @@ def _latest_payment_date(data: dict) -> datetime.date | None:
     return datetime.date.fromisoformat(max(dates))
 
 
+# P12: known safe parent-facing URL fields Invoice Ninja returns on an
+# invoice. We accept any of these; everything else is ignored to avoid
+# synthesizing URLs that may not be parent-safe.
+_INVOICE_EXTERNAL_URL_KEYS = ("public_url", "invoice_url", "payment_url", "client_url")
+
+
+def _invoice_external_url(data: dict) -> str:
+    """Return a parent-safe invoice URL from known fields, or empty string.
+
+    Never synthesizes URLs from base URL + id. Only accepts string values
+    starting with http:// or https://.
+    """
+    for key in _INVOICE_EXTERNAL_URL_KEYS:
+        value = data.get(key)
+        if isinstance(value, str) and value.startswith(("https://", "http://")):
+            return value
+    for invitation in data.get("invitations") or []:
+        if not isinstance(invitation, dict):
+            continue
+        value = invitation.get("link")
+        if isinstance(value, str) and value.startswith(("https://", "http://")):
+            return value
+    return ""
+
+
 def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
     api_url, api_key = _require_config()
-    # ?include=payments embeds the payment records so we can read the latest
-    # payment date — Invoice Ninja does not embed them on the invoice by default.
+    # ?include embeds payment records and invitation links; Invoice Ninja does
+    # not embed them on the invoice by default.
     resp = _request(
-        "GET", f"{api_url}/invoices/{external_invoice_id}?include=payments", api_key
+        "GET",
+        f"{api_url}/invoices/{external_invoice_id}?include=payments,invitations",
+        api_key,
     )
     if resp.status_code >= 400:
         raise InvoicePlatformConfigError(
@@ -318,6 +345,7 @@ def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
         paid_to_date=paid,
         balance=balance,
         last_payment_date=_latest_payment_date(data),
+        external_url=_invoice_external_url(data),
     )
 
 

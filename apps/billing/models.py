@@ -192,6 +192,10 @@ class BillingInvoice(TimeStampedModel):
     external_invoice_id = models.CharField(max_length=64, blank=True, default="")
     external_status = models.CharField(max_length=16, blank=True, default="")
     external_error_code = models.CharField(max_length=64, blank=True, default="")
+    # P12: parent-safe invoice URL. Filled only by payment sync (never
+    # synthesized from base URL + id). Empty when the provider response does
+    # not carry a known safe URL field.
+    external_url = models.URLField(blank=True, default="")
     payment_status = models.CharField(
         max_length=16, choices=PaymentStatus.choices, blank=True, default=""
     )

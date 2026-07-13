@@ -315,7 +315,7 @@ class TestEditableWorkspaceActions:
                 "guardian_declared_address": "Riga 2",
                 "member_full_name": "Updated Child",
                 "member_personal_id": "010125-54321",
-                "member_birth_date": "2025-01-01",
+                "member_birth_date": "01.01.2025",
                 "preferred_agreement_signing": "paper",
                 "submit_action": "save_draft",
             },

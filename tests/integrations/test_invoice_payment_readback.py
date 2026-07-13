@@ -125,3 +125,64 @@ def test_readback_timeout_maps_to_transient():
     with patch("apps.integrations.invoice_ninja.requests.request", side_effect=requests.Timeout("t")):
         with pytest.raises(InvoicePlatformTransientError):
             invoice_ninja.fetch_invoice_payment("inv-6")
+
+
+# -- P12: external_url on PaymentResult --
+
+
+def test_stub_mode_returns_external_url():
+    """Stub fetch_invoice_payment returns a deterministic external URL."""
+    from apps.integrations import invoice_platform
+
+    result = invoice_platform.fetch_invoice_payment("inv-123")
+    assert result.external_url == "https://stub.invalid/invoices/inv-123"
+
+
+@override_settings(**INVOICE_NINJA)
+def test_invoice_ninja_public_url_maps_to_external_url():
+    """Invoice Ninja provider reads public_url into PaymentResult.external_url."""
+    from apps.integrations import invoice_ninja
+
+    payload = {
+        "id": "inv-7", "status_id": "2", "amount": "30.00",
+        "paid_to_date": "0.00", "balance": "30.00",
+        "public_url": "https://in.example.com/view/abc123",
+    }
+    fake = SimpleNamespace(status_code=200, json=lambda: {"data": payload}, text="")
+    with patch("apps.integrations.invoice_ninja.requests.request", return_value=fake):
+        result = invoice_ninja.fetch_invoice_payment("inv-7")
+    assert result.external_url == "https://in.example.com/view/abc123"
+
+
+@override_settings(**INVOICE_NINJA)
+def test_invoice_ninja_invitation_link_maps_to_external_url():
+    """Invoice Ninja provider reads invitations[].link into PaymentResult.external_url."""
+    from apps.integrations import invoice_ninja
+
+    payload = {
+        "id": "inv-8", "status_id": "2", "amount": "30.00",
+        "paid_to_date": "0.00", "balance": "30.00",
+        "invitations": [
+            {"link": "https://in.example.com/client/invoice/token-123"},
+        ],
+    }
+    fake = SimpleNamespace(status_code=200, json=lambda: {"data": payload}, text="")
+    with patch("apps.integrations.invoice_ninja.requests.request", return_value=fake):
+        result = invoice_ninja.fetch_invoice_payment("inv-8")
+    assert result.external_url == "https://in.example.com/client/invoice/token-123"
+
+
+@override_settings(**INVOICE_NINJA)
+def test_invoice_ninja_missing_url_fields_returns_empty_external_url():
+    """Invoice Ninja provider must not guess a URL when none is present."""
+    from apps.integrations import invoice_ninja
+
+    payload = {
+        "id": "inv-9", "status_id": "2", "amount": "30.00",
+        "paid_to_date": "0.00", "balance": "30.00",
+        "invitations": [{"link": "not-a-url"}],
+    }
+    fake = SimpleNamespace(status_code=200, json=lambda: {"data": payload}, text="")
+    with patch("apps.integrations.invoice_ninja.requests.request", return_value=fake):
+        result = invoice_ninja.fetch_invoice_payment("inv-9")
+    assert result.external_url == ""

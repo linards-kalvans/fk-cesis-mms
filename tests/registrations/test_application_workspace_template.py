@@ -398,3 +398,37 @@ class TestSliceDViewContext:
             assert bound_fields[kind].name.endswith("_document"), (
                 f"Bound field for {kind} should be the *_document FileField."
             )
+
+
+# ---------------------------------------------------------------------------
+# Date format — Latvian DD.MM.GGGG
+# ---------------------------------------------------------------------------
+
+
+def test_member_birth_date_renders_latvian_placeholder_and_hint():
+    client = Client()
+    account, app = _make_draft("date-placeholder@example.com")
+    _login(client, account)
+
+    response = client.get(f"/applications/{app.pk}/")
+    assert response.status_code == 200
+    html = response.content.decode()
+    tag = _find_input_tag(html, "member_birth_date")
+    assert _attr_value(tag, "placeholder") == "DD.MM.GGGG"
+    assert _attr_value(tag, "type") != "date"
+    assert "Ievadiet datumu formātā DD.MM.GGGG" in html
+
+
+def test_read_only_member_birth_date_uses_latvian_dot_format():
+    client = Client()
+    account, app = _make_draft("date-readonly@example.com")
+    app.status = RegistrationApplication.Status.SUBMITTED
+    app.submitted_at = timezone.now()
+    app.save(update_fields=["status", "submitted_at", "updated_at"])
+    _login(client, account)
+
+    response = client.get(f"/applications/{app.pk}/")
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "01.01.2025" in html
+    assert "2025-01-01" not in html

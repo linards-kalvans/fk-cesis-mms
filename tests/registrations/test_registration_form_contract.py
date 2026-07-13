@@ -18,6 +18,7 @@ P2 Task 3 additions:
 """
 
 import pytest
+from datetime import date
 
 from apps.accounts.models import ParentAccount
 
@@ -1075,3 +1076,40 @@ class TestFormFieldDefaults:
             form["preferred_payment_mode"].value()
             == RegistrationApplication.PaymentMode.INSTALLMENTS
         )
+
+
+# ===========================================================================
+# 16. Date format — Latvian DD.MM.GGGG instead of native type="date"
+# ===========================================================================
+
+
+class TestRegistrationFormContract:
+    """member_birth_date must accept DD.MM.GGGG and reject invalid Latvian dates."""
+
+    def test_member_birth_date_accepts_latvian_dot_format(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "date-format@example.com",
+                "member_birth_date": "01.02.2025",
+            },
+            is_submit=False,
+        )
+
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["member_birth_date"] == date(2025, 2, 1)
+
+    def test_member_birth_date_rejects_invalid_latvian_dot_format(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={
+                "guardian_email": "date-format-bad@example.com",
+                "member_birth_date": "32.02.2025",
+            },
+            is_submit=False,
+        )
+
+        assert not form.is_valid()
+        assert form.errors["member_birth_date"] == ["Ievadiet derīgu datumu."]

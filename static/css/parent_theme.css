@@ -1294,3 +1294,77 @@ h1, h2, h3 {
   color: var(--fk-muted);
   font-size: 0.9em;
 }
+
+/* ── Parent portal invoice section (P12) ── */
+
+.fk-invoice-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.fk-invoice-card {
+  background: var(--fk-white);
+  border: 1px solid var(--fk-border);
+  border-radius: var(--fk-radius-lg);
+  padding: 20px;
+  box-shadow: var(--fk-shadow-soft);
+}
+
+.fk-invoice-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fk-invoice-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fk-text);
+  margin: 0;
+}
+
+.fk-invoice-meta {
+  color: var(--fk-muted);
+  font-size: 14px;
+}
+
+.fk-invoice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.fk-invoice-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1fr 0.8fr 0.8fr 1fr 1.2fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--fk-border);
+}
+
+.fk-invoice-cell {
+  font-size: 14px;
+  color: var(--fk-text);
+}
+
+.fk-invoice-muted {
+  color: var(--fk-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .fk-invoice-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .fk-invoice-row .fk-invoice-cell {
+    padding: 2px 0;
+  }
+}

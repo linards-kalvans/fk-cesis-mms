@@ -64,8 +64,10 @@ class RegistrationApplicationForm(forms.Form):
     member_birth_date = forms.DateField(
         required=False,
         label="Bērna dzimšanas datums",
+        help_text="Ievadiet datumu formātā DD.MM.GGGG",
+        input_formats=["%d.%m.%Y"],
         error_messages={"invalid": "Ievadiet derīgu datumu."},
-        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+        widget=forms.DateInput(attrs={"placeholder": "DD.MM.GGGG"}, format="%d.%m.%Y"),
     )
     member_actual_address = forms.CharField(max_length=255, required=False, label="Bērna faktiskā adrese")
     member_same_address_as_guardian = forms.BooleanField(required=False, label="Adrese tāda pati kā vecāka")

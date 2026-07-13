@@ -606,16 +606,21 @@ def _sync_invoice_payment(billing_invoice) -> None:
     billing_invoice.balance = result.balance
     billing_invoice.last_payment_date = result.last_payment_date
     billing_invoice.last_synced_at = timezone.now()
-    billing_invoice.save(
-        update_fields=[
-            "payment_status",
-            "paid_to_date",
-            "balance",
-            "last_payment_date",
-            "last_synced_at",
-            "updated_at",
-        ]
-    )
+    update_fields = [
+        "payment_status",
+        "paid_to_date",
+        "balance",
+        "last_payment_date",
+        "last_synced_at",
+        "updated_at",
+    ]
+    # P12: save the provider-supplied URL only when non-empty. An empty
+    # result preserves the previously-stored URL so a transient missing-field
+    # response never wipes a valid one.
+    if result.external_url:
+        billing_invoice.external_url = result.external_url
+        update_fields.append("external_url")
+    billing_invoice.save(update_fields=update_fields)
 
 
 def sync_billing_payments() -> None:
