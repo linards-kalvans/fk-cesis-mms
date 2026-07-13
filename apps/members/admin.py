@@ -52,6 +52,7 @@ from apps.members.family_hub import (
     build_family_queue_rows,
 )
 from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
+from apps.members.services import assign_training_group
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.services import (
     approve_application,
@@ -426,6 +427,21 @@ class GuardianAdmin(admin.ModelAdmin):
             )
             return
         self.message_user(request, "Pieteikums noraidīts.")
+
+    def _family_hub_handle_assign_training_group(self, request, guardian):
+        member = self._get_guardian_member(
+            guardian, request.POST.get("member_id", "")
+        )
+        group = self._resolve_training_group(
+            request, request.POST.get("training_group", "")
+        )
+        if group is None:
+            self.message_user(
+                request, "Lūdzu izvēlieties treniņu grupu.", level=messages.ERROR
+            )
+            return
+        assign_training_group(member, group, request.user)
+        self.message_user(request, "Treniņu grupa piešķirta.")
 
     def _family_hub_handle_mark_agreement_sent(self, request, guardian):
         agreement = self._get_guardian_agreement(

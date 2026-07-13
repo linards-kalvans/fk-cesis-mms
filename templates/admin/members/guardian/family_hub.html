@@ -181,6 +181,21 @@
   <h3>Dalība</h3>
   <p>{% include "admin/members/guardian/_lane_status.html" with status=child.membership_status %}</p>
   <p>Formas izmērs: <strong>{{ child.kit_size_label }}</strong></p>
+  {% if child.member and not child.member.training_group_id %}
+    <form method="post" action="{{ action_url }}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="assign_training_group">
+      <input type="hidden" name="member_id" value="{{ child.member.pk }}">
+      <label for="hub_member_group_{{ child.member.pk }}">Treniņu grupa:</label>
+      <select name="training_group" id="hub_member_group_{{ child.member.pk }}" required>
+        <option value="">— Izvēlieties grupu —</option>
+        {% for grp in hub.active_training_groups %}
+          <option value="{{ grp.pk }}">{{ grp.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Piešķirt grupu</button>
+    </form>
+  {% endif %}
   {% if child.member %}
     <p><a href="{{ child.deep_links.member }}">Atvērt detalizēti biedru →</a></p>
   {% endif %}

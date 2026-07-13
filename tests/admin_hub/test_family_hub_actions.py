@@ -455,3 +455,56 @@ def test_docuseal_document_endpoint_redirects_back_when_no_documents(
     assert response.status_code == 200
     messages = [m.message for m in response.context["messages"]]
     assert any("DocuSeal dokuments nav atrasts" in msg for msg in messages)
+
+
+def test_assign_training_group_from_hub(
+    staff_client, approved_application,
+):
+    """POSTing assign_training_group sets the member's training_group."""
+    from apps.members.models import TrainingGroup
+
+    group = TrainingGroup.objects.create(name="U10 A", is_active=True)
+    member = approved_application.approved_member
+    member.training_group = None
+    member.save(update_fields=["training_group"])
+
+    guardian = approved_application.guardian
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "assign_training_group",
+            "member_id": member.pk,
+            "training_group": group.pk,
+        },
+    )
+    assert response.status_code == 302
+
+    member.refresh_from_db()
+    assert member.training_group_id == group.pk
+
+
+def test_assign_training_group_rejects_cross_family_member(
+    staff_client, approved_application,
+):
+    """Assigning a training group to another guardian's member must 404."""
+    from apps.accounts.models import ParentAccount
+    from apps.members.models import Member, TrainingGroup
+    from tests.support import make_guardian as _make_guardian
+
+    group = TrainingGroup.objects.create(name="U10 A", is_active=True)
+    other_account = ParentAccount.objects.create(email="cross-family-group@example.com")
+    other_guardian = _make_guardian(account=other_account, full_name="Other Parent")
+    other_member = Member.objects.create(
+        full_name="Other Child", guardian=other_guardian,
+    )
+
+    guardian = approved_application.guardian
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "assign_training_group",
+            "member_id": other_member.pk,
+            "training_group": group.pk,
+        },
+    )
+    assert response.status_code == 404

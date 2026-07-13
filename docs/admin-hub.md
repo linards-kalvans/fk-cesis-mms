@@ -115,6 +115,15 @@ shirt value is the only kit-size staff see or set in this flow.
 If you need to change a kit size, edit the RegistrationApplication on its deep admin
 change page (the child may not yet be a Member). The hub re-reads on the next request.
 
+## Treniņu grupa (training group)
+
+In **Dalība**, an active member without a training group shows an inline **Treniņu grupa**
+dropdown and **Piešķirt grupu** button. The dropdown lists the active groups from
+`TrainingGroup.objects.filter(is_active=True)`. POST goes through
+`action=assign_training_group` and reuses the existing `assign_training_group` service
+(plus the `TRAINING_GROUP_ASSIGNED` audit hook). To reassign or clear a group, use
+the deep admin Member change page — the hub exposes only the empty-group case.
+
 ## What still needs deep admin pages
 
 The hub is for triage and the routine workflow. Deep edits stay on the existing

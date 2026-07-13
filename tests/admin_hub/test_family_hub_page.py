@@ -248,3 +248,45 @@ def test_hub_hides_docuseal_pdf_link_without_external_id(
     html = response.content.decode()
 
     assert "Lejupielādēt līguma PDF no DocuSeal" not in html
+
+
+def _make_group(name="U10 A"):
+    from apps.members.models import TrainingGroup
+    return TrainingGroup.objects.create(name=name, is_active=True)
+
+
+def test_hub_shows_inline_group_assignment_for_member_without_group(
+    staff_client, approved_application,
+):
+    """Member without training_group must show inline assign form with
+    dropdown of active groups and a submit button."""
+    group = _make_group()
+    member = approved_application.approved_member
+    member.training_group = None
+    member.save(update_fields=["training_group"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert 'value="assign_training_group"' in html
+    assert f'value="{member.pk}"' in html
+    assert 'name="training_group"' in html
+    assert "Piešķirt grupu" in html
+    assert group.name in html
+
+
+def test_hub_hides_inline_group_assignment_for_member_with_group(
+    staff_client, approved_application,
+):
+    """Member already assigned to a group must NOT show the inline assign form."""
+    group = _make_group()
+    member = approved_application.approved_member
+    member.training_group = group
+    member.save(update_fields=["training_group"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert 'value="assign_training_group"' not in html
