@@ -36,7 +36,8 @@ class TestRegistrationApplicationFormFields:
     @pytest.mark.parametrize(
         "field_name",
         [
-            "guardian_full_name",
+            "guardian_first_name",
+            "guardian_family_name",
             "guardian_personal_id",
             "guardian_declared_address",
             "guardian_email",
@@ -87,7 +88,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqaddr@example.com",
-                "guardian_full_name": "ReqAddr Guardian",
+                "guardian_first_name": "ReqAddr",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-11111",
                 "guardian_declared_address": "",
                 "guardian_phone": "+37122222222",
@@ -110,7 +112,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqmname@example.com",
-                "guardian_full_name": "ReqMName Guardian",
+                "guardian_first_name": "ReqMName",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-22222",
                 "guardian_declared_address": "Riga 2",
                 "guardian_phone": "+37133333333",
@@ -133,7 +136,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqkit@example.com",
-                "guardian_full_name": "ReqKit Guardian",
+                "guardian_first_name": "ReqKit",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-33333",
                 "guardian_declared_address": "Riga 3",
                 "guardian_phone": "+37144444444",
@@ -156,7 +160,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqagree@example.com",
-                "guardian_full_name": "ReqAgree Guardian",
+                "guardian_first_name": "ReqAgree",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-44444",
                 "guardian_declared_address": "Riga 4",
                 "guardian_phone": "+37155555555",
@@ -179,7 +184,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqpid@example.com",
-                "guardian_full_name": "ReqPID Guardian",
+                "guardian_first_name": "ReqPID",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "",
                 "guardian_declared_address": "Riga 5",
                 "guardian_phone": "+37166666666",
@@ -202,7 +208,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqbd@example.com",
-                "guardian_full_name": "ReqBD Guardian",
+                "guardian_first_name": "ReqBD",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-66666",
                 "guardian_declared_address": "Riga 6",
                 "guardian_phone": "+37177777777",
@@ -226,7 +233,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqgid@example.com",
-                "guardian_full_name": "ReqGID Guardian",
+                "guardian_first_name": "ReqGID",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-88888",
                 "guardian_declared_address": "Riga 8",
                 "guardian_phone": "+37188888888",
@@ -250,7 +258,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqmid@example.com",
-                "guardian_full_name": "ReqMID Guardian",
+                "guardian_first_name": "ReqMID",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-99999",
                 "guardian_declared_address": "Riga 9",
                 "guardian_phone": "+37199999999",
@@ -274,7 +283,8 @@ class TestSubmitRequiredFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reqmp@example.com",
-                "guardian_full_name": "ReqMP Guardian",
+                "guardian_first_name": "ReqMP",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-10101",
                 "guardian_declared_address": "Riga 10",
                 "guardian_phone": "+37110101010",
@@ -396,7 +406,8 @@ class TestDraftAllowsIncompleteAfterVerified:
         app = create_or_update_draft(
             data={
                 "guardian_email": "draftincomplete@example.com",
-                "guardian_full_name": "",
+                "guardian_first_name": "",
+                "guardian_family_name": "",
                 "guardian_personal_id": "",
                 "guardian_declared_address": "",
                 "guardian_phone": "",
@@ -422,7 +433,8 @@ class TestDraftAllowsIncompleteAfterVerified:
         app = create_or_update_draft(
             data={
                 "guardian_email": "draftkit@example.com",
-                "guardian_full_name": "DraftKit Guardian",
+                "guardian_first_name": "DraftKit",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-70707",
                 "guardian_declared_address": "Riga 7",
                 "guardian_phone": "+37180808080",
@@ -457,7 +469,8 @@ class TestSameAddressToggle:
         app = create_or_update_draft(
             data={
                 "guardian_email": "sameaddr@example.com",
-                "guardian_full_name": "SameAddr Guardian",
+                "guardian_first_name": "SameAddr",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-90909",
                 "guardian_declared_address": "Riga 90, iela 5",
                 "guardian_phone": "+37101010101",
@@ -485,7 +498,8 @@ class TestSameAddressToggle:
         app = create_or_update_draft(
             data={
                 "guardian_email": "diffaddr@example.com",
-                "guardian_full_name": "DiffAddr Guardian",
+                "guardian_first_name": "DiffAddr",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-12121",
                 "guardian_declared_address": "Riga 90, iela 5",
                 "guardian_phone": "+37123232323",
@@ -525,7 +539,8 @@ class TestFieldSources:
         app = create_or_update_draft(
             data={
                 "guardian_email": "srcderived@example.com",
-                "guardian_full_name": "SrcDerived Guardian",
+                "guardian_first_name": "SrcDerived",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-13131",
                 "guardian_declared_address": "Riga 13, iela 3",
                 "guardian_phone": "+37114141414",
@@ -555,7 +570,8 @@ class TestFieldSources:
         app = create_or_update_draft(
             data={
                 "guardian_email": "srcmanual@example.com",
-                "guardian_full_name": "SrcManual Guardian",
+                "guardian_first_name": "SrcManual",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-15151",
                 "guardian_declared_address": "Riga 15, iela 7",
                 "guardian_phone": "+37116161616",
@@ -585,7 +601,8 @@ class TestFieldSources:
         app = create_or_update_draft(
             data={
                 "guardian_email": "srceemail@example.com",
-                "guardian_full_name": "SrcEmail Guardian",
+                "guardian_first_name": "SrcEmail",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-17171",
                 "guardian_declared_address": "Riga 17",
                 "guardian_phone": "+37118181818",
@@ -614,7 +631,7 @@ class TestGroupedFormContract:
     for the canonical workspace template to render grouped sections.
 
     Section order (from Task 3 plan):
-      1. guardian — guardian_full_name, guardian_personal_id, guardian_email,
+      1. guardian — guardian_first_name, guardian_family_name, guardian_personal_id, guardian_email,
          guardian_phone, guardian_declared_address
       2. member — member_full_name, member_personal_id, member_birth_date,
          member_actual_address, member_same_address_as_guardian,
@@ -653,8 +670,8 @@ class TestGroupedFormContract:
         )
 
     def test_guardian_section_fields(self):
-        """Guardian section must contain: guardian_full_name, guardian_personal_id,
-        guardian_email, guardian_phone, guardian_declared_address."""
+        """Guardian section must contain: guardian_first_name, guardian_family_name,
+        guardian_personal_id, guardian_email, guardian_phone, guardian_declared_address."""
         from apps.registrations.forms import RegistrationApplicationForm
 
         guardian_fields = [
@@ -662,7 +679,8 @@ class TestGroupedFormContract:
             if name == "guardian"
         ][0]
         expected = (
-            "guardian_full_name",
+            "guardian_first_name",
+            "guardian_family_name",
             "guardian_personal_id",
             "guardian_email",
             "guardian_phone",
@@ -766,7 +784,7 @@ class TestGroupedFormContract:
 
         expected_counts = {
             "documents": 3,
-            "guardian": 5,
+            "guardian": 6,
             "member": 6,
             "agreement": 3,
         }
@@ -814,7 +832,8 @@ class TestErrorSummaryContract:
         form = RegistrationApplicationForm(
             data={
                 "guardian_email": "",  # invalid — empty
-                "guardian_full_name": "Valid Parent",
+                "guardian_first_name": "Valid",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",
@@ -852,7 +871,8 @@ class TestErrorSummaryContract:
         form = RegistrationApplicationForm(
             data={
                 "guardian_email": "",
-                "guardian_full_name": "Valid Parent",
+                "guardian_first_name": "Valid",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",

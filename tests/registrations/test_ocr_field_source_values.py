@@ -78,11 +78,17 @@ class TestOcrFieldSourceValues:
 
         # field_sources must include ocr_guardian_identity for guardian fields
         assert app.field_sources is not None
-        assert app.field_sources.get("guardian_full_name") == "ocr_guardian_identity", (
+        assert app.field_sources.get("guardian_first_name") == "ocr_guardian_identity", (
             "field_sources must include ocr_guardian_identity when OCR succeeds."
+        )
+        assert app.field_sources.get("guardian_family_name") == "ocr_guardian_identity", (
+            "field_sources must include ocr_guardian_identity for guardian_family_name."
         )
         assert app.field_sources.get("guardian_personal_id") == "ocr_guardian_identity", (
             "field_sources must include ocr_guardian_identity for guardian_personal_id."
+        )
+        assert "guardian_full_name" not in (app.field_sources or {}), (
+            "field_sources must NOT contain guardian_full_name after P13."
         )
 
     def test_field_sources_include_ocr_member_identity_when_extraction_exists(
@@ -161,8 +167,14 @@ class TestOcrFieldSourceValues:
 
         # No guardian identity doc uploaded — no OCR
         assert app.field_sources is not None
-        assert app.field_sources.get("guardian_full_name") == "manual_only", (
+        assert app.field_sources.get("guardian_first_name") == "manual_only", (
             "field_sources must be manual_only when no guardian doc uploaded."
+        )
+        assert app.field_sources.get("guardian_family_name") == "manual_only", (
+            "field_sources must be manual_only for guardian_family_name when no guardian doc uploaded."
+        )
+        assert "guardian_full_name" not in (app.field_sources or {}), (
+            "field_sources must NOT contain guardian_full_name after P13."
         )
 
     def test_field_sources_manual_only_when_ocr_failed(
@@ -209,6 +221,9 @@ class TestOcrFieldSourceValues:
 
         # field_sources must NOT include OCR keys when OCR failed
         assert app.field_sources is not None
-        assert app.field_sources.get("guardian_full_name") == "manual_only", (
+        assert app.field_sources.get("guardian_first_name") == "manual_only", (
             "field_sources must be manual_only when OCR fails."
+        )
+        assert "guardian_full_name" not in (app.field_sources or {}), (
+            "field_sources must NOT contain guardian_full_name after P13."
         )

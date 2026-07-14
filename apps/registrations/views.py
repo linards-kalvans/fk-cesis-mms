@@ -301,7 +301,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     else:
         form = RegistrationApplicationForm(
             initial={
-                "guardian_full_name": application.guardian_name,
+                "guardian_first_name": application.guardian_first_name,
+                "guardian_family_name": application.guardian_family_name,
                 "guardian_personal_id": application.guardian_pid,
                 "guardian_email": application.guardian_contact_email,
                 "guardian_phone": application.guardian_contact_phone,
@@ -668,8 +669,10 @@ def _ocr_extracted_fields(document: Document) -> dict[str, str]:
 
     fields: dict[str, str] = {}
     if document.kind == Document.Kind.GUARDIAN_IDENTITY:
-        if full_name:
-            fields["guardian_full_name"] = full_name
+        if first:
+            fields["guardian_first_name"] = first
+        if last:
+            fields["guardian_family_name"] = last
         if pid:
             fields["guardian_personal_id"] = pid
     elif document.kind == Document.Kind.MEMBER_IDENTITY:

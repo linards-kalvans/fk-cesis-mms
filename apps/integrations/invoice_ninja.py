@@ -180,7 +180,13 @@ def ensure_client(guardian) -> ClientResult:
     body = {
         "name": guardian.full_name,
         "custom_value1": str(guardian.pk),
-        "contacts": [{"first_name": guardian.full_name, "email": guardian.email}],
+        "contacts": [
+            {
+                "first_name": guardian.first_name,
+                "last_name": guardian.family_name,
+                "email": guardian.email,
+            }
+        ],
     }
     resp = _request("POST", f"{api_url}/clients", api_key, json=body)
     if resp.status_code >= 400:

@@ -60,7 +60,8 @@ def _create_app_with_guardian_ocr(account: ParentAccount) -> RegistrationApplica
     app = create_or_update_draft(
         data={
             "guardian_email": account.email,
-            "guardian_full_name": "OCR Parent",
+            "guardian_first_name": "OCR",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-11111",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": "Riga 1",
@@ -102,8 +103,10 @@ class TestParentOcrPrefillFieldSources:
 
         # field_sources must reflect OCR source for guardian fields
         assert app.field_sources is not None
-        assert "guardian_full_name" in app.field_sources
+        assert "guardian_first_name" in app.field_sources
+        assert "guardian_family_name" in app.field_sources
         assert "guardian_personal_id" in app.field_sources
+        assert "guardian_full_name" not in app.field_sources
 
     def test_workspace_context_includes_ocr_extractions(self, settings):
         """Workspace view must pass ocr_extractions context with completed extractions."""
@@ -164,7 +167,8 @@ class TestManualFallbackOnOcrFailure:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Fail Parent",
+                "guardian_first_name": "Fail",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-32323",
                 "guardian_phone": "+37120000032",
                 "guardian_declared_address": "Riga 32",
@@ -200,7 +204,8 @@ class TestManualFallbackOnOcrFailure:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Fallback Parent",
+                "guardian_first_name": "Fallback",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37120000033",
                 "guardian_declared_address": "Riga 33",
@@ -250,7 +255,8 @@ class TestManualFallbackOnOcrFailure:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Editable Parent",
+                "guardian_first_name": "Editable",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-34343",
                 "guardian_phone": "+37120000034",
                 "guardian_declared_address": "Riga 34",
@@ -268,7 +274,8 @@ class TestManualFallbackOnOcrFailure:
         resp = client.post(
             f"/applications/{app.pk}/",
             {
-                "guardian_full_name": "Updated After OCR Fail",
+                "guardian_first_name": "Updated After OCR",
+                "guardian_family_name": "Fail",
                 "guardian_personal_id": "010101-34343",
                 "guardian_email": account.email,
                 "guardian_phone": "+37120000034",
@@ -298,16 +305,18 @@ class TestManualFallbackOnOcrFailure:
         app = _create_app_with_guardian_ocr(account)
 
         # Verify initial OCR source
-        assert app.field_sources.get("guardian_full_name") is not None
+        assert app.field_sources.get("guardian_first_name") is not None
+        assert app.field_sources.get("guardian_family_name") is not None
 
         client = Client()
         _login(client, account)
 
-        # Manually update guardian_full_name
+        # Manually update guardian name parts
         resp = client.post(
             f"/applications/{app.pk}/",
             {
-                "guardian_full_name": "Manually Updated Name",
+                "guardian_first_name": "Manually",
+                "guardian_family_name": "Updated Name",
                 "guardian_personal_id": "010101-11111",
                 "guardian_email": account.email,
                 "guardian_phone": "+37120000000",
@@ -323,8 +332,9 @@ class TestManualFallbackOnOcrFailure:
         assert resp.status_code == 302
         app.refresh_from_db()
         assert app.guardian_name == "Manually Updated Name"
-        # field_sources should still have guardian_full_name (updated by save)
-        assert "guardian_full_name" in (app.field_sources or {})
+        # field_sources should still have the name parts (updated by save)
+        assert "guardian_first_name" in (app.field_sources or {})
+        assert "guardian_family_name" in (app.field_sources or {})
 
 
 # ===========================================================================
@@ -401,7 +411,8 @@ class TestSubmittedOcrWorkspaceReadOnly:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Sub OCR Parent",
+                "guardian_first_name": "Sub OCR",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-19191",
                 "guardian_phone": "+37120000039",
                 "guardian_declared_address": "Riga 39",
@@ -478,7 +489,8 @@ class TestOcrFailurePersistence:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "ErrCode Parent",
+                "guardian_first_name": "ErrCode",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-99990",
                 "guardian_phone": "+37129999990",
                 "guardian_declared_address": "Riga 990",
@@ -519,7 +531,8 @@ class TestOcrFailurePersistence:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "NoExtraction Parent",
+                "guardian_first_name": "NoExtraction",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-99992",
                 "guardian_phone": "+37129999992",
                 "guardian_declared_address": "Riga 992",
@@ -559,7 +572,8 @@ class TestOcrFailurePersistence:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Portrait Parent",
+                "guardian_first_name": "Portrait",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-99994",
                 "guardian_phone": "+37129999994",
                 "guardian_declared_address": "Riga 994",

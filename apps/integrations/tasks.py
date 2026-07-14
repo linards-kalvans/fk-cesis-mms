@@ -56,7 +56,8 @@ _NAME_KEYS = ("first_name", "last_name", "middle_name")
 
 _OCR_FIELD_SOURCE_MAP: dict[str, dict[str, str]] = {
     "guardian_identity": {
-        "guardian_full_name": "ocr_guardian_identity",
+        "guardian_first_name": "ocr_guardian_identity",
+        "guardian_family_name": "ocr_guardian_identity",
         "guardian_personal_id": "ocr_guardian_identity",
     },
     "member_identity": {

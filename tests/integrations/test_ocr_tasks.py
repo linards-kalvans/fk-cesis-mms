@@ -113,7 +113,8 @@ def test_ocr_extract_job_persists_extraction_on_success(settings):
     assert extraction.encrypted_summary  # non-empty
 
     application.refresh_from_db()
-    assert application.field_sources["guardian_full_name"] == "ocr_guardian_identity"
+    assert application.field_sources["guardian_first_name"] == "ocr_guardian_identity"
+    assert application.field_sources["guardian_family_name"] == "ocr_guardian_identity"
     assert application.field_sources["guardian_personal_id"] == "ocr_guardian_identity"
 
 

@@ -22,7 +22,8 @@ class RegistrationApplicationForm(forms.Form):
         (
             "guardian",
             (
-                "guardian_full_name",
+                "guardian_first_name",
+                "guardian_family_name",
                 "guardian_personal_id",
                 "guardian_email",
                 "guardian_phone",
@@ -50,7 +51,8 @@ class RegistrationApplicationForm(forms.Form):
         ),
     )
 
-    guardian_full_name = forms.CharField(max_length=255, required=False, label="Vecāka vārds, uzvārds")
+    guardian_first_name = forms.CharField(max_length=255, required=False, label="Vecāka vārds")
+    guardian_family_name = forms.CharField(max_length=255, required=False, label="Vecāka uzvārds")
     guardian_personal_id = forms.CharField(max_length=32, required=False, label="Vecāka personas kods")
     guardian_email = forms.EmailField(
         required=True,
@@ -67,7 +69,16 @@ class RegistrationApplicationForm(forms.Form):
         help_text="Ievadiet datumu formātā DD.MM.GGGG",
         input_formats=["%d.%m.%Y"],
         error_messages={"invalid": "Ievadiet derīgu datumu."},
-        widget=forms.DateInput(attrs={"placeholder": "DD.MM.GGGG"}, format="%d.%m.%Y"),
+        widget=forms.DateInput(
+            attrs={
+                "placeholder": "DD.MM.GGGG",
+                "data-date-format": "lv-dot",
+                "autocomplete": "bday",
+                "inputmode": "numeric",
+                "maxlength": "10",
+            },
+            format="%d.%m.%Y",
+        ),
     )
     member_actual_address = forms.CharField(max_length=255, required=False, label="Bērna faktiskā adrese")
     member_same_address_as_guardian = forms.BooleanField(required=False, label="Adrese tāda pati kā vecāka")
@@ -82,7 +93,8 @@ class RegistrationApplicationForm(forms.Form):
     member_portrait_document = forms.FileField(required=False, label="Bērna portrets")
 
     submit_required_fields = (
-        "guardian_full_name",
+        "guardian_first_name",
+        "guardian_family_name",
         "guardian_personal_id",
         "guardian_email",
         "guardian_phone",
@@ -165,7 +177,8 @@ class RegistrationApplicationForm(forms.Form):
         _field_step_map = {
             "guardian_identity_document": "documents",
             "member_identity_document": "documents",
-            "guardian_full_name": "guardian",
+            "guardian_first_name": "guardian",
+            "guardian_family_name": "guardian",
             "guardian_personal_id": "guardian",
             "guardian_email": "guardian",
             "guardian_phone": "guardian",
@@ -207,7 +220,8 @@ class RegistrationApplicationForm(forms.Form):
         # unchanged; the template's unlock toggle removes readonly client-side.
         if guardian_profile_locked:
             for _name in (
-                "guardian_full_name",
+                "guardian_first_name",
+                "guardian_family_name",
                 "guardian_personal_id",
                 "guardian_phone",
                 "guardian_declared_address",

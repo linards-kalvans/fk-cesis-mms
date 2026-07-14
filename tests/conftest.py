@@ -131,7 +131,16 @@ def make_guardian(db):
     """
     from tests.support import make_guardian as _support_make_guardian
 
-    def _make(account, *, full_name="", personal_id="", phone="", address=""):
+    def _make(
+        account,
+        *,
+        full_name="",
+        first_name="",
+        family_name="",
+        personal_id="",
+        phone="",
+        address="",
+    ):
         # phone lives on the account (Guardian.phone is a proxy). When the
         # caller passes a phone with an explicit account, apply it to the account
         # so make_guardian(account, phone=...) is not silently dropped.
@@ -141,6 +150,8 @@ def make_guardian(db):
         return _support_make_guardian(
             account=account,
             full_name=full_name,
+            first_name=first_name,
+            family_name=family_name,
             personal_id=personal_id,
             address=address,
         )

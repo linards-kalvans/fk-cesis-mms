@@ -363,17 +363,22 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - verification evidence: targeted P12 tests 28 passed; full gate `uv run pytest -q` → 1703 passed, `uv run ruff check .` → passed, `uv run mypy .` → passed, `uv run python manage.py makemigrations --check` → no changes; code review approved
 
 ### P13 — Invoice Ninja client name mapping
+**Status:** dev complete (2026-07-13)
+
 **Why thirteenth**
 - Invoice Ninja clients expect separate first-name / family-name values
-- MMS currently has one canonical parent full-name field, which makes client records weaker and invoice presentation less clean
+- MMS previously had one canonical parent full-name field, which made client records weaker and invoice presentation less clean
 - this is crucial for MVP billing polish before adding custom invoices
 
-**Target outcome**
-- decide whether MMS stores explicit parent first/family name fields or derives them from the canonical full name
-- Invoice Ninja client payload sends correct first-name and family-name values
-- existing Guardian/ParentAccount flows keep one source of truth and do not reintroduce duplicate contact fields
-- migration/backfill path is safe for existing guardians
-- tests cover Latvian names, multi-token surnames where practical, and Invoice Ninja payload mapping
+**Delivered**
+- `Guardian.first_name` and `Guardian.family_name` added with safe backfill migration `members/0010_guardian_name_parts`; backfill rule uses the last token as family name and earlier tokens as first name
+- `Guardian.full_name` remains a temporary compatibility mirror; new registration/admin writes keep it synced from explicit fields
+- parent registration now renders separate **Vecāka vārds** and **Vecāka uzvārds** fields; direct service callers keep a legacy `guardian_full_name` alias for compatibility
+- guardian OCR maps provider `first_name` / `last_name` into explicit guardian fields and source keys
+- Guardian admin edits explicit name fields, shows `full_name` read-only, and keeps ParentAccount-owned email/phone consolidation intact
+- Invoice Ninja client contact payload sends separate `first_name` and `last_name` while preserving client `name` and `custom_value1` dedup behavior
+- existing display surfaces keep using the mirrored full name for P13 step 1; dropping the mirror column remains future cleanup
+- verification evidence: P13 targeted tests 57 passed; OCR/source tests 24 passed; old-test sweep 96 passed; review-fix tests 23 passed; prefill/read-through tests 52 passed; full suite `uv run pytest -q` → 1733 passed; `uv run ruff check .` → passed; `uv run mypy .` → success (416 source files); `uv run python manage.py makemigrations --check` → no changes
 
 ### P14 — Custom invoices
 **Why fourteenth**
@@ -991,7 +996,6 @@ Remaining focus:
 - payment visibility and retry paths
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- Invoice Ninja client name mapping (P13)
 - custom one-off invoices (P14)
 - coaches linked to training groups (P15)
 
@@ -1019,7 +1023,6 @@ Remaining focus:
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
 - family admin action hub (P11)
-- Invoice Ninja client name mapping (P13)
 - custom one-off invoices (P14)
 - coaches linked to training groups (P15)
 - calendar integration (P16)

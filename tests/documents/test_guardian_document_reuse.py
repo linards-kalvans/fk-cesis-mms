@@ -129,8 +129,11 @@ class TestGuardianReuseFieldSources:
         new_app = RegistrationApplication.objects.get(pk=app_id)
         # field_sources must include ocr_guardian_identity when extraction exists
         assert new_app.field_sources is not None
-        assert new_app.field_sources.get("guardian_full_name") == "ocr_guardian_identity"
+        assert new_app.field_sources.get("guardian_first_name") == "ocr_guardian_identity"
+        assert new_app.field_sources.get("guardian_family_name") == "ocr_guardian_identity"
         assert new_app.field_sources.get("guardian_personal_id") == "ocr_guardian_identity"
+        # P13 split — legacy combined key must NOT be written
+        assert "guardian_full_name" not in new_app.field_sources
 
     def test_new_draft_field_sources_manual_without_reusable_doc(
         self, settings
@@ -168,7 +171,8 @@ class TestGuardianReuseFieldSources:
 
         new_app = RegistrationApplication.objects.get(pk=app_id)
         # field_sources must be manual_only (no OCR extraction)
-        assert new_app.field_sources.get("guardian_full_name") == "manual_only"
+        assert new_app.field_sources.get("guardian_first_name") == "manual_only"
+        assert new_app.field_sources.get("guardian_family_name") == "manual_only"
         assert new_app.field_sources.get("guardian_personal_id") == "manual_only"
 
 
@@ -225,7 +229,10 @@ class TestGuardianReuseOcrFieldSources:
 
         new_app = RegistrationApplication.objects.get(pk=app_id)
         assert new_app.field_sources is not None
-        assert "guardian_full_name" in new_app.field_sources
+        assert "guardian_first_name" in new_app.field_sources
+        assert "guardian_family_name" in new_app.field_sources
+        # P13 split — legacy combined key must NOT be written
+        assert "guardian_full_name" not in new_app.field_sources
 
     def test_submit_new_application_without_reupload_uses_reused_guardian_document(
         self, settings
@@ -265,7 +272,8 @@ class TestGuardianReuseOcrFieldSources:
             f"/applications/{app_id}/",
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Reuse Submit Parent",
+                "guardian_first_name": "Reuse Submit Parent",
+                "guardian_family_name": "Test",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37150000023",
                 "guardian_declared_address": "Riga 23",

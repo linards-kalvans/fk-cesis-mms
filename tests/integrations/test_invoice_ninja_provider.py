@@ -215,3 +215,38 @@ def test_cancel_invoice_timeout_maps_to_transient():
     ):
         with pytest.raises(InvoicePlatformTransientError):
             invoice_ninja.cancel_invoice("IN-SENT-1", "reason")
+
+
+# -- P13: ensure_client sends separate first_name / last_name in contacts --
+
+
+@override_settings(**INVOICE_NINJA)
+def test_ensure_client_posts_name_parts_in_contacts(db):
+    """ensure_client must send contacts[0].first_name and contacts[0].last_name separately."""
+    from apps.integrations import invoice_ninja
+    from tests.support import make_guardian
+
+    guardian = make_guardian(
+        first_name="Anna Marija",
+        family_name="Ozola",
+        email="anna@example.com",
+    )
+    lookup = SimpleNamespace(status_code=200, json=lambda: {"data": []}, text="")
+    created = SimpleNamespace(status_code=200, json=lambda: {"id": "client-99"}, text="")
+    with patch(
+        "apps.integrations.invoice_ninja.requests.request",
+        side_effect=[lookup, created],
+    ) as m:
+        result = invoice_ninja.ensure_client(guardian)
+
+    assert result.external_id == "client-99"
+    body = m.call_args_list[1].kwargs["json"]
+    assert body["name"] == "Anna Marija Ozola"
+    assert body["custom_value1"] == str(guardian.pk)
+    assert body["contacts"] == [
+        {
+            "first_name": "Anna Marija",
+            "last_name": "Ozola",
+            "email": "anna@example.com",
+        }
+    ]

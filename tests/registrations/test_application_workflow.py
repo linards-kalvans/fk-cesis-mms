@@ -59,7 +59,8 @@ class TestCreateOrUpdateDraft:
         app = create_or_update_draft(
             data={
                 "guardian_email": "newparent@example.com",
-                "guardian_full_name": "Jane Doe",
+                "guardian_first_name": "Jane",
+                "guardian_family_name": "Doe",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga, Brivibas 1",
@@ -84,7 +85,8 @@ class TestCreateOrUpdateDraft:
         app = create_or_update_draft(
             data={
                 "guardian_email": "returning@example.com",
-                "guardian_full_name": "Jane Doe",
+                "guardian_first_name": "Jane",
+                "guardian_family_name": "Doe",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga, Brivibas 1",
@@ -108,7 +110,8 @@ class TestCreateOrUpdateDraft:
         create_or_update_draft(
             data={
                 "guardian_email": "multi@example.com",
-                "guardian_full_name": "Parent One",
+                "guardian_first_name": "Parent",
+                "guardian_family_name": "One",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 1",
@@ -121,7 +124,8 @@ class TestCreateOrUpdateDraft:
         second = create_or_update_draft(
             data={
                 "guardian_email": "multi@example.com",
-                "guardian_full_name": "Parent One",
+                "guardian_first_name": "Parent",
+                "guardian_family_name": "One",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 1",
@@ -179,7 +183,8 @@ class TestDraftAllowsIncompleteFields:
         app = create_or_update_draft(
             data={
                 "guardian_email": "incomplete@example.com",
-                "guardian_full_name": "",
+                "guardian_first_name": "",
+                "guardian_family_name": "",
                 "guardian_personal_id": "",
                 "guardian_phone": "",
                 "guardian_declared_address": "",
@@ -210,7 +215,8 @@ class TestUploadCreatesDocument:
         app = create_or_update_draft(
             data={
                 "guardian_email": "upload@example.com",
-                "guardian_full_name": "Uploader",
+                "guardian_first_name": "Uploader",
+                "guardian_family_name": "",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37133333333",
                 "guardian_declared_address": "Riga 3",
@@ -235,7 +241,8 @@ class TestUploadCreatesDocument:
         app = create_or_update_draft(
             data={
                 "guardian_email": "upload2@example.com",
-                "guardian_full_name": "Uploader 2",
+                "guardian_first_name": "Uploader",
+                "guardian_family_name": "2",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37133333334",
                 "guardian_declared_address": "Riga 4",
@@ -257,7 +264,8 @@ class TestUploadCreatesDocument:
         app = create_or_update_draft(
             data={
                 "guardian_email": "upload3@example.com",
-                "guardian_full_name": "Uploader 3",
+                "guardian_first_name": "Uploader",
+                "guardian_family_name": "3",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37133333335",
                 "guardian_declared_address": "Riga 5",
@@ -289,7 +297,8 @@ class TestSubmitApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": parent_account.email,
-                "guardian_full_name": "Submitter",
+                "guardian_first_name": "Submitter",
+                "guardian_family_name": "Doe",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37155555555",
                 "guardian_declared_address": "Riga 5",
@@ -319,7 +328,8 @@ class TestSubmitApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": "no-doc@example.com",
-                "guardian_full_name": "No Doc",
+                "guardian_first_name": "No",
+                "guardian_family_name": "Doc",
                 "guardian_personal_id": "010101-66666",
                 "guardian_phone": "+37177777777",
                 "guardian_declared_address": "Riga 7",
@@ -343,7 +353,8 @@ class TestSubmitApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": parent_account.email,
-                "guardian_full_name": "Deleted Doc",
+                "guardian_first_name": "Deleted",
+                "guardian_family_name": "Doc",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37199999999",
                 "guardian_declared_address": "Riga 9",
@@ -375,7 +386,8 @@ class TestSubmitApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": parent_account.email,
-                "guardian_full_name": "Owner",
+                "guardian_first_name": "Owner",
+                "guardian_family_name": "",
                 "guardian_personal_id": "010101-10101",
                 "guardian_phone": "+37130303030",
                 "guardian_declared_address": "Riga 10",
@@ -409,7 +421,8 @@ class TestSubmitApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": "nokit@example.com",
-                "guardian_full_name": "No Kit",
+                "guardian_first_name": "No",
+                "guardian_family_name": "Kit",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 11",
@@ -472,7 +485,8 @@ class TestGetApplicationPrefill:
         create_or_update_draft(
             data={
                 "guardian_email": "prefill@example.com",
-                "guardian_full_name": "First Name",
+                "guardian_first_name": "First",
+                "guardian_family_name": "Name",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37134343434",
                 "guardian_declared_address": "Riga 23",
@@ -487,7 +501,8 @@ class TestGetApplicationPrefill:
         create_or_update_draft(
             data={
                 "guardian_email": "prefill@example.com",
-                "guardian_full_name": "Updated Name",
+                "guardian_first_name": "Updated",
+                "guardian_family_name": "Name",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37145454545",
                 "guardian_declared_address": "Riga 45",
@@ -502,7 +517,8 @@ class TestGetApplicationPrefill:
         prefill = get_application_prefill(acct)
         assert isinstance(prefill, dict)
         # Should contain guardian data from latest application (via Guardian row)
-        assert prefill.get("guardian_full_name") == "Updated Name"
+        assert prefill.get("guardian_first_name") == "Updated"
+        assert prefill.get("guardian_family_name") == "Name"
         assert prefill.get("guardian_email") == "prefill@example.com"
 
     def test_prefill_returns_empty_when_no_account(self):
@@ -528,7 +544,8 @@ class TestInvalidSubmitErrorSummary:
         resp = verified_client.post(
             f"/applications/{draft_with_documents.pk}/submit/",
             data={
-                "guardian_full_name": "",
+                "guardian_first_name": "",
+                "guardian_family_name": "",
                 "guardian_personal_id": "",
                 "guardian_email": "",
                 "guardian_phone": "",

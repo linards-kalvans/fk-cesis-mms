@@ -74,7 +74,8 @@ class TestWorkspaceOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Decrypt Parent",
+                "guardian_first_name": "Decrypt",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-30000",
                 "guardian_phone": "+37120000030",
                 "guardian_declared_address": "Riga 30",
@@ -131,7 +132,8 @@ class TestWorkspaceOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Decrypt Parent",
+                "guardian_first_name": "Decrypt",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-31000",
                 "guardian_phone": "+37120000031",
                 "guardian_declared_address": "Riga 31",
@@ -184,7 +186,8 @@ class TestWorkspaceOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "NoValue Parent",
+                "guardian_first_name": "NoValue",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-32000",
                 "guardian_phone": "+37120000032",
                 "guardian_declared_address": "Riga 32",
@@ -210,5 +213,6 @@ class TestWorkspaceOcrDecryption:
 
         assert resp.status_code == 200
         content = resp.content.decode()
-        # Page must still render fine
-        assert "NoValue Parent" in content
+        # Page must still render fine; both name parts must be present in the read-only view.
+        assert "NoValue" in content
+        assert "Parent" in content

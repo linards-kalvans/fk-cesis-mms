@@ -56,7 +56,8 @@ def _make_draft(email="autosave@example.com", child_name="AutoSave Child"):
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "AutoSave Parent",
+            "guardian_first_name": "AutoSave",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000010",
             "guardian_declared_address": "Riga 1",
@@ -73,7 +74,8 @@ def _make_draft(email="autosave@example.com", child_name="AutoSave Child"):
 def _base_payload(acct: ParentAccount) -> dict:
     """Canonical draft-save payload (valid form when guardian_email present)."""
     return {
-        "guardian_full_name": "AutoSave Parent",
+        "guardian_first_name": "AutoSave",
+        "guardian_family_name": "Parent",
         "guardian_personal_id": "010101-12345",
         "guardian_email": acct.email,
         "guardian_phone": "+37120000010",
@@ -89,7 +91,8 @@ def _base_payload(acct: ParentAccount) -> dict:
 def _full_submit_payload(acct: ParentAccount) -> dict:
     shirt_pk, shorts_pk = _ensure_kit_sizes()
     return {
-        "guardian_full_name": "AutoSave Parent",
+        "guardian_first_name": "AutoSave",
+        "guardian_family_name": "Parent",
         "guardian_personal_id": "010101-12345",
         "guardian_email": acct.email,
         "guardian_phone": "+37120000010",

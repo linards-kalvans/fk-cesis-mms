@@ -171,7 +171,8 @@ class TestOcrExtractedBadgeVisible:
         )
         # Simulate OCR-extracted field sources (what OCR integration would set)
         app.field_sources = {
-            "guardian_full_name": "ocr_guardian_identity",
+            "guardian_first_name": "ocr_guardian_identity",
+            "guardian_family_name": "ocr_guardian_identity",
             "guardian_personal_id": "ocr_guardian_identity",
             "member_full_name": "ocr_member_identity",
             "member_personal_id": "ocr_member_identity",
@@ -330,7 +331,8 @@ class TestReviewHintExtractedSource:
         )
         # Simulate a review_hint_extracted source marker
         app.field_sources = {
-            "guardian_full_name": "review_hint_extracted",
+            "guardian_first_name": "review_hint_extracted",
+            "guardian_family_name": "review_hint_extracted",
             "guardian_personal_id": "review_hint_extracted",
         }
         app.save(update_fields=["field_sources"])

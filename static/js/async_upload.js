@@ -147,6 +147,17 @@
     }
   }
 
+  // wizard.js::updateReview() skips file inputs, so the review step
+  // shows "—" for file fields after async upload until page reload.
+  // Patch the matching [data-review-for="<input.id>"] cell in place.
+  function syncReviewSummary(input) {
+    if (!input.id) return;
+    var cell = document.querySelector('[data-review-for="' + input.id + '"]');
+    if (!cell) return;
+    var file = input.files && input.files[0];
+    cell.textContent = file ? file.name : 'Augšupielādēts ✓';
+  }
+
   function applyExtractedFields(extractedFields) {
     Object.keys(extractedFields).forEach(function (fieldName) {
       var value = extractedFields[fieldName];
@@ -286,6 +297,7 @@
         })
         .then(function (payload) {
           markCardAsUploaded(input);
+          syncReviewSummary(input);
 
           if (payload.ocr_status === 'not_requested') {
             setProgressLabel(progressSlot, 'Augšupielādēts');

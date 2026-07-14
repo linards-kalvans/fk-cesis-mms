@@ -84,6 +84,21 @@ class TestWizardJsContract:
         for state in ("saving", "saved", "error"):
             assert state in src, f"Save indicator state {state!r} must appear in source"
 
+    def test_date_mask_contract_for_latvian_birth_date(self):
+        src = _source()
+        # The mask helper must be defined in wizard.js.
+        assert "formatLvDotDateInput" in src
+        # The visible date field carries a stable hook the mask binds to.
+        assert "data-date-format" in src
+        # ISO paste conversion: source must recognise YYYY-MM-DD (either as a
+        # literal example or as a digit-group regex).
+        assert "2025-02-01" in src or r"(\d{4})-(\d{2})-(\d{2})" in src
+        # Non-digit stripping + 8-digit cap.
+        assert r"replace(/\D/g" in src or r"replace(/[^\d]/g" in src
+        assert "slice(0, 8)" in src
+        # Dot-format output: explicit example OR a join with the dot separator.
+        assert "01.02.2025" in src or "parts.join('.')" in src
+
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-q"])

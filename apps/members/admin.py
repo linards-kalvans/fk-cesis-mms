@@ -68,7 +68,11 @@ class GuardianAdminForm(forms.ModelForm):
 
     class Meta:
         model = Guardian
-        fields = ("full_name", "personal_id", "address")
+        fields = ("first_name", "family_name", "personal_id", "address")
+        labels = {
+            "first_name": "Vārds",
+            "family_name": "Uzvārds",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -99,9 +103,16 @@ class GuardianAdmin(admin.ModelAdmin):
         "next_family_action",
         "family_hub_link",
     )
-    search_fields = ("full_name", "parent_account__email", "personal_id")
-    readonly_fields = ("related_records",)
-    fields = ("related_records", "full_name", "personal_id", "address",
+    search_fields = (
+        "full_name",
+        "first_name",
+        "family_name",
+        "parent_account__email",
+        "personal_id",
+    )
+    readonly_fields = ("related_records", "full_name")
+    fields = ("related_records", "first_name", "family_name", "full_name",
+              "personal_id", "address",
               "email", "phone", "is_active")
 
     class Media:
@@ -226,6 +237,10 @@ class GuardianAdmin(admin.ModelAdmin):
         )  # type: ignore[return-value,no-any-return]
 
     def save_model(self, request, obj, form, change):
+        # Keep the legacy ``full_name`` mirror in sync with the explicit
+        # name fields BEFORE the parent save, so the row never lands in
+        # the DB with explicit parts and a stale mirror.
+        obj.sync_full_name()
         super().save_model(request, obj, form, change)
         account = obj.parent_account
         new_phone = form.cleaned_data.get("phone", "")

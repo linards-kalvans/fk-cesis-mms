@@ -20,7 +20,10 @@ def _staff_client():
 
 def _guardian():
     acc = ParentAccount.objects.create(email="old@example.com", phone="+371", is_active=True)
-    return Guardian.objects.create(full_name="Vecāks", parent_account=acc)
+    g = Guardian(first_name="Vecāks", family_name="", parent_account=acc)
+    g.sync_full_name()
+    g.save()
+    return g
 
 
 def test_change_page_shows_account_fields():
@@ -33,11 +36,19 @@ def test_change_page_shows_account_fields():
     assert 'name="is_active"' in html
 
 
+def test_change_page_shows_first_name_and_family_name():
+    g = _guardian()
+    c = _staff_client()
+    html = c.get(reverse("admin:members_guardian_change", args=[g.pk])).content.decode()
+    assert 'name="first_name"' in html
+    assert 'name="family_name"' in html
+
+
 def test_save_writes_phone_and_is_active_to_account():
     g = _guardian()
     c = _staff_client()
     resp = c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
-        "full_name": "Vecāks", "personal_id": "", "address": "",
+        "first_name": "Vecāks", "family_name": "", "personal_id": "", "address": "",
         "email": "old@example.com", "phone": "+37100099", "is_active": "",
     })
     assert resp.status_code == 302  # saved + redirected (no form errors)
@@ -50,7 +61,7 @@ def test_save_routes_email_change_through_service():
     g = _guardian()
     c = _staff_client()
     c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
-        "full_name": "Vecāks", "personal_id": "", "address": "",
+        "first_name": "Vecāks", "family_name": "", "personal_id": "", "address": "",
         "email": "new@example.com", "phone": "+371", "is_active": "on",
     })
     g.refresh_from_db()
@@ -62,12 +73,35 @@ def test_duplicate_email_is_rejected():
     ParentAccount.objects.create(email="taken@example.com")
     c = _staff_client()
     resp = c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
-        "full_name": "Vecāks", "personal_id": "", "address": "",
+        "first_name": "Vecāks", "family_name": "", "personal_id": "", "address": "",
         "email": "taken@example.com", "phone": "+371", "is_active": "on",
     })
     g.refresh_from_db()
     assert g.parent_account.email == "old@example.com"  # unchanged
     assert resp.status_code == 200  # re-renders with an error
+
+
+def test_save_writes_name_parts_and_full_name_mirror():
+    g = _guardian()
+    c = _staff_client()
+    resp = c.post(reverse("admin:members_guardian_change", args=[g.pk]), {
+        "first_name": "Anna Marija", "family_name": "Ozola",
+        "personal_id": "", "address": "",
+        "email": "old@example.com", "phone": "+371", "is_active": "on",
+    })
+    assert resp.status_code == 302
+    g.refresh_from_db()
+    assert g.first_name == "Anna Marija"
+    assert g.family_name == "Ozola"
+    assert g.full_name == "Anna Marija Ozola"
+
+
+def test_change_page_has_no_editable_full_name_input():
+    g = _guardian()
+    c = _staff_client()
+    html = c.get(reverse("admin:members_guardian_change", args=[g.pk])).content.decode()
+    assert 'name="full_name"' not in html
+    assert g.full_name in html
 
 
 def test_guardian_add_is_disabled():

@@ -140,11 +140,16 @@ def test_prefill_uses_guardian_profile_for_returning_parent():
     )
     # Edit the shared Guardian directly; prefill must reflect it, not a stale column.
     guardian = Guardian.objects.get(parent_account=account)
-    guardian.full_name = "Updated Guardian"
-    guardian.save(update_fields=["full_name"])
+    guardian.first_name = "Updated"
+    guardian.family_name = "Guardian"
+    guardian.sync_full_name()
+    guardian.save(update_fields=["first_name", "family_name", "full_name"])
 
     prefill = get_application_prefill(account)
-    assert prefill["guardian_full_name"] == "Updated Guardian"
+    # P13 split: prefill surfaces the explicit parts, not the legacy combined key
+    assert prefill["guardian_first_name"] == "Updated"
+    assert prefill["guardian_family_name"] == "Guardian"
+    assert "guardian_full_name" not in prefill
 
 
 def test_make_guardian_helper_links_a_populated_guardian(make_guardian):

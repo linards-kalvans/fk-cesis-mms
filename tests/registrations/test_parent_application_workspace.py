@@ -79,7 +79,8 @@ def _make_workspace_draft(email="workspace@example.com", child_name="Workspace C
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "Workspace Parent",
+            "guardian_first_name": "Workspace",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": "Riga 1",
@@ -103,7 +104,8 @@ def _make_submitted_app(email="readonly@example.com", child_name="Readonly Child
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "Readonly Parent",
+            "guardian_first_name": "Readonly",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000004",
             "guardian_declared_address": "Riga 1",
@@ -236,7 +238,8 @@ class TestSubmittedApplicationReadOnly:
         resp = client.post(
             f"/applications/{app.pk}/",
             {
-                "guardian_full_name": "Readonly Parent",
+                "guardian_first_name": "Readonly",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_email": acct.email,
                 "guardian_phone": "+37120000004",
@@ -308,7 +311,8 @@ class TestEditableWorkspaceActions:
         resp = client.post(
             f"/applications/{app.pk}/",
             {
-                "guardian_full_name": "Updated Parent",
+                "guardian_first_name": "Updated",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_email": acct.email,
                 "guardian_phone": "+37120000000",

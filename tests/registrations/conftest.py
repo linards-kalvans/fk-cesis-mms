@@ -66,7 +66,8 @@ def submit_payload(kit_sizes, parent_account):
     """POST payload that passes RegistrationApplicationForm submit validation."""
     shirt_pk, shorts_pk = kit_sizes
     return {
-        "guardian_full_name": "Submit Guardian",
+        "guardian_first_name": "Submit",
+        "guardian_family_name": "Guardian",
         "guardian_personal_id": "010101-12345",
         "guardian_email": parent_account.email,
         "guardian_phone": "+37120000000",

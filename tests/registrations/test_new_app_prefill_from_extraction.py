@@ -74,7 +74,8 @@ class TestNewAppPrefillFromExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Prior Parent",
+                "guardian_first_name": "Prior",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-40000",
                 "guardian_phone": "+37120000040",
                 "guardian_declared_address": "Riga 40",
@@ -127,7 +128,8 @@ class TestNewAppPrefillFromExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Prior Parent",
+                "guardian_first_name": "Prior",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-41000",
                 "guardian_phone": "+37120000041",
                 "guardian_declared_address": "Riga 41",
@@ -179,7 +181,8 @@ class TestNewAppPrefillFromExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Fallback Parent",
+                "guardian_first_name": "Fallback",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-42000",
                 "guardian_phone": "+37120000042",
                 "guardian_declared_address": "Riga 42",
@@ -206,11 +209,15 @@ class TestNewAppPrefillFromExtraction:
         assert resp.status_code == 200
         content = resp.content.decode()
         # OCR stub returns ("Anna", "Bērziņa") for guardian_identity — OCR wins.
-        assert "Anna Bērziņa" in content, (
-            "New app form must show OCR-extracted guardian name, not model fallback value."
+        assert "Anna" in content and "Bērziņa" in content, (
+            "New app form must show OCR-extracted guardian name parts, not model fallback value."
         )
-        assert "Fallback Parent" not in content, (
-            "Model fallback value must not appear when OCR extraction exists."
+        # Model fallback value must not appear in either name-part input.
+        assert 'value="Fallback"' not in content, (
+            "Model fallback first name must not appear when OCR extraction exists."
+        )
+        assert 'value="Parent"' not in content, (
+            "Model fallback family name must not appear when OCR extraction exists."
         )
 
 
@@ -276,7 +283,7 @@ class TestPrefillNormalization:
     """OCR-derived prefill values must be Latvian title-case, even when the
     encrypted payload stores ALL CAPS provider data."""
 
-    def test_guardian_full_name_prefill_is_title_case(self, settings):
+    def test_guardian_name_parts_prefill_is_title_case(self, settings):
         from apps.registrations.services import get_application_prefill
 
         account = ParentAccount.objects.create(
@@ -294,7 +301,8 @@ class TestPrefillNormalization:
         prefill = get_application_prefill(account)
 
         # OCR value wins; must be exactly the normalized OCR name (no model-value prefix).
-        assert prefill["guardian_full_name"] == "Jānis Bērziņš"
+        assert prefill["guardian_first_name"] == "Jānis"
+        assert prefill["guardian_family_name"] == "Bērziņš"
 
     def test_member_full_name_absent_from_new_app_prefill(self, settings):
         from apps.registrations.services import get_application_prefill
@@ -329,8 +337,9 @@ def _create_submitted_app_with_ocr(email: str):
     account = ParentAccount.objects.create(email=email, phone="+37120000040")
     app = create_or_update_draft(
         data={
-            "guardian_email": email,
-            "guardian_full_name": "Auto Reuse Parent",
+                "guardian_email": email,
+                "guardian_first_name": "Auto Reuse",
+                "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-20202",
             "guardian_phone": "+37120000040",
             "guardian_declared_address": "Riga 40",
@@ -418,7 +427,7 @@ class TestGuardianAutoReuseDefault:
 class TestPrefillNoDoubling:
     """Guardian name from OCR must not be appended to the model value."""
 
-    def test_guardian_full_name_not_doubled_when_ocr_matches_model(self, settings):
+    def test_guardian_name_parts_not_doubled_when_ocr_matches_model(self, settings):
         from apps.documents.models import Document, DocumentExtraction
         from apps.documents.ocr import encrypt_json
         from apps.registrations.models import RegistrationApplication
@@ -464,8 +473,9 @@ class TestPrefillNoDoubling:
 
         prefill = get_application_prefill(account)
 
-        # Must be exactly "Anna Bērziņa", not "Anna Bērziņa Anna Bērziņa".
-        assert prefill["guardian_full_name"] == "Anna Bērziņa"
+        # Must be exactly "Anna Bērziņa" (split into first + family), not doubled.
+        assert prefill["guardian_first_name"] == "Anna"
+        assert prefill["guardian_family_name"] == "Bērziņa"
 
     def test_submit_syncs_account_phone_from_application(self, settings):
         """Submitting an application updates account.phone so future prefill uses the new value."""
@@ -483,7 +493,8 @@ class TestPrefillNoDoubling:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Anna Bērziņa",
+                "guardian_first_name": "Anna",
+                "guardian_family_name": "Bērziņa",
                 "guardian_personal_id": "010101-72000",
                 "guardian_phone": "+37120000999",  # contact phone for this app
                 "guardian_declared_address": "Riga",
