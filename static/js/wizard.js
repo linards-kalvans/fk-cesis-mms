@@ -11,6 +11,108 @@
   var form = document.querySelector('.fk-workspace-form');
   var nextButtons = document.querySelectorAll('[data-wizard-next]');
 
+  // ---- Date picker assist (progressive enhancement for DD.MM.GGGG fields) ---
+  // Visible text input stays the source of truth; the hidden native date input
+  // is assist-only (server ignores it). Text field still works without JS.
+
+  function dotDateToIso(value) {
+    var match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((value || '').trim());
+    if (!match) return '';
+    return match[3] + '-' + match[2] + '-' + match[1];
+  }
+
+  function isoDateToDot(value) {
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((value || '').trim());
+    if (!match) return '';
+    return match[3] + '.' + match[2] + '.' + match[1];
+  }
+
+  // Progressive-enhancement input mask for DD.MM.GGGG fields. Accepts:
+  //   2025-02-01  -> 01.02.2025
+  //   01/02/2025  -> 01.02.2025
+  //   01022025    -> 01.02.2025
+  //   01          -> 01.
+  //   0102        -> 01.02.
+  // Strips non-digits, caps at 8 digits, auto-inserts dots after day+month.
+  function formatLvDotDateInput(value) {
+    var raw = (value || '').trim();
+    var iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (iso) return iso[3] + '.' + iso[2] + '.' + iso[1];
+
+    var digits = raw.replace(/\D/g, '').slice(0, 8);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return digits.length === 2 ? digits + '.' : digits;
+    if (digits.length <= 4) {
+      return digits.slice(0, 2) + '.' + digits.slice(2) + (digits.length === 4 ? '.' : '');
+    }
+    return digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+  }
+
+  function setupDatePickerAssists() {
+    document.querySelectorAll('[data-date-picker-assist-for]').forEach(function (picker) {
+      var fieldId = picker.getAttribute('data-date-picker-assist-for');
+      var visible = fieldId ? document.getElementById(fieldId) : null;
+      var button = fieldId
+        ? document.querySelector('[data-date-picker-button-for="' + fieldId + '"]')
+        : null;
+      if (!visible || !button) return;
+
+      function syncPickerFromVisible() {
+        var iso = dotDateToIso(visible.value);
+        if (iso) picker.value = iso;
+      }
+
+      function normalizeVisibleAndSyncPicker() {
+        var formatted = formatLvDotDateInput(visible.value);
+        if (formatted && formatted !== visible.value) visible.value = formatted;
+        syncPickerFromVisible();
+      }
+
+      visible.addEventListener('input', normalizeVisibleAndSyncPicker);
+      visible.addEventListener('change', normalizeVisibleAndSyncPicker);
+
+      picker.addEventListener('change', function () {
+        var dot = isoDateToDot(picker.value);
+        if (!dot) return;
+        visible.value = dot;
+        visible.dispatchEvent(new Event('input', { bubbles: true }));
+        visible.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      button.addEventListener('click', function () {
+        syncPickerFromVisible();
+        if (typeof picker.showPicker === 'function') {
+          picker.showPicker();
+          return;
+        }
+        picker.focus();
+        picker.click();
+      });
+
+      syncPickerFromVisible();
+    });
+  }
+
+  // Lightweight input mask for any field tagged with `data-date-format="lv-dot"`.
+  // Auto-inserts dots and normalizes ISO / slashed / 8-digit paste into
+  // `DD.MM.GGGG`. The picker assist above already handles visible->picker sync
+  // for fields that have a paired picker; this loop covers the mask in case
+  // a `data-date-format` field is rendered without one.
+  function setupDateInputMasks() {
+    document.querySelectorAll('input[data-date-format="lv-dot"]').forEach(function (input) {
+      // Picker assist already runs the mask for fields wrapped in a date-assist
+      // container — skip them here to avoid double-binding.
+      var container = input.closest('[data-date-assist]');
+      if (container && container.querySelector('[data-date-picker-assist-for="' + input.id + '"]')) return;
+      function applyMask() {
+        var formatted = formatLvDotDateInput(input.value);
+        if (formatted && formatted !== input.value) input.value = formatted;
+      }
+      input.addEventListener('input', applyMask);
+      input.addEventListener('change', applyMask);
+    });
+  }
+
   var current = 0;
   var visitedSteps = new Set();
   var total = steps.length;
@@ -475,6 +577,8 @@
 
   bindStepGating();
   bindAutoSave();
+  setupDatePickerAssists();
+  setupDateInputMasks();
 
   var startAttr = document.querySelector('[data-wizard-start]');
   var startStep = startAttr ? parseInt(startAttr.getAttribute('data-wizard-start'), 10) : 0;

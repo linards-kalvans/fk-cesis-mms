@@ -56,7 +56,8 @@ def _make_draft(email="autosave@example.com", child_name="AutoSave Child"):
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "AutoSave Parent",
+            "guardian_first_name": "AutoSave",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000010",
             "guardian_declared_address": "Riga 1",
@@ -73,14 +74,15 @@ def _make_draft(email="autosave@example.com", child_name="AutoSave Child"):
 def _base_payload(acct: ParentAccount) -> dict:
     """Canonical draft-save payload (valid form when guardian_email present)."""
     return {
-        "guardian_full_name": "AutoSave Parent",
+        "guardian_first_name": "AutoSave",
+        "guardian_family_name": "Parent",
         "guardian_personal_id": "010101-12345",
         "guardian_email": acct.email,
         "guardian_phone": "+37120000010",
         "guardian_declared_address": "Riga 1",
         "member_full_name": "AutoSave Child",
         "member_personal_id": "010125-54321",
-        "member_birth_date": "2025-01-01",
+        "member_birth_date": "01.01.2025",
         "preferred_agreement_signing": "paper",
         "submit_action": "save_draft",
     }
@@ -89,14 +91,15 @@ def _base_payload(acct: ParentAccount) -> dict:
 def _full_submit_payload(acct: ParentAccount) -> dict:
     shirt_pk, shorts_pk = _ensure_kit_sizes()
     return {
-        "guardian_full_name": "AutoSave Parent",
+        "guardian_first_name": "AutoSave",
+        "guardian_family_name": "Parent",
         "guardian_personal_id": "010101-12345",
         "guardian_email": acct.email,
         "guardian_phone": "+37120000010",
         "guardian_declared_address": "Riga 1",
         "member_full_name": "AutoSave Child",
         "member_personal_id": "010125-54321",
-        "member_birth_date": "2025-01-01",
+        "member_birth_date": "01.01.2025",
         "member_same_address_as_guardian": True,
         "preferred_agreement_signing": "paper",
         "member_kit_size_shirt": shirt_pk,
@@ -197,7 +200,8 @@ class TestAjaxAutoSaveBranch:
         acct, app = _make_draft()
         _login(client, acct)
 
-        resp = client.post(f"/applications/{app.pk}/", _base_payload(acct))
+        payload = _base_payload(acct)
+        resp = client.post(f"/applications/{app.pk}/", payload)
 
         assert resp.status_code in (301, 302)
         assert resp["Location"] == f"/applications/{app.pk}/"
@@ -267,7 +271,7 @@ class TestAjaxAutoSaveBranch:
             )
 
         app = create_or_update_draft(
-            data=_full_submit_payload(acct),
+            data={**_full_submit_payload(acct), "member_birth_date": "2025-01-01"},
             files={
                 "guardian_identity_document": _png("guardian.png"),
                 "member_identity_document": _png("member.png"),
@@ -293,6 +297,7 @@ class TestAjaxAutoSaveBranch:
 
         payload = _full_submit_payload(acct)
         payload["submit_action"] = "submit"
+        payload["member_birth_date"] = "01.01.2025"
 
         resp = client.post(
             f"/applications/{app.pk}/",
@@ -321,7 +326,7 @@ class TestAjaxAutoSaveBranch:
             )
 
         create_or_update_draft(
-            data=_full_submit_payload(acct),
+            data={**_full_submit_payload(acct), "member_birth_date": "2025-01-01"},
             files={
                 "guardian_identity_document": _png("guardian.png"),
                 "member_identity_document": _png("member.png"),

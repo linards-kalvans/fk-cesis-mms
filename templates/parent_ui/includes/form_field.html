@@ -1,3 +1,4 @@
+{% load reg_filters %}
 {% if field.field.widget.input_type == "checkbox" %}
 <div class="fk-form-field fk-form-field--checkbox{% if field.errors %} fk-form-field--error{% endif %}">
   <label class="fk-form-label fk-form-label--checkbox" for="{{ field.id_for_label }}">
@@ -37,7 +38,15 @@
   {% if source_label %}
     {% include "parent_ui/includes/source_badge.html" with label=source_label %}
   {% endif %}
-  {{ field }}
+  {% if field.field.widget.attrs|get_item:"data-date-format" == "lv-dot" %}
+    <div class="fk-date-assist" data-date-assist>
+      {{ field }}
+      <button type="button" class="fk-date-assist__button" data-date-picker-button-for="{{ field.id_for_label }}" aria-label="Atvērt datuma izvēlni">📅</button>
+      <input type="date" class="fk-date-assist__native" data-date-picker-assist-for="{{ field.id_for_label }}" aria-hidden="true" tabindex="-1">
+    </div>
+  {% else %}
+    {{ field }}
+  {% endif %}
   {% if field.help_text %}<p class="fk-form-help">{{ field.help_text }}</p>{% endif %}
   {% for error in field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
 </div>

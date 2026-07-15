@@ -97,7 +97,7 @@ class TestSubmitRegistrationView:
         app = draft_with_documents
         resp = verified_client.post(
             f"/applications/{app.pk}/submit/",
-            data=submit_payload,
+            data={**submit_payload, "member_birth_date": "01.01.2025"},
         )
         # Successful submit redirects to parent portal
         assert resp.status_code == 302
@@ -112,7 +112,8 @@ class TestSubmitRegistrationView:
         resp = verified_client.post(
             f"/applications/{app.pk}/submit/",
             data={
-                "guardian_full_name": "",
+                "guardian_first_name": "",
+                "guardian_family_name": "",
                 "guardian_personal_id": "",
                 "guardian_email": "",
                 "guardian_phone": "",
@@ -143,7 +144,8 @@ class TestParentPortalView:
         create_or_update_draft(
             data={
                 "guardian_email": parent_account.email,
-                "guardian_full_name": "Parent A",
+                "guardian_first_name": "Parent",
+                "guardian_family_name": "A",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37199999999",
                 "guardian_declared_address": "Riga 88",
@@ -159,7 +161,8 @@ class TestParentPortalView:
         create_or_update_draft(
             data={
                 "guardian_email": other_parent_account.email,
-                "guardian_full_name": "Parent B",
+                "guardian_first_name": "Parent",
+                "guardian_family_name": "B",
                 "guardian_personal_id": "010101-00000",
                 "guardian_phone": "+37112121212",
                 "guardian_declared_address": "Riga 99",
@@ -202,7 +205,8 @@ class TestResumedParentCanContinueDraft:
         app = create_or_update_draft(
             data={
                 "guardian_email": "resume@example.com",
-                "guardian_full_name": "Resume Parent",
+                "guardian_first_name": "Resume",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-21212",
                 "guardian_phone": "+37132323232",
                 "guardian_declared_address": "Riga 21",
@@ -256,7 +260,8 @@ class TestResumedParentCanContinueDraft:
         app_a = create_or_update_draft(
             data={
                 "guardian_email": "otherdraft@example.com",
-                "guardian_full_name": "Other Draft",
+                "guardian_first_name": "Other",
+                "guardian_family_name": "Draft",
                 "guardian_personal_id": "010101-31313",
                 "guardian_phone": "+37142424242",
                 "guardian_declared_address": "Riga 31",
@@ -327,7 +332,8 @@ class TestSameBrowserVsCrossBrowser:
         create_or_update_draft(
             data={
                 "guardian_email": "crosscross@example.com",
-                "guardian_full_name": "Same Browser Parent",
+                "guardian_first_name": "Same Browser",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga, Brivibas 1",
@@ -355,7 +361,8 @@ class TestSameBrowserVsCrossBrowser:
         create_or_update_draft(
             data={
                 "guardian_email": "crossportal@example.com",
-                "guardian_full_name": "Same Browser Parent",
+                "guardian_first_name": "Same Browser",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga, Brivibas 1",
@@ -460,9 +467,11 @@ class TestFixRequestedDraftSavePreservesStatus:
             f"/applications/{app.pk}/",
             {
                 **submit_payload,
-                "guardian_full_name": "Updated Guardian",
+                "guardian_first_name": "Updated",
+                "guardian_family_name": "Guardian",
                 "guardian_email": parent_account.email,
                 "member_kit_size_shirt": app.member_kit_size_shirt_id,
+                "member_birth_date": "01.01.2025",
                 "submit_action": "save_draft",
             },
         )

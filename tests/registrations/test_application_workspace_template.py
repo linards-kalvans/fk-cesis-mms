@@ -68,7 +68,8 @@ def _make_draft(email: str = "template@example.com") -> tuple[ParentAccount, Reg
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "Template Parent",
+            "guardian_first_name": "Template",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000099",
             "guardian_declared_address": "Riga 1",
@@ -88,7 +89,8 @@ _FIELD_STEP_MAP = {
     "guardian_identity_document": "documents",
     "member_identity_document": "documents",
     # guardian step
-    "guardian_full_name": "guardian",
+    "guardian_first_name": "guardian",
+    "guardian_family_name": "guardian",
     "guardian_personal_id": "guardian",
     "guardian_email": "guardian",
     "guardian_phone": "guardian",
@@ -398,3 +400,119 @@ class TestSliceDViewContext:
             assert bound_fields[kind].name.endswith("_document"), (
                 f"Bound field for {kind} should be the *_document FileField."
             )
+
+
+# ---------------------------------------------------------------------------
+# Date format — Latvian DD.MM.GGGG
+# ---------------------------------------------------------------------------
+
+
+def test_member_birth_date_renders_latvian_placeholder_hint_and_picker_assist():
+    client = Client()
+    account, app = _make_draft("date-placeholder@example.com")
+    _login(client, account)
+
+    response = client.get(f"/applications/{app.pk}/")
+    assert response.status_code == 200
+    html = response.content.decode()
+
+    tag = _find_input_tag(html, "member_birth_date")
+    assert _attr_value(tag, "placeholder") == "DD.MM.GGGG"
+    assert _attr_value(tag, "type") != "date"
+    assert _attr_value(tag, "data-date-format") == "lv-dot"
+    assert "Ievadiet datumu formātā DD.MM.GGGG" in html
+    assert 'data-date-picker-button-for="id_member_birth_date"' in html
+    assert 'type="date"' in html
+    assert 'data-date-picker-assist-for="id_member_birth_date"' in html
+
+
+def test_read_only_member_birth_date_uses_latvian_dot_format():
+    client = Client()
+    account, app = _make_draft("date-readonly@example.com")
+    app.status = RegistrationApplication.Status.SUBMITTED
+    app.submitted_at = timezone.now()
+    app.save(update_fields=["status", "submitted_at", "updated_at"])
+    _login(client, account)
+
+    response = client.get(f"/applications/{app.pk}/")
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "01.01.2025" in html
+    assert "2025-01-01" not in html
+
+
+# ---------------------------------------------------------------------------
+# Date assist CSS contract — single short control, calendar button inside it.
+# ---------------------------------------------------------------------------
+
+
+def _read_parent_theme_css() -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[2] / "static" / "css" / "parent_theme.css").read_text()
+
+
+def _css_block(css: str, selector: str) -> str:
+    """Return the body of the first rule whose selector matches `selector` exactly.
+
+    Anchors the selector to be followed by whitespace + '{' so that, e.g.,
+    searching for ``.fk-date-assist`` does not accidentally match
+    ``.fk-date-assist__button``.
+    """
+    pattern = re.compile(
+        re.escape(selector) + r"\s*\{([^{}]*)\}",
+        re.MULTILINE,
+    )
+    match = pattern.search(css)
+    assert match, f"CSS rule for selector {selector!r} not found"
+    return match.group(1)
+
+
+def test_date_assist_css_contract_single_short_control_with_inside_button():
+    """Contract for `.fk-date-assist` (Latvian DD.MM.GGGG input + calendar button).
+
+    Bug fix scope: the visible UI must be ONE control (the text input) with the
+    calendar button rendered inside its right edge. The native ``[type="date"]``
+    input is a hidden affordance for ``picker.showPicker()`` and must never
+    appear as a second visible field.
+    """
+    css = _read_parent_theme_css()
+
+    # 1. The wrapper is short (max-width) and acts as a positioning context.
+    assist = _css_block(css, ".fk-date-assist")
+    assert "position: relative" in assist, (
+        ".fk-date-assist must be a positioning context for the absolute button"
+    )
+    assert re.search(r"max-width\s*:\s*\d+px", assist), (
+        ".fk-date-assist must set a max-width (px) so the control stays short"
+    )
+
+    # 2. The calendar button is absolutely positioned (so it sits INSIDE the
+    #    input, not beside it via flex).
+    button = _css_block(css, ".fk-date-assist__button")
+    assert "position: absolute" in button, (
+        ".fk-date-assist__button must be position: absolute (inside the input)"
+    )
+
+    # 3. The hidden native date input uses a selector STRONGER than
+    #    `.fk-form-field input[type="date"]` so the general form rule cannot
+    #    leak width/min-height/border/padding onto it and make it look like
+    #    a second field.
+    strong = re.search(
+        r"\.fk-form-field\s+\.fk-date-assist__native\[type=\"date\"\]\s*\{([^{}]*)\}",
+        css,
+    )
+    assert strong, (
+        "Need a stronger selector `.fk-form-field .fk-date-assist__native[type=\"date\"]` "
+        "to beat the general `.fk-form-field input[type=\"date\"]` rule"
+    )
+    body = strong.group(1)
+    for prop, val in (
+        ("width", r"1px"),
+        ("height", r"1px"),
+        ("clip", r"rect\(\s*0\s+0\s+0\s+0\s*\)"),
+        ("pointer-events", r"none"),
+    ):
+        assert re.search(rf"\b{re.escape(prop)}\s*:\s*{val}", body), (
+            f"Strong hidden-input rule must set {prop}: {val} (got body: {body!r})"
+        )

@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<p>Ģimenes ar neatrisinātiem soļiem — sakārtotas pēc steidzamības (vispirms iesniegtie pieteikumi).</p>
+
+{% if rows %}
+<table class="module">
+  <thead>
+    <tr>
+      <th>Vecāks</th>
+      <th>E-pasts</th>
+      <th>Statusi un nākamās darbības</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><strong>{{ row.guardian.full_name|default:"—" }}</strong></td>
+      <td>{{ row.guardian.email|default:"—" }}</td>
+      <td class="fk-hub-lanes">
+        {% for status in row.statuses %}
+          {% include "admin/members/guardian/_lane_status.html" with status=status %}
+        {% endfor %}
+      </td>
+      <td>
+        <a class="button" href="{% url 'admin:members_guardian_family_hub' row.guardian.pk %}">Atvērt centru →</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Nav ģimeņu, kurām būtu nepieciešama darbība. 🎉</p>
+{% endif %}
+{% endblock %}

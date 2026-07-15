@@ -4,6 +4,7 @@ from typing import cast
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db.models import Q
 from django.http import (
     Http404,
     HttpRequest,
@@ -13,6 +14,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from urllib.parse import urlparse
 
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
@@ -27,6 +29,8 @@ from apps.agreements.services import (
 )
 from apps.analytics import services as analytics_services
 from apps.analytics.sanitize import sanitize_referral_code
+from apps.billing.models import BillingInvoice
+from apps.billing.parent_portal import parent_invoice_groups
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
 from apps.integrations.name_normalization import normalize_latvian_name
@@ -297,7 +301,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
     else:
         form = RegistrationApplicationForm(
             initial={
-                "guardian_full_name": application.guardian_name,
+                "guardian_first_name": application.guardian_first_name,
+                "guardian_family_name": application.guardian_family_name,
                 "guardian_personal_id": application.guardian_pid,
                 "guardian_email": application.guardian_contact_email,
                 "guardian_phone": application.guardian_contact_phone,
@@ -578,8 +583,42 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "has_draft": has_draft,
             "primary_application": _portal_primary_application(account),
             "greeting_name": greeting_name,
+            "invoice_groups": parent_invoice_groups(account),
         },
     )
+
+
+def open_parent_invoice(request: HttpRequest, invoice_id: int) -> HttpResponse:
+    """GET /portal/invoices/<id>/open/ — ownership-scoped proxy redirect.
+
+    The parent must own the invoice through ParentAccount -> Guardian ->
+    Member -> BillingRecord -> BillingInvoice, the invoice must be issued,
+    and it must have a stored safe external URL with an http(s) scheme. All
+    other cases return 404 so the existence of cross-family invoices is
+    never revealed, and a non-http(s) URL (defense-in-depth against a future
+    provider bug) is also refused.
+    """
+    account = _current_parent_account(request)
+    if account is None:
+        return redirect("registrations:start-registration")
+
+    invoice = (
+        BillingInvoice.objects.filter(
+            Q(sent_at__isnull=False) | Q(external_status="sent"),
+            pk=invoice_id,
+            billing_record__member__guardian__parent_account=account,
+            cancelled_at__isnull=True,
+        )
+        .exclude(external_url="")
+        .first()
+    )
+    if invoice is None:
+        raise Http404
+    # Defense-in-depth: refuse non-http(s) URLs in case a future provider
+    # returns something exotic (e.g. javascript:, data:, file:).
+    if urlparse(invoice.external_url).scheme not in ("http", "https"):
+        raise Http404
+    return redirect(invoice.external_url)
 
 
 def view_registration_summary(request: HttpRequest, application_id: int) -> HttpResponse:
@@ -630,8 +669,10 @@ def _ocr_extracted_fields(document: Document) -> dict[str, str]:
 
     fields: dict[str, str] = {}
     if document.kind == Document.Kind.GUARDIAN_IDENTITY:
-        if full_name:
-            fields["guardian_full_name"] = full_name
+        if first:
+            fields["guardian_first_name"] = first
+        if last:
+            fields["guardian_family_name"] = last
         if pid:
             fields["guardian_personal_id"] = pid
     elif document.kind == Document.Kind.MEMBER_IDENTITY:

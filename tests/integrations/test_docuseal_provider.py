@@ -40,8 +40,12 @@ class _FakeGuardian:
 
 class _FakeDate:
     @staticmethod
-    def isoformat():
-        return "2015-12-10"
+    def strftime(fmt):
+        return "10.12.2015"
+
+
+class _FakeSourceApplication:
+    member_actual_address = "Sporta iela 1, Cēsis"
 
 
 class _FakeMember:
@@ -50,6 +54,7 @@ class _FakeMember:
     personal_id = "151210-22222"
     birth_date = _FakeDate()
     guardian = _FakeGuardian()
+    source_application = _FakeSourceApplication()
 
 
 class _GeneratedAt:
@@ -67,6 +72,7 @@ class _FakeAgreement:
     id = 42
     member = _FakeMember()
     generated_at = _GeneratedAt()
+    agreement_number = "FKC-2026-001"
 
 
 def _mock_response(status_code, payload=None):
@@ -126,10 +132,18 @@ def test_create_submission_request_shape_and_normalization(
     assert "values" not in submitter
     fields = submitter["fields"]
     by_name = {f["name"]: f for f in fields}
-    assert {"child_name", "guardian_name", "email", "phone"} <= set(by_name)
-    assert by_name["guardian_name"]["default_value"] == "Anna Bērziņa"
-    assert by_name["email"]["default_value"] == "anna@example.test"
-    assert by_name["phone"]["default_value"] == "+37120000000"
+    assert {
+        "agreement_number",
+        "child_name",
+        "child_address",
+        "guardian_name",
+        "guardian_email",
+        "guardian_phone",
+    } <= set(by_name)
+    assert by_name["agreement_number"]["default_value"] == "FKC-2026-001"
+    assert by_name["child_address"]["default_value"] == "Sporta iela 1, Cēsis"
+    assert by_name["guardian_email"]["default_value"] == "anna@example.test"
+    assert by_name["guardian_phone"]["default_value"] == "+37120000000"
     assert all(f["readonly"] is True for f in fields)
     assert "training_group" not in by_name
     # agreement_date is auto-filled by the DocuSeal template (current date),
@@ -204,3 +218,62 @@ def test_verify_webhook_signature_rejects_stale_timestamp(docuseal_settings):
 
 def test_verify_webhook_signature_rejects_empty_header(docuseal_settings):
     assert docuseal.verify_webhook_signature(b"x", "") is False
+
+
+def test_create_submission_requires_agreement_number(docuseal_settings):
+    class MissingNumberAgreement(_FakeAgreement):
+        agreement_number = ""
+
+    with pytest.raises(ap.AgreementPlatformConfigError, match="agreement number"):
+        docuseal.create_submission(MissingNumberAgreement())
+
+
+def test_list_submission_documents_parses_pdf_documents(docuseal_settings, monkeypatch):
+    """list_submission_documents must GET /submissions/{id}/documents with
+    auth header and parse the response into DocumentResult instances."""
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers
+        return _mock_response(
+            200,
+            {
+                "documents": [
+                    {
+                        "id": 501,
+                        "filename": "agreement.pdf",
+                        "content_type": "application/pdf",
+                        "url": "https://sign.example/docs/501.pdf",
+                    },
+                    {
+                        "id": 502,
+                        "filename": "attachment.png",
+                        "content_type": "image/png",
+                        "url": "https://sign.example/docs/502.png",
+                    },
+                ]
+            },
+        )
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    from apps.integrations.agreement_platform import DocumentResult
+
+    results = docuseal.list_submission_documents("1001")
+
+    assert captured["method"] == "GET"
+    assert captured["url"] == "https://sign.example/api/submissions/1001/documents"
+    assert captured["headers"]["X-Auth-Token"] == "secret-key"
+
+    assert len(results) == 2
+    assert isinstance(results[0], DocumentResult)
+    assert results[0].filename == "agreement.pdf"
+    assert results[0].url == "https://sign.example/docs/501.pdf"
+    assert results[0].content_type == "application/pdf"
+    assert results[1].filename == "attachment.png"
+    assert results[1].url == "https://sign.example/docs/502.png"
+    assert results[1].content_type == "image/png"

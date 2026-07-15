@@ -1,0 +1,15 @@
+/* P11 family hub — minimal lane-status layout. Reuses .fk-badge from fk_badges.css. */
+
+.fk-hub-lanes .fk-hub-lane {
+  display: inline-block;
+  margin: 0 8px 6px 0;
+  white-space: nowrap;
+}
+.fk-hub-lanes .fk-hub-lane__icon {
+  margin-right: 4px;
+}
+.fk-hub-lanes .fk-hub-lane__next {
+  margin-left: 6px;
+  color: #555;
+  font-size: 0.9em;
+}

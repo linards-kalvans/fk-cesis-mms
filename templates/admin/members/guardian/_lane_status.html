@@ -1,0 +1,8 @@
+{# Lane status pill: icon + .fk-badge + next-action label. #}
+<span class="fk-hub-lane">
+  <span class="fk-hub-lane__icon" aria-hidden="true">{{ status.icon }}</span>
+  <span class="fk-badge fk-badge--{{ status.level }}">{{ status.badge }}</span>
+  {% if status.next_action and status.next_action != "—" %}
+    <span class="fk-hub-lane__next">{{ status.next_action }}</span>
+  {% endif %}
+</span>

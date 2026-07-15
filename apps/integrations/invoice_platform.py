@@ -58,6 +58,9 @@ class PaymentResult:
     paid_to_date: Decimal
     balance: Decimal | None
     last_payment_date: date | None
+    # P12: parent-safe invoice URL. Empty string when the provider response
+    # does not contain a known safe URL field — never synthesized from base.
+    external_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,7 @@ def fetch_invoice_payment(external_invoice_id: str) -> PaymentResult:
             paid_to_date=Decimal("0.00"),
             balance=None,
             last_payment_date=None,
+            external_url=f"https://stub.invalid/invoices/{external_invoice_id}",
         )
     if mode == "invoiceninja":
         from apps.integrations import invoice_ninja

@@ -323,6 +323,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - GDPR/privacy posture and production enablement checklist are documented in `docs/analytics.md`; live provider/dashboard smoke remains required before enabling in production.
 
 ### P11 — Family admin action hub
+**Status:** dev complete (2026-07-09) — family action queue + Guardian family hub delivered inside Django admin. Staff can review family lanes, approve/request-fix/reject applications, send/sign/retry/sync/void/regenerate agreements, start minor/material amendments, discontinue memberships with invoice selection, confirm/push/sync billing, and inspect the unified `Norēķini un rēķini` block with invoice rows. Statuses render as icon + badge + next-action labels. Agreement billing-plan setup is available before signing, the Guardian changelist shows a next-action column and sorts action-needed families first, DocuSeal agreement PDFs can be opened through a staff-only Family hub proxy once a submission exists, missing training groups can be assigned inline from **Dalība**, and kit size appears as one canonical **Formas izmērs** value; legacy shorts values stay hidden here. Verification: `uv run pytest -q` → 1684 passed, `uv run ruff check .` → clean, `uv run mypy .` → clean, `uv run python manage.py makemigrations --check` → no changes. LAN acceptance remains pending before final P11 sign-off.
+
 **Why eleventh**
 - staff currently jumps across many Django admin pages to process one family end-to-end
 - all underlying service paths already exist (P5–P8); this is presentation/orchestration only
@@ -340,6 +342,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - deep edits remain on existing admin change pages
 
 ### P12 — Parent invoice visibility
+**Status:** dev complete (2026-07-13)
+
 **Why twelfth**
 - builds on Invoice Ninja sync and payment read-back already delivered in P6
 - gives parents self-service visibility before adding more invoice types
@@ -350,9 +354,35 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - safe Invoice Ninja payment/view link is shown only when available
 - parent access is limited to the verified guardian's own invoices
 
-### P13 — Custom invoices
+**Delivered**
+- issued membership invoices visible on existing `/portal/`, grouped by child + season
+- rows show sequence, due date, amount, sent status, payment status, sync freshness timestamp
+- safe stored Invoice Ninja URL opens through Django ownership-check proxy (not raw external link)
+- future draft / unissued installments hidden from parent view
+- custom invoices remain out of scope (P14)
+- verification evidence: targeted P12 tests 28 passed; full gate `uv run pytest -q` → 1703 passed, `uv run ruff check .` → passed, `uv run mypy .` → passed, `uv run python manage.py makemigrations --check` → no changes; code review approved
+
+### P13 — Invoice Ninja client name mapping
+**Status:** dev complete (2026-07-13)
+
 **Why thirteenth**
-- extends billing beyond membership dues after parent invoice visibility exists
+- Invoice Ninja clients expect separate first-name / family-name values
+- MMS previously had one canonical parent full-name field, which made client records weaker and invoice presentation less clean
+- this is crucial for MVP billing polish before adding custom invoices
+
+**Delivered**
+- `Guardian.first_name` and `Guardian.family_name` added with safe backfill migration `members/0010_guardian_name_parts`; backfill rule uses the last token as family name and earlier tokens as first name
+- `Guardian.full_name` remains a temporary compatibility mirror; new registration/admin writes keep it synced from explicit fields
+- parent registration now renders separate **Vecāka vārds** and **Vecāka uzvārds** fields; direct service callers keep a legacy `guardian_full_name` alias for compatibility
+- guardian OCR maps provider `first_name` / `last_name` into explicit guardian fields and source keys
+- Guardian admin edits explicit name fields, shows `full_name` read-only, and keeps ParentAccount-owned email/phone consolidation intact
+- Invoice Ninja client contact payload sends separate `first_name` and `last_name` while preserving client `name` and `custom_value1` dedup behavior
+- existing display surfaces keep using the mirrored full name for P13 step 1; dropping the mirror column remains future cleanup
+- verification evidence: P13 targeted tests 57 passed; OCR/source tests 24 passed; old-test sweep 96 passed; review-fix tests 23 passed; prefill/read-through tests 52 passed; full suite `uv run pytest -q` → 1733 passed; `uv run ruff check .` → passed; `uv run mypy .` → success (416 source files); `uv run python manage.py makemigrations --check` → no changes
+
+### P14 — Custom invoices
+**Why fourteenth**
+- extends billing beyond membership dues after parent invoice visibility exists and client name mapping is correct
 - covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
 
 **Target outcome**
@@ -361,8 +391,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent portal shows custom invoices alongside membership invoices
 - creation, push, send, failure, and payment-sync actions stay audited
 
-### P14 — Coaches and training groups
-**Why fourteenth**
+### P15 — Coaches and training groups
+**Why fifteenth**
 - extends the member/training-group admin model before adding attendance or coach-facing workflows
 - keeps coach data structured instead of burying it in free-text group names
 
@@ -373,7 +403,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent-visible coach info stays optional and explicitly scoped later
 - coach portal, attendance, and messaging remain out of this slice
 
-### P15 — Calendar + WhatsApp attendance integration
+### P16 — Calendar + WhatsApp attendance integration
 **Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
@@ -873,7 +903,7 @@ P11 is complete when all of the following are true:
 9. All hub actions reuse existing service paths — no new business logic.
 10. Tests cover queue ordering/filtering, hub page rendering, each hub action triggering the correct service, void-vs-discontinuation separation, billing block grouping, kit-size admin display, and permission checks.
 
-### P12 acceptance — Parent invoice visibility
+### P12 acceptance — Parent invoice visibility ✅ COMPLETE (2026-07-13)
 P12 is complete when all of the following are true:
 
 1. Parent portal lists every invoice linked to the verified guardian's members.
@@ -884,8 +914,18 @@ P12 is complete when all of the following are true:
 6. Empty/error states are parent-friendly and Latvian.
 7. Tests cover ownership, status display, empty state, and mixed paid/unpaid invoices.
 
-### P13 acceptance — Custom invoices
+### P13 acceptance — Invoice Ninja client name mapping
 P13 is complete when all of the following are true:
+
+1. MMS has a decided source of truth for parent first-name and family-name values: explicit fields or a documented derivation from the canonical full name.
+2. Existing guardians are migrated/backfilled safely, or the derivation path is proven safe without migration.
+3. Invoice Ninja client create/update payload sends first-name and family-name values in the fields Invoice Ninja expects.
+4. Existing Guardian/ParentAccount contact-data consolidation remains intact; no duplicate email/phone source is reintroduced.
+5. Admin and parent surfaces still render the canonical parent display name clearly.
+6. Tests cover Latvian names, multi-token names where practical, empty/ambiguous names, and Invoice Ninja payload mapping.
+
+### P14 acceptance — Custom invoices
+P14 is complete when all of the following are true:
 
 1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
 2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
@@ -895,8 +935,8 @@ P13 is complete when all of the following are true:
 6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
 7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
 
-### P14 acceptance — Coaches and training groups
-P14 is complete when all of the following are true:
+### P15 acceptance — Coaches and training groups
+P15 is complete when all of the following are true:
 
 1. Staff can create and edit coach records in admin.
 2. Training groups can have one or more linked coaches.
@@ -906,8 +946,8 @@ P14 is complete when all of the following are true:
 6. Coach portal, attendance, and messaging are not introduced in this milestone.
 7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
 
-### P15 acceptance — Calendar + WhatsApp attendance integration
-P15 is complete when all of the following are true:
+### P16 acceptance — Calendar + WhatsApp attendance integration
+P16 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -956,9 +996,8 @@ Remaining focus:
 - payment visibility and retry paths
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- parent invoice visibility (P12)
-- custom one-off invoices (P13)
-- coaches linked to training groups (P14)
+- custom one-off invoices (P14)
+- coaches linked to training groups (P15)
 
 ### M5 — Admin operations completion
 Remaining focus:
@@ -984,11 +1023,10 @@ Remaining focus:
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
 - family admin action hub (P11)
-- parent invoice visibility (P12)
-- custom one-off invoices (P13)
-- coaches linked to training groups (P14)
-- calendar integration (P15)
-- WhatsApp attendance polling (P15)
+- custom one-off invoices (P14)
+- coaches linked to training groups (P15)
+- calendar integration (P16)
+- WhatsApp attendance polling (P16)
 
 ---
 

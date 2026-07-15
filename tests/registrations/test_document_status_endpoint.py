@@ -146,7 +146,8 @@ def test_status_returns_extracted_fields_on_completed_guardian(settings):
     payload = json.loads(response.content)
     assert payload["ocr_status"] == "completed"
     assert payload["extracted_fields"] == {
-        "guardian_full_name": "Anna Bērziņa",
+        "guardian_first_name": "Anna",
+        "guardian_family_name": "Bērziņa",
         "guardian_personal_id": "010180-12345",
     }
 
@@ -378,7 +379,8 @@ def test_status_normalizes_uppercase_guardian_name(settings):
     assert response.status_code == 200
     payload = json.loads(response.content)
     assert payload["ocr_status"] == "completed"
-    assert payload["extracted_fields"]["guardian_full_name"] == "John Smith"
+    assert payload["extracted_fields"]["guardian_first_name"] == "John"
+    assert payload["extracted_fields"]["guardian_family_name"] == "Smith"
     assert payload["extracted_fields"]["guardian_personal_id"] == "010180-12345"
 
 

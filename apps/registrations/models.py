@@ -156,6 +156,14 @@ class RegistrationApplication(TimeStampedModel):
         return str(self.guardian.full_name) if self.guardian_id is not None else ""
 
     @property
+    def guardian_first_name(self) -> str:
+        return str(self.guardian.first_name) if self.guardian_id is not None else ""
+
+    @property
+    def guardian_family_name(self) -> str:
+        return str(self.guardian.family_name) if self.guardian_id is not None else ""
+
+    @property
     def guardian_pid(self) -> str:
         return str(self.guardian.personal_id) if self.guardian_id is not None else ""
 
@@ -175,4 +183,6 @@ class RegistrationApplication(TimeStampedModel):
     def guardian_profile_populated(self) -> bool:
         """True when this application's canonical Guardian profile is already
         filled (returning parent). Drives the locked-profile UX in Slice C."""
-        return bool(self.guardian_id is not None and self.guardian.full_name)
+        if self.guardian_id is None:
+            return False
+        return bool(self.guardian.first_name.strip() and self.guardian.family_name.strip())

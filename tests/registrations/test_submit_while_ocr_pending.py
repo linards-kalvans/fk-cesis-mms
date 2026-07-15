@@ -140,9 +140,9 @@ def test_late_ocr_completion_writes_extraction_but_freezes_field_sources(setting
     # the late job (submitted-state data is frozen).
     app.refresh_from_db()
     post_sources = dict(app.field_sources) if app.field_sources else {}
-    assert post_sources.get("guardian_full_name") == pre_sources.get(
-        "guardian_full_name"
+    assert post_sources.get("guardian_first_name") == pre_sources.get(
+        "guardian_first_name"
     ), (
         "Late OCR completion must not mutate field_sources on submitted apps."
     )
-    assert post_sources.get("guardian_full_name") != "ocr_guardian_identity"
+    assert post_sources.get("guardian_first_name") != "ocr_guardian_identity"

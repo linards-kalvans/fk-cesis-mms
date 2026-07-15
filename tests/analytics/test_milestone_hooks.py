@@ -66,7 +66,7 @@ def test_application_submitted_milestone_emitted_with_status_and_referral(
 
     response = verified_client.post(
         reverse("registrations:application-workspace", args=[draft_with_documents.pk]),
-        {**submit_payload, "submit_action": "submit"},
+        {**submit_payload, "submit_action": "submit", "member_birth_date": "01.01.2025"},
     )
 
     assert response.status_code == 302

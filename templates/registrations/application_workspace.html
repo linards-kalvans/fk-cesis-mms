@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var btn = document.querySelector('[data-guardian-unlock]');
   var lockBlock = document.querySelector('[data-guardian-lock]');
   if (!btn || !lockBlock) return;
-  var lockableIds = ["id_guardian_full_name", "id_guardian_personal_id", "id_guardian_phone", "id_guardian_declared_address"];
+  var lockableIds = ["id_guardian_first_name", "id_guardian_family_name", "id_guardian_personal_id", "id_guardian_phone", "id_guardian_declared_address"];
   var LOCK_CLASS = "fk-input--guardian-locked";
   var LABEL_UNLOCK = "Rediģēt vecāka datus";
   var LABEL_LOCK = "Slēgt rediģēšanu";
@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded',function(){
       {% for bound_field in bound_fields %}
         <p><strong>{{ bound_field.label }}:</strong>
           {% if section_name == "member" and bound_field.name == "member_birth_date" %}
-            {{ application.member_birth_date|date:"Y-m-d" }}
+            {{ application.member_birth_date|date:"d.m.Y" }}
           {% elif section_name == "agreement" and bound_field.name == "support_club_instead_of_multi_child_discount" %}
             {{ bound_field.value|yesno:"Jā,Nē" }}
           {% elif bound_field.name == "guardian_email" %}

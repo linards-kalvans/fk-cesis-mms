@@ -20,7 +20,7 @@ from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
-from apps.members.models import KitSizeOption, Member, TrainingGroup
+from apps.members.models import KitSizeOption, Member, TrainingGroup, split_guardian_full_name
 from apps.members.services import resolve_guardian_for_account
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
@@ -39,7 +39,8 @@ def safe_extract_document_data(*args, **kwargs):
     return _ocr.safe_extract_document_data(*args, **kwargs)
 
 REQUIRED_SUBMIT_FIELDS = (
-    "guardian_full_name",
+    "guardian_first_name",
+    "guardian_family_name",
     "guardian_personal_id",
     "guardian_email",
     "guardian_phone",
@@ -52,10 +53,12 @@ REQUIRED_SUBMIT_FIELDS = (
     "preferred_agreement_signing",
 )
 
-# Slice B2: guardian fields in REQUIRED_SUBMIT_FIELDS are legacy column names;
-# resolve them through the read accessors instead of direct attribute access.
+# Slice B2 / P13: guardian fields in REQUIRED_SUBMIT_FIELDS map to model
+# accessors; the read path lives on the linked Guardian, not on legacy
+# RegistrationApplication columns.
 _GUARDIAN_SUBMIT_ACCESSORS = {
-    "guardian_full_name": "guardian_name",
+    "guardian_first_name": "guardian_first_name",
+    "guardian_family_name": "guardian_family_name",
     "guardian_personal_id": "guardian_pid",
     "guardian_email": "guardian_contact_email",
     "guardian_phone": "guardian_contact_phone",
@@ -65,7 +68,8 @@ _GUARDIAN_SUBMIT_ACCESSORS = {
 # Manual P1 form-field names used as field_sources keys (guardian fields now
 # live on the Guardian row; guardian_email is derived from ParentAccount).
 MANUAL_P1_FIELDS = (
-    "guardian_full_name",
+    "guardian_first_name",
+    "guardian_family_name",
     "guardian_personal_id",
     "guardian_phone",
     "guardian_declared_address",
@@ -134,7 +138,8 @@ def get_application_prefill(account: ParentAccount | None) -> dict[str, object]:
     if latest is not None:
         prefill.update(
             {
-                "guardian_full_name": latest.guardian_name,
+                "guardian_first_name": latest.guardian_first_name,
+                "guardian_family_name": latest.guardian_family_name,
                 "guardian_personal_id": latest.guardian_pid,
                 "guardian_declared_address": latest.guardian_address,
             }
@@ -177,9 +182,10 @@ def _merge_ocr_extractions(account: ParentAccount) -> dict[str, str]:
         fn = normalize_latvian_name(person_fields.get("first_name", ""))
         ln = normalize_latvian_name(person_fields.get("last_name", ""))
         pid = str(person_fields.get("personal_id", "")).strip()
-        full_name = " ".join(part for part in [fn, ln] if part).strip()
-        if full_name:
-            result["guardian_full_name"] = full_name
+        if fn:
+            result["guardian_first_name"] = fn
+        if ln:
+            result["guardian_family_name"] = ln
         if pid:
             result["guardian_personal_id"] = pid
         break  # Found usable guardian OCR — stop scanning older apps
@@ -210,7 +216,8 @@ def _set_ocr_field_sources(application: RegistrationApplication, kind: str) -> N
     """
     sources = dict(application.field_sources) if application.field_sources else {}
     if kind == Document.Kind.GUARDIAN_IDENTITY:
-        sources["guardian_full_name"] = "ocr_guardian_identity"
+        sources["guardian_first_name"] = "ocr_guardian_identity"
+        sources["guardian_family_name"] = "ocr_guardian_identity"
         sources["guardian_personal_id"] = "ocr_guardian_identity"
     elif kind == Document.Kind.MEMBER_IDENTITY:
         sources["member_full_name"] = "ocr_member_identity"
@@ -364,7 +371,8 @@ def _handle_guardian_doc_reuse(
         _set_ocr_field_sources(application, prior_doc.kind)
     else:
         sources = dict(application.field_sources) if application.field_sources else {}
-        sources["guardian_full_name"] = "manual_only"
+        sources["guardian_first_name"] = "manual_only"
+        sources["guardian_family_name"] = "manual_only"
         sources["guardian_personal_id"] = "manual_only"
         application.field_sources = sources
         application.save(update_fields=["field_sources", "updated_at"])
@@ -426,15 +434,31 @@ def create_or_update_draft(
             data = dict(data)
             data[new] = data[old]
 
+    # P13 legacy alias: old callers (or stale tabs) posting the single
+    # ``guardian_full_name`` field are still accepted; we split it once
+    # here so all downstream writes see the explicit name parts.
+    if "guardian_full_name" in data and (
+        "guardian_first_name" not in data and "guardian_family_name" not in data
+    ):
+        legacy = str(data["guardian_full_name"])
+        first_name, family_name = split_guardian_full_name(legacy)
+        data = dict(data)
+        data["guardian_first_name"] = first_name
+        data["guardian_family_name"] = family_name
+
     # Slice B2: when a Guardian is linked, write only the canonical Guardian
     # row; the legacy columns are not written. Unverified drafts hold only
     # claimed_email — no guardian_* column writes.
     if application.guardian_id is not None:
         _guardian = application.guardian
-        _guardian.full_name = str(data.get("guardian_full_name", "")).strip()
+        _guardian.first_name = str(data.get("guardian_first_name", "")).strip()
+        _guardian.family_name = str(data.get("guardian_family_name", "")).strip()
+        _guardian.sync_full_name()
         _guardian.personal_id = str(data.get("guardian_personal_id", "")).strip()
         _guardian.address = str(data.get("guardian_declared_address", "")).strip()
-        _guardian.save(update_fields=["full_name", "personal_id", "address"])
+        _guardian.save(
+            update_fields=["first_name", "family_name", "full_name", "personal_id", "address"]
+        )
         account = _guardian.parent_account
         new_phone = str(data.get("guardian_phone", "")).strip()
         if account is not None and new_phone and account.phone != new_phone:

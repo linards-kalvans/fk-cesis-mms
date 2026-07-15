@@ -173,6 +173,28 @@ def test_material_amendment_creates_lifecycle_events(signed_agreement, staff_use
     assert "material_amendment_started" in event_types
 
 
+def test_material_amendment_assigns_new_agreement_number(
+    signed_agreement, staff_user
+):
+    """The new current agreement must carry its own immutable agreement number
+    (different from the superseded one's)."""
+    from django.utils import timezone
+
+    from apps.agreements.services import start_material_amendment
+
+    old_number = signed_agreement.agreement_number
+    assert old_number  # baseline: existing fixture already has one
+
+    new_agreement = start_material_amendment(
+        signed_agreement, staff_user, "Būtiskas izmaiņas"
+    )
+
+    year = timezone.localtime(new_agreement.generated_at).year
+    assert new_agreement.agreement_number is not None
+    assert new_agreement.agreement_number != old_number
+    assert new_agreement.agreement_number == f"FKC-{year}-002"
+
+
 # -- discontinue_agreement --
 
 

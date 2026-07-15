@@ -10,7 +10,8 @@ from apps.registrations.models import RegistrationApplication
 pytestmark = pytest.mark.django_db
 
 GUARDIAN_PROFILE_FIELDS = (
-    "guardian_full_name",
+    "guardian_first_name",
+    "guardian_family_name",
     "guardian_personal_id",
     "guardian_phone",
     "guardian_declared_address",
@@ -22,15 +23,15 @@ class TestGuardianProfilePopulated:
         app = RegistrationApplication.objects.create(claimed_email="p@example.com")
         assert app.guardian_profile_populated is False
 
-    def test_false_when_guardian_has_empty_full_name(self, parent_account, make_guardian):
-        guardian = make_guardian(parent_account)  # full_name="" by default
+    def test_false_when_guardian_has_empty_name(self, parent_account, make_guardian):
+        guardian = make_guardian(parent_account)  # first_name="" family_name="" by default
         app = RegistrationApplication.objects.create(
             parent_account=parent_account, guardian=guardian
         )
         assert app.guardian_profile_populated is False
 
-    def test_true_when_guardian_full_name_set(self, parent_account, make_guardian):
-        guardian = make_guardian(parent_account, full_name="Anna Ozola")
+    def test_true_when_guardian_name_parts_set(self, parent_account, make_guardian):
+        guardian = make_guardian(parent_account, first_name="Anna", family_name="Ozola")
         app = RegistrationApplication.objects.create(
             parent_account=parent_account, guardian=guardian
         )
@@ -59,8 +60,10 @@ class TestWorkspaceLockWiring:
         from apps.registrations.models import RegistrationApplication
 
         guardian = resolve_guardian_for_account(parent_account)
-        guardian.full_name = "Anna Ozola"
-        guardian.save(update_fields=["full_name"])
+        guardian.first_name = "Anna"
+        guardian.family_name = "Ozola"
+        guardian.sync_full_name()
+        guardian.save(update_fields=["first_name", "family_name", "full_name"])
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
@@ -70,7 +73,8 @@ class TestWorkspaceLockWiring:
         resp = verified_client.get(f"/applications/{app.id}/")
         assert resp.status_code == 200
         assert resp.context["guardian_profile_locked"] is True
-        assert resp.context["form"].fields["guardian_full_name"].widget.attrs.get("readonly") == "readonly"
+        assert resp.context["form"].fields["guardian_first_name"].widget.attrs.get("readonly") == "readonly"
+        assert resp.context["form"].fields["guardian_family_name"].widget.attrs.get("readonly") == "readonly"
 
     def test_first_registration_profile_unlocked(self, verified_client, parent_account):
         from apps.members.services import resolve_guardian_for_account
@@ -85,7 +89,8 @@ class TestWorkspaceLockWiring:
         resp = verified_client.get(f"/applications/{app.id}/")
         assert resp.status_code == 200
         assert resp.context["guardian_profile_locked"] is False
-        assert "readonly" not in resp.context["form"].fields["guardian_full_name"].widget.attrs
+        assert "readonly" not in resp.context["form"].fields["guardian_first_name"].widget.attrs
+        assert "readonly" not in resp.context["form"].fields["guardian_family_name"].widget.attrs
 
 
 class TestLockedRenderMarkup:
@@ -94,8 +99,10 @@ class TestLockedRenderMarkup:
         from apps.registrations.models import RegistrationApplication
 
         guardian = resolve_guardian_for_account(parent_account)
-        guardian.full_name = "Anna Ozola"
-        guardian.save(update_fields=["full_name"])
+        guardian.first_name = "Anna"
+        guardian.family_name = "Ozola"
+        guardian.sync_full_name()
+        guardian.save(update_fields=["first_name", "family_name", "full_name"])
         return RegistrationApplication.objects.create(
             parent_account=parent_account,
             guardian=guardian,
@@ -125,7 +132,8 @@ class TestLockedRenderMarkup:
 # ---------------------------------------------------------------------------
 
 _LOCKABLE_FIELDS = [
-    "id_guardian_full_name",
+    "id_guardian_first_name",
+    "id_guardian_family_name",
     "id_guardian_personal_id",
     "id_guardian_phone",
     "id_guardian_declared_address",
@@ -142,8 +150,10 @@ class TestGuardianLockVisualState:
         from apps.registrations.models import RegistrationApplication
 
         guardian = resolve_guardian_for_account(parent_account)
-        guardian.full_name = "Anna Ozola"
-        guardian.save(update_fields=["full_name"])
+        guardian.first_name = "Anna"
+        guardian.family_name = "Ozola"
+        guardian.sync_full_name()
+        guardian.save(update_fields=["first_name", "family_name", "full_name"])
         return RegistrationApplication.objects.create(
             parent_account=parent_account,
             guardian=guardian,
