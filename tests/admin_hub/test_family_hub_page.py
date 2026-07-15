@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 from django.urls import reverse
 
@@ -211,7 +214,9 @@ def test_hub_shows_docuseal_pdf_link_when_external_id_exists(
     staff_client, approved_application,
 ):
     """Hub must show 'Lejupielādēt līguma PDF no DocuSeal' link when the
-    agreement has an external_id (DocuSeal submission id)."""
+    agreement has an external_id (DocuSeal submission id). The href must
+    include ?return_anchor=child-application-<pk> so the PDF fallback
+    returns staff to the correct child card."""
     from apps.agreements.models import Agreement
 
     member = approved_application.approved_member
@@ -228,7 +233,10 @@ def test_hub_shows_docuseal_pdf_link_when_external_id_exists(
         "admin:members_guardian_docuseal_document",
         args=[guardian.pk, agreement.pk],
     )
+    anchor = f"child-application-{approved_application.pk}"
     assert expected_url in html
+    # The href must include the return_anchor query param
+    assert f'?return_anchor={anchor}' in html
 
 
 def test_hub_hides_docuseal_pdf_link_without_external_id(
@@ -290,3 +298,170 @@ def test_hub_hides_inline_group_assignment_for_member_with_group(
     html = response.content.decode()
 
     assert 'value="assign_training_group"' not in html
+
+
+# ---------------------------------------------------------------------------
+# Anchor contract — child card DOM ids and return_anchor hidden fields.
+# ---------------------------------------------------------------------------
+
+
+def test_hub_renders_application_child_anchor_and_return_field(
+    staff_client, submitted_application,
+):
+    """Each child card must carry a stable id based on its source application,
+    and every POST form inside that card must submit a matching return_anchor.
+    For a submitted application, the template renders approve, request_fix,
+    and reject forms — all three must carry the anchor."""
+    guardian = submitted_application.guardian
+    action_url = reverse(
+        "admin:members_guardian_family_hub_action", args=[guardian.pk]
+    )
+    response = staff_client.get(_hub_url(guardian))
+
+    anchor = f"child-application-{submitted_application.pk}"
+    html = response.content.decode()
+
+    # Card has the anchor id
+    assert f'id="{anchor}"' in html
+
+    # Known application controls are present
+    assert 'value="approve_application"' in html
+    assert 'value="request_fix"' in html
+    assert 'value="reject"' in html
+
+    # Count forms posting to the action URL and return_anchor fields
+    form_count = html.count(f'action="{action_url}"')
+    anchor_count = html.count(f'name="return_anchor" value="{anchor}"')
+
+    # Sanity: at least the three application forms rendered
+    assert form_count >= 3, f"Expected >=3 forms, got {form_count}"
+    # Every form must have exactly one matching return_anchor
+    assert anchor_count == form_count, (
+        f"Expected {form_count} return_anchor fields, got {anchor_count}"
+    )
+
+
+def test_hub_approved_child_card_uses_source_application_anchor(
+    staff_client, approved_application,
+):
+    """After approval the child card must keep its source-application anchor,
+    not fall back to a member-based anchor. The approved_application fixture
+    provides an agreement (generated state) and a member (no training_group),
+    so the template renders agreement + membership controls — all must carry
+    the source-application anchor."""
+    source_app = approved_application
+    guardian = source_app.guardian
+    action_url = reverse(
+        "admin:members_guardian_family_hub_action", args=[guardian.pk]
+    )
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    anchor = f"child-application-{source_app.pk}"
+
+    # Card has the anchor id
+    assert f'id="{anchor}"' in html
+
+    # Known controls are present: agreement (mark_agreement_sent, void) +
+    # membership (assign_training_group)
+    assert 'value="mark_agreement_sent"' in html
+    assert 'value="void_agreement"' in html
+    assert 'value="assign_training_group"' in html
+
+    # Count forms posting to the action URL and return_anchor fields
+    form_count = html.count(f'action="{action_url}"')
+    anchor_count = html.count(f'name="return_anchor" value="{anchor}"')
+
+    # Sanity: at least the three controls rendered
+    assert form_count >= 3, f"Expected >=3 forms, got {form_count}"
+    # Every form must have exactly one matching return_anchor
+    assert anchor_count == form_count, (
+        f"Expected {form_count} return_anchor fields, got {anchor_count}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Static template contract — every form in family_hub.html must carry the
+# return_anchor hidden field. Covers conditional branches (e.g. billing states,
+# agreement states, member-with/without-group) not simultaneously rendered by
+# one fixture.
+# ---------------------------------------------------------------------------
+
+
+def test_every_hub_form_carries_return_anchor_hidden_field():
+    """Every <form method="post" action="{{ action_url }}"> in the hub template
+    must include <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">.
+    This contract covers all application, agreement, membership, and billing
+    controls, including conditional branches not simultaneously rendered by
+    one fixture."""
+    template_path = (
+        Path(__file__).resolve().parents[2]
+        / "templates"
+        / "admin"
+        / "members"
+        / "guardian"
+        / "family_hub.html"
+    )
+    template_source = template_path.read_text(encoding="utf-8")
+
+    # Match every form block: <form ... method="post" ... action="{{ action_url }}" ...>...</form>
+    # The regex uses order-independent lookaheads so attribute order is irrelevant.
+    form_pattern = re.compile(
+        r'<form\s+(?=[^>]*method="post")'
+        r'(?=[^>]*action="\{\{\s*action_url\s*\}\}")'
+        r'[^>]*>.*?</form>',
+        re.DOTALL,
+    )
+    forms = form_pattern.findall(template_source)
+
+    assert len(forms) > 0, (
+        "Expected at least one <form method=\"post\" action=\"{{ action_url }}\"> "
+        "in family_hub.html"
+    )
+
+    # Every form must contain an <input> with both name="return_anchor" and
+    # value="{{ child.anchor_id }}" in any attribute order.
+    anchor_pattern = re.compile(
+        r'<input\s+(?=[^>]*name="return_anchor")'
+        r'(?=[^>]*value="\{\{\s*child\.anchor_id\s*\}\}")'
+        r'[^>]*>'
+    )
+    missing = []
+    for idx, form_html in enumerate(forms, start=1):
+        if not anchor_pattern.search(form_html):
+            missing.append(idx)
+
+    assert not missing, (
+        f"Forms at positions {missing} are missing the return_anchor hidden field. "
+        f"Expected: name=\"return_anchor\" value=\"{{{{ child.anchor_id }}}}\". "
+        f"Total forms: {len(forms)}."
+    )
+
+
+def test_hub_member_without_source_application_uses_member_anchor(
+    staff_client,
+):
+    """A Member without a source_application must fall back to
+    child-member-<pk> as its anchor, with matching return_anchor fields
+    in rendered action forms."""
+    from apps.members.models import Member
+    from tests.support import make_guardian
+
+    guardian = make_guardian(full_name="Member-Only Parent")
+    member = Member.objects.create(
+        full_name="Member-Only Child", guardian=guardian
+    )
+
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    anchor = f"child-member-{member.pk}"
+
+    # Card id uses member fallback
+    assert f'id="{anchor}"' in html
+
+    # At least one return_anchor field carries the member anchor
+    assert f'name="return_anchor" value="{anchor}"' in html
+
+    # Inline training-group control renders so this is a real action-capable child
+    assert 'value="assign_training_group"' in html

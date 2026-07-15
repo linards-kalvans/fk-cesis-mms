@@ -16,7 +16,7 @@
 {% endif %}
 
 {% for child in hub.children %}
-<div class="module">
+<div class="module" id="{{ child.anchor_id }}">
   <h2>{% if child.member %}{{ child.member.full_name }}{% else %}{{ child.application.member_full_name|default:"Pieteikums" }}{% endif %}</h2>
 
   {# Pieteikumi #}
@@ -30,6 +30,7 @@
         <summary>Apstiprināt ar izvēlētu grupu</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="approve_application">
           <input type="hidden" name="application_id" value="{{ child.application.pk }}">
           <label for="hub_group_{{ child.application.pk }}">Treniņu grupa:</label>
@@ -46,6 +47,7 @@
         <summary>Pieprasīt labojumu</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="request_fix">
           <input type="hidden" name="application_id" value="{{ child.application.pk }}">
           <label for="fix_msg_{{ child.application.pk }}">Ziņojums:</label>
@@ -57,6 +59,7 @@
         <summary>Noraidīt</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="reject">
           <input type="hidden" name="application_id" value="{{ child.application.pk }}">
           <label for="reject_msg_{{ child.application.pk }}">Ziņojums:</label>
@@ -84,6 +87,7 @@
       </p>
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="set_billing_setup">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <label for="hub_billing_plan_{{ child.agreement.pk }}">Norēķinu plāns:</label>
@@ -102,6 +106,7 @@
     {% if child.agreement.state == "generated" %}
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="mark_agreement_sent">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <button type="submit">Atzīmēt nosūtītu</button>
@@ -109,6 +114,7 @@
     {% elif child.agreement.state == "sent" and child.agreement.billing_plan_id %}
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="mark_agreement_signed">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <button type="submit">Atzīmēt parakstītu</button>
@@ -117,12 +123,14 @@
     {% if child.agreement.external_state == "failed" or child.agreement.external_error_code %}
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="retry_docuseal">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <button type="submit">Mēģināt vēlreiz</button>
       </form>
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="sync_docuseal">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <button type="submit">Pārbaudīt DocuSeal statusu</button>
@@ -130,7 +138,7 @@
     {% endif %}
     {% if child.agreement.external_id %}
       <p>
-        <a href="{% url 'admin:members_guardian_docuseal_document' guardian.pk child.agreement.pk %}">
+        <a href="{% url 'admin:members_guardian_docuseal_document' guardian.pk child.agreement.pk %}?return_anchor={{ child.anchor_id }}">
           Lejupielādēt līguma PDF no DocuSeal
         </a>
       </p>
@@ -140,6 +148,7 @@
         <summary>Neliels labojums (piezīme)</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="minor_amendment">
           <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
           <label for="minor_note_{{ child.agreement.pk }}">Piezīme:</label>
@@ -151,6 +160,7 @@
         <summary>Sākt būtisku izmaiņu procedūru</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="material_amendment">
           <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
           <label for="material_note_{{ child.agreement.pk }}">Piezīme:</label>
@@ -164,6 +174,7 @@
         <summary>Atcelt līgumu</summary>
         <form method="post" action="{{ action_url }}">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="void_agreement">
           <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
           <label for="void_reason_{{ child.agreement.pk }}">Iemesls:</label>
@@ -184,6 +195,7 @@
   {% if child.member and not child.member.training_group_id %}
     <form method="post" action="{{ action_url }}" style="display:inline">
       {% csrf_token %}
+      <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
       <input type="hidden" name="action" value="assign_training_group">
       <input type="hidden" name="member_id" value="{{ child.member.pk }}">
       <label for="hub_member_group_{{ child.member.pk }}">Treniņu grupa:</label>
@@ -204,6 +216,7 @@
       <summary>Pārtraukt dalību</summary>
       <form method="post" action="{{ action_url }}">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="discontinue_member">
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <label for="eff_date_{{ child.agreement.pk }}">Spēkā stāšanās datums:</label>
@@ -242,6 +255,7 @@
       {% if group.record.status == "draft" %}
         <form method="post" action="{{ action_url }}" style="display:inline">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="confirm_billing">
           <input type="hidden" name="billing_record_id" value="{{ group.record.pk }}">
           <button type="submit" class="default">Apstiprināt ierakstu</button>
@@ -249,6 +263,7 @@
       {% elif group.record.status == "confirmed" and group.record.external_status != "synced" %}
         <form method="post" action="{{ action_url }}" style="display:inline">
           {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
           <input type="hidden" name="action" value="push_billing">
           <input type="hidden" name="billing_record_id" value="{{ group.record.pk }}">
           <button type="submit">Izrakstīt rēķinus</button>
@@ -256,6 +271,7 @@
       {% endif %}
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
+        <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
         <input type="hidden" name="action" value="sync_billing_payments">
         <input type="hidden" name="billing_record_id" value="{{ group.record.pk }}">
         <button type="submit">Pārbaudīt maksājumus</button>

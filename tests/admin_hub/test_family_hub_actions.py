@@ -508,3 +508,143 @@ def test_assign_training_group_rejects_cross_family_member(
         },
     )
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Anchor redirect contract — POST actions preserve return_anchor as fragment.
+# ---------------------------------------------------------------------------
+
+
+def _hub_url(guardian):
+    return reverse("admin:members_guardian_family_hub", args=[guardian.pk])
+
+
+def test_approve_application_redirects_to_its_application_anchor(
+    staff_client, submitted_application,
+):
+    """Approval POST with return_anchor must redirect to hub + #child-application-<pk>."""
+    guardian = submitted_application.guardian
+    anchor = f"child-application-{submitted_application.pk}"
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "approve_application",
+            "application_id": submitted_application.pk,
+            "return_anchor": anchor,
+        },
+    )
+
+    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+
+
+def test_mark_agreement_sent_redirects_with_source_application_anchor(
+    staff_client, approved_application,
+):
+    """Agreement action must redirect to the source application anchor."""
+    from apps.agreements.models import Agreement
+
+    guardian = approved_application.guardian
+    agreement = Agreement.objects.get(
+        member=approved_application.approved_member, is_current=True
+    )
+    anchor = f"child-application-{approved_application.pk}"
+
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "mark_agreement_sent",
+            "agreement_id": agreement.pk,
+            "return_anchor": anchor,
+        },
+    )
+
+    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+
+
+def test_assign_training_group_redirects_with_source_application_anchor(
+    staff_client, approved_application,
+):
+    """Training-group assignment must redirect to the source application anchor."""
+    from apps.members.models import TrainingGroup
+
+    group = TrainingGroup.objects.create(name="U10 B", is_active=True)
+    member = approved_application.approved_member
+    member.training_group = None
+    member.save(update_fields=["training_group"])
+
+    guardian = approved_application.guardian
+    anchor = f"child-application-{approved_application.pk}"
+
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "assign_training_group",
+            "member_id": member.pk,
+            "training_group": group.pk,
+            "return_anchor": anchor,
+        },
+    )
+
+    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+
+
+def test_confirm_billing_redirects_with_source_application_anchor(
+    staff_client, approved_application, billing_record_factory,
+):
+    """Billing confirmation must redirect to the source application anchor."""
+    from apps.billing.models import BillingRecord
+
+    member = approved_application.approved_member
+    record = billing_record_factory(member, status=BillingRecord.Status.DRAFT)
+    guardian = approved_application.guardian
+    anchor = f"child-application-{approved_application.pk}"
+
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "confirm_billing",
+            "billing_record_id": record.pk,
+            "return_anchor": anchor,
+        },
+    )
+
+    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+
+
+def test_hub_action_discards_invalid_return_anchor(
+    staff_client, submitted_application,
+):
+    """Invalid return_anchor (external URL) must redirect to base hub, not attacker URL."""
+    guardian = submitted_application.guardian
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "request_fix",
+            "application_id": submitted_application.pk,
+            "review_message": "Lūdzu papildiniet.",
+            "return_anchor": "https://attacker.example/#x",
+        },
+    )
+
+    assert response["Location"] == _hub_url(guardian)
+
+
+def test_docuseal_pdf_error_fallback_preserves_return_anchor(
+    staff_client, approved_application,
+):
+    """DocuSeal PDF endpoint fallback (no external_id) must redirect to
+    hub + #anchor when return_anchor query param is valid."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = ""
+    agreement.save(update_fields=["external_id", "updated_at"])
+
+    guardian = approved_application.guardian
+    anchor = f"child-application-{approved_application.pk}"
+    url = _docuseal_document_url(guardian, agreement)
+
+    response = staff_client.get(f"{url}?return_anchor={anchor}")
+
+    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"

@@ -95,6 +95,24 @@ class _Child(TypedDict):
     membership_status: FamilyLaneStatus
     billing_groups: list[_BillingGroup]
     deep_links: dict[str, str]
+    anchor_id: str
+
+
+def _child_anchor_id(
+    application: "RegistrationApplication | None",
+    member: "Member | None",
+) -> str:
+    """Stable per-child DOM id used as URL fragment on the family hub.
+
+    Source application wins when present (an approved application keeps its
+    application anchor even though it created a Member). Otherwise the
+    member pk is used.
+    """
+    if application is not None and getattr(application, "pk", None):
+        return f"child-application-{application.pk}"
+    if member is not None and getattr(member, "pk", None):
+        return f"child-member-{member.pk}"
+    return ""
 
 
 def application_lane(application: RegistrationApplication) -> FamilyLaneStatus:
@@ -560,6 +578,7 @@ def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
                     "application": _application_deep_link(application) if application else "",
                     "agreement": _agreement_deep_link(agreement) if agreement else "",
                 },
+                "anchor_id": _child_anchor_id(application, member),
             }
         )
 
@@ -583,6 +602,7 @@ def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
                     "application": _application_deep_link(application),
                     "agreement": "",
                 },
+                "anchor_id": _child_anchor_id(application, None),
             }
         )
 

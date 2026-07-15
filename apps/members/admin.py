@@ -1,6 +1,7 @@
 """Django admin for members app."""
 
 import datetime
+import re
 
 from django import forms
 from django.contrib import admin, messages
@@ -59,6 +60,12 @@ from apps.registrations.services import (
     reject_application,
     request_application_fix,
 )
+
+
+# Only local-fragment anchors are accepted as a return-target. Anything else
+# (full URL, javascript:, empty, …) is dropped so user input never controls
+# a non-local redirect.
+_HUB_ANCHOR_RE = re.compile(r"\Achild-(?:application|member)-\d+\Z")
 
 
 class GuardianAdminForm(forms.ModelForm):
@@ -297,18 +304,19 @@ class GuardianAdmin(admin.ModelAdmin):
             Guardian.objects.select_related("parent_account"), pk=guardian_id
         )
         agreement = self._get_guardian_agreement(guardian, agreement_id)
+        return_anchor = request.GET.get("return_anchor", "")
         if not agreement.external_id:
             self.message_user(
                 request,
                 "DocuSeal sūtījums vēl nav izveidots.",
                 level=messages.ERROR,
             )
-            return self._family_hub_redirect(guardian.pk)
+            return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
         try:
             docs = agreement_platform.list_submission_documents(agreement.external_id)
         except agreement_platform.AgreementPlatformError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return self._family_hub_redirect(guardian.pk)
+            return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
         selected = next(
             (d for d in docs if d.content_type == "application/pdf"),
             docs[0] if docs else None,
@@ -319,7 +327,7 @@ class GuardianAdmin(admin.ModelAdmin):
                 "DocuSeal dokuments nav atrasts.",
                 level=messages.ERROR,
             )
-            return self._family_hub_redirect(guardian.pk)
+            return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
         return HttpResponseRedirect(selected.url)
 
     def family_hub_action_view(self, request, guardian_id):
@@ -330,6 +338,7 @@ class GuardianAdmin(admin.ModelAdmin):
         guardian = get_object_or_404(
             Guardian.objects.select_related("parent_account"), pk=guardian_id
         )
+        return_anchor = request.POST.get("return_anchor", "")
         action = request.POST.get("action", "").strip()
         handler = getattr(self, f"_family_hub_handle_{action}", None)
         if handler is None:
@@ -337,7 +346,9 @@ class GuardianAdmin(admin.ModelAdmin):
                 request, f"Nezināma darbība: {action or '—'}.",
                 level=messages.ERROR,
             )
-            return self._family_hub_redirect(guardian.pk)
+            return self._family_hub_redirect(
+                guardian.pk, return_anchor=return_anchor
+            )
         try:
             handler(request, guardian)
         except PermissionDenied:
@@ -346,10 +357,13 @@ class GuardianAdmin(admin.ModelAdmin):
             raise
         except Exception as exc:  # surface unexpected as admin error message
             self.message_user(request, str(exc), level=messages.ERROR)
-        return self._family_hub_redirect(guardian.pk)
+        return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
 
-    def _family_hub_redirect(self, guardian_id):
-        return redirect("admin:members_guardian_family_hub", guardian_id)
+    def _family_hub_redirect(self, guardian_id, return_anchor=""):
+        response = redirect("admin:members_guardian_family_hub", guardian_id)
+        if return_anchor and _HUB_ANCHOR_RE.fullmatch(return_anchor):
+            response["Location"] = f"{response["Location"]}#{return_anchor}"
+        return response
 
     def _get_guardian_application(self, guardian, application_id):
         return get_object_or_404(
