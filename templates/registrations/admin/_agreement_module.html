@@ -25,8 +25,8 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
       </select>
     </div>
     <div class="form-row">
-      <label for="first_billing_month">Pirmais rēķina mēnesis (GGGG-MM):</label>
-      <input type="text" name="first_billing_month" id="first_billing_month" value="{{ agreement.first_billing_month }}" placeholder="2026-09" pattern="\d{4}-\d{2}">
+      <label for="first_billing_month">Pirmais rēķina mēnesis:</label>
+      <input type="month" name="first_billing_month" id="first_billing_month" value="{{ agreement.first_billing_month }}" required>
     </div>
     <button type="submit" name="action" value="set_billing_setup" class="default">Saglabāt norēķinu plānu</button>
   </form>

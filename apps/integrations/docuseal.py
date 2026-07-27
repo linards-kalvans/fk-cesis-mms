@@ -50,7 +50,7 @@ def _build_submitter(agreement) -> dict:
     guardian = agreement.member.guardian
     return {
         "email": guardian.email,
-        "name": guardian.full_name,
+        "name": guardian.display_name,
     }
 
 
@@ -71,7 +71,7 @@ def _build_field_payload(agreement) -> dict:
             member.birth_date.strftime("%d.%m.%Y") if member.birth_date else ""
         ),
         "child_address": child_address,
-        "guardian_name": guardian.full_name,
+        "guardian_name": guardian.display_name,
         "guardian_personal_id": guardian.personal_id,
         "guardian_address": guardian.address,
         "guardian_email": guardian.email,

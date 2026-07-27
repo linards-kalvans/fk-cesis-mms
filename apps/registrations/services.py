@@ -20,7 +20,7 @@ from apps.integrations import ocr as _ocr
 from apps.integrations.name_normalization import normalize_latvian_name
 from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
-from apps.members.models import KitSizeOption, Member, TrainingGroup, split_guardian_full_name
+from apps.members.models import KitSizeOption, Member, TrainingGroup
 from apps.members.services import resolve_guardian_for_account
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
@@ -434,18 +434,6 @@ def create_or_update_draft(
             data = dict(data)
             data[new] = data[old]
 
-    # P13 legacy alias: old callers (or stale tabs) posting the single
-    # ``guardian_full_name`` field are still accepted; we split it once
-    # here so all downstream writes see the explicit name parts.
-    if "guardian_full_name" in data and (
-        "guardian_first_name" not in data and "guardian_family_name" not in data
-    ):
-        legacy = str(data["guardian_full_name"])
-        first_name, family_name = split_guardian_full_name(legacy)
-        data = dict(data)
-        data["guardian_first_name"] = first_name
-        data["guardian_family_name"] = family_name
-
     # Slice B2: when a Guardian is linked, write only the canonical Guardian
     # row; the legacy columns are not written. Unverified drafts hold only
     # claimed_email — no guardian_* column writes.
@@ -453,11 +441,10 @@ def create_or_update_draft(
         _guardian = application.guardian
         _guardian.first_name = str(data.get("guardian_first_name", "")).strip()
         _guardian.family_name = str(data.get("guardian_family_name", "")).strip()
-        _guardian.sync_full_name()
         _guardian.personal_id = str(data.get("guardian_personal_id", "")).strip()
         _guardian.address = str(data.get("guardian_declared_address", "")).strip()
         _guardian.save(
-            update_fields=["first_name", "family_name", "full_name", "personal_id", "address"]
+            update_fields=["first_name", "family_name", "personal_id", "address"]
         )
         account = _guardian.parent_account
         new_phone = str(data.get("guardian_phone", "")).strip()
@@ -662,7 +649,18 @@ def submit_application(
     application.review_message = ""
     application.reviewed_by = None
     application.reviewed_at = None
-    application.save(update_fields=["status", "submitted_at", "updated_at", "review_message", "reviewed_by_id", "reviewed_at"])
+    # P19: re-arm the per-row digest delivery flag so the next morning's digest
+    # includes this newly-submitted event.
+    application.submission_digest_sent_at = None
+    application.save(update_fields=[
+        "status",
+        "submitted_at",
+        "updated_at",
+        "review_message",
+        "reviewed_by_id",
+        "reviewed_at",
+        "submission_digest_sent_at",
+    ])
 
     return application
 
@@ -847,7 +845,7 @@ def _render_and_send_notification(
     context: dict[str, Any] = {
         "application": application,
         "member_full_name": application.member_full_name,
-        "guardian_full_name": application.guardian_name,
+        "guardian_display_name": application.guardian_name,
         "review_message": application.review_message or "",
         "application_url": f"{settings.SITE_URL}{application_path}",
         "portal_url": f"{settings.SITE_URL}{portal_path}",

@@ -106,7 +106,8 @@ def _create_submitted_app(
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": guardian_name,
+            "guardian_first_name": guardian_name.split(" ", 1)[0] if " " in guardian_name else "",
+            "guardian_family_name": guardian_name.split(" ", 1)[1] if " " in guardian_name else guardian_name,
             "guardian_personal_id": guardian_pid,
             "guardian_phone": "+37122222222",
             "guardian_declared_address": "Riga, Brivibas 1",
@@ -151,9 +152,10 @@ class TestGuardianModel:
     def test_guardian_model_exists(self):
         assert Guardian is not None
 
-    def test_guardian_has_full_name_field(self):
+    def test_guardian_has_first_and_family_name_fields(self):
         field_names = {f.name for f in Guardian._meta.get_fields()}
-        assert "full_name" in field_names, "Guardian must have full_name field."
+        assert "first_name" in field_names, "Guardian must have first_name field."
+        assert "family_name" in field_names, "Guardian must have family_name field."
 
     def test_guardian_has_personal_id_field(self):
         field_names = {f.name for f in Guardian._meta.get_fields()}
@@ -162,13 +164,21 @@ class TestGuardianModel:
     def test_guardian_email_reads_through_account(self):
         """Guardian.email is a read-only proxy onto the linked ParentAccount."""
         acct = ParentAccount.objects.create(email="jane@example.com")
-        g = Guardian.objects.create(full_name="Jane Doe", parent_account=acct)
+        g = Guardian.objects.create(
+            first_name="Jane",
+            family_name="Doe",
+            parent_account=acct,
+        )
         assert g.email == "jane@example.com"
 
     def test_guardian_phone_reads_through_account(self):
         """Guardian.phone is a read-only proxy onto the linked ParentAccount."""
         acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
-        g = Guardian.objects.create(full_name="Jane Doe", parent_account=acct)
+        g = Guardian.objects.create(
+            first_name="Jane",
+            family_name="Doe",
+            parent_account=acct,
+        )
         assert g.phone == "+37120000000"
 
     def test_guardian_has_address_field(self):
@@ -178,13 +188,14 @@ class TestGuardianModel:
     def test_guardian_can_be_created(self):
         acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
-            full_name="Jane Doe",
+            first_name="Jane",
+            family_name="Doe",
             personal_id="010101-12345",
             address="Riga, Brivibas 1",
             parent_account=acct,
         )
         assert g.pk is not None
-        assert g.full_name == "Jane Doe"
+        assert g.display_name == "Jane Doe"
         assert g.email == "jane@example.com"
 
 
@@ -256,7 +267,8 @@ class TestMemberModel:
         """
         acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
-            full_name="Jane Doe",
+            first_name="Jane",
+            family_name="Doe",
             personal_id="010101-12345",
             address="Riga, Brivibas 1",
             parent_account=acct,
@@ -273,7 +285,8 @@ class TestMemberModel:
     def test_member_can_be_created_with_guardian(self):
         acct = ParentAccount.objects.create(email="jane@example.com", phone="+37120000000")
         g = Guardian.objects.create(
-            full_name="Jane Doe",
+            first_name="Jane",
+            family_name="Doe",
             personal_id="010101-12345",
             address="Riga, Brivibas 1",
             parent_account=acct,

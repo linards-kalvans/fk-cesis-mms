@@ -55,7 +55,8 @@ class TestOcrFieldSourceValues:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "OcrSource Parent",
+                "guardian_first_name": "OcrSource",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-60000",
                 "guardian_phone": "+37120000060",
                 "guardian_declared_address": "Riga 60",
@@ -106,7 +107,8 @@ class TestOcrFieldSourceValues:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "OcrMember Parent",
+                "guardian_first_name": "OcrMember",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-61000",
                 "guardian_phone": "+37120000061",
                 "guardian_declared_address": "Riga 61",
@@ -151,7 +153,8 @@ class TestOcrFieldSourceValues:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "ManualSource Parent",
+                "guardian_first_name": "ManualSource",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-62000",
                 "guardian_phone": "+37120000062",
                 "guardian_declared_address": "Riga 62",
@@ -199,7 +202,8 @@ class TestOcrFieldSourceValues:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "FailSource Parent",
+                "guardian_first_name": "FailSource",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-63000",
                 "guardian_phone": "+37120000063",
                 "guardian_declared_address": "Riga 63",

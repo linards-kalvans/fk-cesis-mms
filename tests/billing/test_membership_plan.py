@@ -15,7 +15,11 @@ def test_membership_plan_defaults():
     )
     assert plan.currency == "EUR"
     assert plan.annual_amount == Decimal("300.00")
-    assert plan.sibling_discount_percent == Decimal("0.00")
+    # P14: sibling_discount_percent field removed from MembershipPlan.
+    assert not hasattr(MembershipPlan, "sibling_discount_percent")
+    # P14: sibling_discount_percent_applied retained on BillingRecord.
+    from apps.billing.models import BillingRecord
+    assert hasattr(BillingRecord, "sibling_discount_percent_applied")
     assert plan.is_active is False
     assert str(plan) == "Sezona 2026/2027"
     assert plan.created_at is not None

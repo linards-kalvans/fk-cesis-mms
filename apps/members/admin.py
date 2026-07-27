@@ -104,21 +104,20 @@ class GuardianAdminForm(forms.ModelForm):
 class GuardianAdmin(admin.ModelAdmin):
     form = GuardianAdminForm
     list_display = (
-        "full_name",
+        "display_name",
         "email",
         "phone",
         "next_family_action",
         "family_hub_link",
     )
     search_fields = (
-        "full_name",
         "first_name",
         "family_name",
         "parent_account__email",
         "personal_id",
     )
-    readonly_fields = ("related_records", "full_name")
-    fields = ("related_records", "first_name", "family_name", "full_name",
+    readonly_fields = ("related_records", "display_name")
+    fields = ("related_records", "first_name", "family_name", "display_name",
               "personal_id", "address",
               "email", "phone", "is_active")
 
@@ -172,7 +171,7 @@ class GuardianAdmin(admin.ModelAdmin):
             output_field=IntegerField(),
         )
         return qs.annotate(action_priority=action_priority).order_by(
-            "-action_priority", "full_name", "pk"
+            "-action_priority", "first_name", "family_name", "pk"
         )
 
     def get_urls(self):
@@ -229,6 +228,10 @@ class GuardianAdmin(admin.ModelAdmin):
             '<a href="{}">Atvērt centru →</a>', url
         )  # type: ignore[return-value,no-any-return]
 
+    @admin.display(description="Pilns vārds")
+    def display_name(self, obj):
+        return obj.display_name or "—"
+
     @admin.display(description="Saistītie ieraksti")
     def related_records(self, obj):
         members = list(obj.members.prefetch_related("billing_records")) if obj.pk else []
@@ -244,10 +247,6 @@ class GuardianAdmin(admin.ModelAdmin):
         )  # type: ignore[return-value,no-any-return]
 
     def save_model(self, request, obj, form, change):
-        # Keep the legacy ``full_name`` mirror in sync with the explicit
-        # name fields BEFORE the parent save, so the row never lands in
-        # the DB with explicit parts and a stale mirror.
-        obj.sync_full_name()
         super().save_model(request, obj, form, change)
         account = obj.parent_account
         new_phone = form.cleaned_data.get("phone", "")
@@ -285,7 +284,7 @@ class GuardianAdmin(admin.ModelAdmin):
         )
         context = {
             **self.admin_site.each_context(request),
-            "title": f"Ģimenes centrs — {guardian.full_name or guardian.pk}",
+            "title": f"Ģimenes centrs — {guardian.display_name or guardian.pk}",
             "guardian": guardian,
             "action_url": reverse(
                 "admin:members_guardian_family_hub_action", args=[guardian.pk]
@@ -498,6 +497,12 @@ class GuardianAdmin(admin.ModelAdmin):
             raw = str(exc)
             if raw == "billing plan required":
                 latvian = "Pirms parakstīšanas jāizvēlas norēķinu plāns."
+            elif raw == "next year plan required":
+                latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
+            elif raw == "first billing month required":
+                latvian = "Pirmais rēķina mēnesis ir obligāts."
+            elif raw == "billing plan inactive":
+                latvian = "Izvēlētais norēķinu plāns nav aktīvs."
             else:
                 latvian = raw
             self.message_user(request, latvian, level=messages.ERROR)
@@ -535,8 +540,18 @@ class GuardianAdmin(admin.ModelAdmin):
             )
         except ValueError as exc:
             raw = str(exc)
-            if "first billing month" in raw:
+            if raw == "next year plan required":
+                latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
+            elif raw == "first billing month required":
+                latvian = "Pirmais rēķina mēnesis ir obligāts."
+            elif raw == "billing plan inactive":
+                latvian = "Izvēlētais norēķinu plāns nav aktīvs."
+            elif "first billing month must use YYYY-MM" in raw:
                 latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+            elif "cannot be before cutoff-derived default" in raw:
+                latvian = (
+                    "Izvēlētais mēnesis ir pirms pirmā pieejamā rēķina mēneša."
+                )
             else:
                 latvian = raw
             self.message_user(request, latvian, level=messages.ERROR)

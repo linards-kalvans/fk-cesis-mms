@@ -1,4 +1,4 @@
-Sveiki, {{ guardian_full_name }}!
+Sveiki, {{ guardian_display_name }}!
 
 Jūsu bērna {{ member_full_name }} līgums ir nosūtīts parakstīšanai.
 

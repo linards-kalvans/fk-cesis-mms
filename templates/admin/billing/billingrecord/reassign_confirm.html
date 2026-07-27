@@ -15,8 +15,8 @@
     </select>
   </div>
   <div class="form-row">
-    <label for="first_billing_month">Pirmais rēķina mēnesis (GGGG-MM):</label>
-    <input type="text" id="first_billing_month" name="first_billing_month" value="{{ record.first_billing_month }}" pattern="\d{4}-\d{2}" placeholder="2027-09">
+    <label for="first_billing_month">Pirmais rēķina mēnesis:</label>
+    <input type="month" id="first_billing_month" name="first_billing_month" value="{{ record.first_billing_month }}" required>
   </div>
   <button type="submit" class="default">Pārpiešķirt</button>
   <a href="{% url 'admin:billing_billingrecord_change' record.pk %}" class="button">Atcelt</a>

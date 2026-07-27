@@ -215,7 +215,8 @@ def test_consent_stamping_does_not_break_draft_save_for_non_consent_fields():
 
     result = create_or_update_draft(
         data=_base_data(
-            guardian_full_name="Jānis Bērziņš",
+            guardian_first_name="Jānis",
+            guardian_family_name="Bērziņš",
             personal_data_consent=True,
         ),
         files={},
@@ -225,7 +226,7 @@ def test_consent_stamping_does_not_break_draft_save_for_non_consent_fields():
 
     # This is the unverified/anonymous draft path (no verified_account), which by
     # design (Slice B2) persists only consent + claimed_email — the guardian profile
-    # (e.g. guardian_full_name) is not stored without a linked Guardian. We assert the
+    # (e.g. guardian first/family name) is not stored without a linked Guardian. We assert the
     # consent stamping still works; verified-path guardian persistence is covered in
     # tests/registrations/test_guardian_read_through.py.
     assert result.personal_data_consent_at is not None

@@ -1,4 +1,4 @@
-"""GuardianAdmin search works after email/phone became account proxies."""
+"""P13 cleanup — GuardianAdmin search uses first_name / family_name (not full_name)."""
 
 import pytest
 from django.contrib.auth.models import User
@@ -18,8 +18,6 @@ def _staff_client():
 
 
 def test_guardian_search_by_account_email_does_not_error():
-    # email is no longer a Guardian column; search_fields must traverse the
-    # account, else the changelist 500s with "no such column".
     make_guardian(full_name="Anna Ozola", email="findme@example.com")
     make_guardian(full_name="Cits", email="other@example.com")
     c = _staff_client()
@@ -27,3 +25,23 @@ def test_guardian_search_by_account_email_does_not_error():
     body = c.get(url).content.decode().split("</thead>")[-1]
     assert "Anna Ozola" in body
     assert "Cits" not in body
+
+
+def test_guardian_search_by_first_name():
+    make_guardian(full_name="Anna Ozola", email="a@example.com")
+    make_guardian(full_name="Cits", email="b@example.com")
+    c = _staff_client()
+    url = reverse("admin:members_guardian_changelist") + "?q=Anna"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Anna Ozola" in body
+    assert "Cits" not in body
+
+
+def test_guardian_search_by_family_name():
+    make_guardian(full_name="Anna Ozola", email="a@example.com")
+    make_guardian(full_name="Jānis Kalniņš", email="b@example.com")
+    c = _staff_client()
+    url = reverse("admin:members_guardian_changelist") + "?q=Ozola"
+    body = c.get(url).content.decode().split("</thead>")[-1]
+    assert "Anna Ozola" in body
+    assert "Kalniņš" not in body

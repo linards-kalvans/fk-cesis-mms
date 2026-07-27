@@ -30,22 +30,6 @@ def kit_size_sort_key(label: str) -> tuple[int, int | str]:
     return (2, normalized)
 
 
-def split_guardian_full_name(full_name: str) -> tuple[str, str]:
-    """Split a full name into (first_name, family_name) using the last-token rule.
-
-    Blank input -> both empty. Single token -> first only, family empty. Multiple
-    tokens -> earlier tokens joined as first, last token as family. The split
-    also collapses runs of internal whitespace, so a messy legacy "  Anna   Marija
-    Ozola  " lands cleanly on ("Anna Marija", "Ozola").
-    """
-    parts = str(full_name).split()
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return " ".join(parts[:-1]), parts[-1]
-
-
 class KitSizeOption(models.Model):
     """Admin-managed kit size lookup model."""
 
@@ -69,7 +53,6 @@ class Guardian(models.Model):
 
     first_name = models.CharField(max_length=255, blank=True, default="")
     family_name = models.CharField(max_length=255, blank=True, default="")
-    full_name = models.CharField(max_length=255)
     personal_id = models.CharField(max_length=32, blank=True, default="")
     address = models.CharField(max_length=255, blank=True, default="")
     external_client_id = models.CharField(max_length=64, blank=True, default="")
@@ -88,21 +71,17 @@ class Guardian(models.Model):
     def phone(self) -> str:
         return self.parent_account.phone if self.parent_account_id else ""
 
-    def sync_full_name(self) -> None:
-        """Rebuild the ``full_name`` mirror from the explicit name parts.
-
-        Centralises mirror construction so services, admin, and tests do not
-        duplicate string assembly. Empty parts are skipped, so a single-token
-        first name renders correctly without a stray double space.
+    @property
+    def display_name(self) -> str:
+        """Derived parent display name. P13 cleanup: replaces the removed
+        ``full_name`` mirror column.
         """
-        self.first_name = (self.first_name or "").strip()
-        self.family_name = (self.family_name or "").strip()
-        self.full_name = " ".join(
-            part for part in (self.first_name, self.family_name) if part
+        return " ".join(
+            part for part in (self.first_name.strip(), self.family_name.strip()) if part
         )
 
     def __str__(self):
-        return self.full_name or str(self.pk)
+        return self.display_name or str(self.pk)
 
     class Meta:
         verbose_name = "Vecāks"

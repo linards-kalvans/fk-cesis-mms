@@ -62,8 +62,7 @@ class TestWorkspaceLockWiring:
         guardian = resolve_guardian_for_account(parent_account)
         guardian.first_name = "Anna"
         guardian.family_name = "Ozola"
-        guardian.sync_full_name()
-        guardian.save(update_fields=["first_name", "family_name", "full_name"])
+        guardian.save(update_fields=["first_name", "family_name"])
 
         app = RegistrationApplication.objects.create(
             parent_account=parent_account,
@@ -101,8 +100,7 @@ class TestLockedRenderMarkup:
         guardian = resolve_guardian_for_account(parent_account)
         guardian.first_name = "Anna"
         guardian.family_name = "Ozola"
-        guardian.sync_full_name()
-        guardian.save(update_fields=["first_name", "family_name", "full_name"])
+        guardian.save(update_fields=["first_name", "family_name"])
         return RegistrationApplication.objects.create(
             parent_account=parent_account,
             guardian=guardian,
@@ -152,8 +150,7 @@ class TestGuardianLockVisualState:
         guardian = resolve_guardian_for_account(parent_account)
         guardian.first_name = "Anna"
         guardian.family_name = "Ozola"
-        guardian.sync_full_name()
-        guardian.save(update_fields=["first_name", "family_name", "full_name"])
+        guardian.save(update_fields=["first_name", "family_name"])
         return RegistrationApplication.objects.create(
             parent_account=parent_account,
             guardian=guardian,

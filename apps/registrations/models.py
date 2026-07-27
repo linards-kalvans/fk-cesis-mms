@@ -2,6 +2,7 @@
 
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import TimeStampedModel
@@ -102,6 +103,9 @@ class RegistrationApplication(TimeStampedModel):
     )
 
     submitted_at = models.DateTimeField(null=True, blank=True)
+    # Marks one specific submission event delivered by the daily digest job (P19).
+    # Not a status — it is a per-event delivery flag, cleared on the next submit.
+    submission_digest_sent_at = models.DateTimeField(null=True, blank=True)
 
     # Review metadata
     review_message = models.TextField(blank=True, default="")
@@ -153,7 +157,7 @@ class RegistrationApplication(TimeStampedModel):
     # --- Guardian-read accessors (Slice B2). No fallback to legacy columns. ---
     @property
     def guardian_name(self) -> str:
-        return str(self.guardian.full_name) if self.guardian_id is not None else ""
+        return str(self.guardian.display_name) if self.guardian_id is not None else ""
 
     @property
     def guardian_first_name(self) -> str:
@@ -186,3 +190,31 @@ class RegistrationApplication(TimeStampedModel):
         if self.guardian_id is None:
             return False
         return bool(self.guardian.first_name.strip() and self.guardian.family_name.strip())
+
+
+class RegistrationSubmissionDigestSettings(models.Model):
+    """Singleton model for the daily submitted-registration digest job (P19).
+
+    Configured recipients (active staff Users) receive a Bcc digest each
+    morning summarising every application that has been submitted since the
+    last successful run. ``last_successful_at`` is stamped on each successful
+    delivery; ``submission_digest_sent_at`` on each included application is
+    the per-row equivalent.
+    """
+
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="registration_submission_digest_settings",
+        limit_choices_to=models.Q(is_active=True, is_staff=True),
+    )
+    last_successful_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Pēdējā veiksmīgā nosūtīšana"
+    )
+
+    class Meta:
+        verbose_name = "Iesniegto pieteikumu kopsavilkuma iestatījumi"
+        verbose_name_plural = "Iesniegto pieteikumu kopsavilkuma iestatījumi"
+
+    def __str__(self) -> str:
+        return "Iesniegto pieteikumu kopsavilkuma iestatījumi"

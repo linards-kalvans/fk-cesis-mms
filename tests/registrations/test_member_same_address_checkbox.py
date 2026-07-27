@@ -70,7 +70,8 @@ class TestSubmitWithoutCheckingBoxStillValidates:
         # Build a complete payload with the checkbox absent (unchecked).
         # Browsers omit unchecked checkboxes from the POST body entirely.
         data = {
-            "guardian_full_name": "Anna Bērziņa",
+            "guardian_first_name": "Anna",
+            "guardian_family_name": "Bērziņa",
             "guardian_personal_id": "010101-10001",
             "guardian_email": "anna@example.com",
             "guardian_phone": "+37120000000",

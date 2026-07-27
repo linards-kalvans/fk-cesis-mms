@@ -52,3 +52,14 @@ def test_materialize_is_idempotent(active_plan, guardian):
     materialize_installments(rec)
     materialize_installments(rec)
     assert BillingInvoice.objects.filter(billing_record=rec).count() == 10
+
+
+def test_zero_final_amount_returns_empty_list(active_plan, guardian):
+    """P14: A record with final_amount=0 must materialize zero BillingInvoice rows."""
+    from apps.billing.models import BillingRecord, BillingInvoice
+    from apps.billing.services import materialize_installments
+
+    rec = _record(active_plan, guardian, BillingRecord.PaymentMode.INSTALLMENTS, "0.00")
+    rows = materialize_installments(rec)
+    assert rows == []
+    assert BillingInvoice.objects.filter(billing_record=rec).count() == 0

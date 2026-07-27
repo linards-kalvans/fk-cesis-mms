@@ -174,3 +174,97 @@ class TestSetBillingSetupEmptyPlanGuard:
         agreement.refresh_from_db()
         assert agreement.billing_plan_id == original_plan_id
         assert agreement.first_billing_month == original_month
+
+
+# ── P15: Signing refuses next-year-normalizing month ───────────────────
+
+
+class TestP15AdminSigningRefusesNextYearLatvian:
+    def test_admin_shows_latvian_next_year_error(
+        self, staff_client, submitted_application, reviewer
+    ):
+        """Admin POST to mark_agreement_signed with a first_billing_month
+        that normalizes into next calendar year (December with skip_months
+        ='7,12') renders the exact Latvian error
+        'Nākamajam gadam izvēlieties aktīvu norēķinu plānu.' and keeps
+        state GENERATED."""
+        plan = _make_plan(
+            season="2026/2027",
+            skip_months="7,12",
+            installment_count=10,
+        )
+        app = approve_application(submitted_application, reviewer)
+        agreement = create_agreement_for_member(
+            app.approved_member, Agreement.SigningPath.PAPER
+        )
+        agreement.billing_plan = plan
+        agreement.first_billing_month = "2026-12"
+        agreement.save(update_fields=["billing_plan", "first_billing_month"])
+
+        url = _review_action_url(app.pk)
+        response = staff_client.post(
+            url,
+            {"action": "mark_agreement_signed"},
+            follow=True,
+        )
+        assert response.status_code == 200
+        content = response.content.decode()
+        assert "Nākamajam gadam izvēlieties aktīvu norēķinu plānu." in content
+
+        agreement.refresh_from_db()
+        assert agreement.state == Agreement.State.GENERATED
+
+
+# ── P15: set_billing_setup normalizes skip months ──────────────────────
+
+
+class TestP15SetBillingSetupNormalizesSkipMonth:
+    def test_post_with_skip_month_persists_normalized(
+        self, staff_client, submitted_application, reviewer
+    ):
+        """Admin set_billing_setup with raw '2026-07' (a skip month for a
+        plan with skip_months='7,12') persists the normalized '2026-08'."""
+        plan = _make_plan(skip_months="7,12")
+        app = approve_application(submitted_application, reviewer)
+        agreement = create_agreement_for_member(
+            app.approved_member, Agreement.SigningPath.PAPER
+        )
+
+        url = _review_action_url(app.pk)
+        response = staff_client.post(
+            url,
+            {
+                "action": "set_billing_setup",
+                "billing_plan": plan.pk,
+                "first_billing_month": "2026-07",
+            },
+        )
+        assert response.status_code == 302
+
+        agreement.refresh_from_db()
+        assert agreement.first_billing_month == "2026-08"
+
+
+# ── P15: Billing month input is native type="month" ────────────────────
+
+
+class TestP15AdminBillingMonthNativeInput:
+    def test_billing_month_input_is_native_type_month(
+        self, staff_client, submitted_application, reviewer
+    ):
+        """The billing setup form renders a native <input type="month">
+        with name="first_billing_month"."""
+        import re
+
+        plan = _make_plan()
+        app = approve_application(submitted_application, reviewer)
+        create_agreement_for_member(
+            app.approved_member, Agreement.SigningPath.PAPER
+        )
+
+        response = staff_client.get(_change_url(app.pk))
+        assert response.status_code == 200
+        content = response.content.decode()
+        # Order-independent: assert one <input> tag contains both type="month" and name="first_billing_month".
+        pattern = r'<input(?=[^>]*type="month")[^>]*name="first_billing_month"[^>]*>'
+        assert re.search(pattern, content) is not None

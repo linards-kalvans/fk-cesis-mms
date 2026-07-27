@@ -59,7 +59,8 @@ def kit_sizes(db):
 def submit_payload(kit_sizes, parent_account):
     shirt_pk, _shorts_pk = kit_sizes
     return {
-        "guardian_full_name": "Hub Test Guardian",
+        "guardian_first_name": "Hub Test",
+        "guardian_family_name": "Guardian",
         "guardian_personal_id": "010101-12345",
         "guardian_email": parent_account.email,
         "guardian_phone": "+37120000000",

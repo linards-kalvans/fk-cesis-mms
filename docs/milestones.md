@@ -359,11 +359,11 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - rows show sequence, due date, amount, sent status, payment status, sync freshness timestamp
 - safe stored Invoice Ninja URL opens through Django ownership-check proxy (not raw external link)
 - future draft / unissued installments hidden from parent view
-- custom invoices remain out of scope (P14)
+- custom invoices remain out of scope (P16)
 - verification evidence: targeted P12 tests 28 passed; full gate `uv run pytest -q` → 1703 passed, `uv run ruff check .` → passed, `uv run mypy .` → passed, `uv run python manage.py makemigrations --check` → no changes; code review approved
 
 ### P13 — Invoice Ninja client name mapping
-**Status:** dev complete (2026-07-13)
+**Status:** dev complete incl. mirror cleanup (2026-07-15)
 
 **Why thirteenth**
 - Invoice Ninja clients expect separate first-name / family-name values
@@ -372,17 +372,58 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 
 **Delivered**
 - `Guardian.first_name` and `Guardian.family_name` added with safe backfill migration `members/0010_guardian_name_parts`; backfill rule uses the last token as family name and earlier tokens as first name
-- `Guardian.full_name` remains a temporary compatibility mirror; new registration/admin writes keep it synced from explicit fields
-- parent registration now renders separate **Vecāka vārds** and **Vecāka uzvārds** fields; direct service callers keep a legacy `guardian_full_name` alias for compatibility
+- `Guardian.full_name` mirror dropped by `members/0011_remove_guardian_full_name`; `Guardian.display_name` now derives from `first_name` + `family_name`
+- parent registration now renders separate **Vecāka vārds** and **Vecāka uzvārds** fields; production `guardian_full_name` alias removed after backfill cleanup
 - guardian OCR maps provider `first_name` / `last_name` into explicit guardian fields and source keys
-- Guardian admin edits explicit name fields, shows `full_name` read-only, and keeps ParentAccount-owned email/phone consolidation intact
-- Invoice Ninja client contact payload sends separate `first_name` and `last_name` while preserving client `name` and `custom_value1` dedup behavior
-- existing display surfaces keep using the mirrored full name for P13 step 1; dropping the mirror column remains future cleanup
-- verification evidence: P13 targeted tests 57 passed; OCR/source tests 24 passed; old-test sweep 96 passed; review-fix tests 23 passed; prefill/read-through tests 52 passed; full suite `uv run pytest -q` → 1733 passed; `uv run ruff check .` → passed; `uv run mypy .` → success (416 source files); `uv run python manage.py makemigrations --check` → no changes
+- Guardian admin edits explicit name fields, shows derived `display_name` read-only, and keeps ParentAccount-owned email/phone consolidation intact
+- Invoice Ninja client contact payload sends separate `first_name` and `last_name` while preserving client `name`/`display_name` and `custom_value1` dedup behavior
+- display surfaces, DocuSeal payloads, email contexts, exports, and admin search now use `display_name` or explicit name parts; stale mirror sync helpers removed
+- verification evidence: cleanup targeted sweep `uv run pytest -q ...` → 290 passed; full gate `uv run pytest -q` → 1757 passed, `uv run ruff check .` → passed, `uv run mypy .` → success (418 source files), `uv run python manage.py makemigrations --check` → no changes; grep check found only historical migrations plus intentional negative tests
 
-### P14 — Custom invoices
+### P14 — Family discount tiers
+**Status:** complete (2026-07-15)
+
 **Why fourteenth**
-- extends billing beyond membership dues after parent invoice visibility exists and client name mapping is correct
+- replaces the flat `MembershipPlan.sibling_discount_percent` with graduated tiers (0 %, 50 %, 75 %, 100 %) computed at billing-record creation time
+- the discount schedule is fixed club policy, not configurable per plan
+- 100 % tier records exist locally for history but do not materialize, push, send, or sync Invoice Ninja invoices
+
+**Target outcome**
+- graduated sibling discount: 1st child 0 %, 2nd 50 %, 3rd 75 %, 4th+ 100 %
+- ordered by current signed agreement's `signed_at` with `Member.pk` tie-break
+- guardian and season isolation for tier computation
+- opt-out child occupies its rank but is full-price
+- discontinued member (or effective date ≤ first due date) excluded from ranking
+- snapshot computed tier atomically under a guardian-row lock
+- staff can override draft record total with a required reason (audited; reason excluded from metadata)
+- `MembershipPlan.sibling_discount_percent` removed; `BillingRecord.sibling_discount_percent_applied` retained as snapshot
+
+**Delivered**
+- Fixed 0/50/75/100 % ranks use current signed agreements ordered by `signed_at`, then member pk; normal signing is season-scoped and guardian-row locked.
+- P9 billing-only renewal ranks the guardian's current signed family across seasons; a member without a current signed agreement remains full-price.
+- Opt-out stores actual 0 %, stays full-price, and keeps rank; draft recompute/reassign preserve snapshots; blank `first_billing_month` stays blank while scheduling falls back to plan defaults.
+- Zero-total records create no Invoice Ninja rows or provider calls and end locally `synced`; draft overrides require a reason including €0, confirmed records lock changes, and audit metadata excludes reason text.
+- `MembershipPlan.sibling_discount_percent` is removed; migrations `core/0007` and `billing/0014` landed. Verification: 1791 passed; ruff, mypy, and migration check clean.
+
+### P15 — Calendar-year partial billing ✅ DEV COMPLETE (2026-07-21)
+**Why fifteenth**
+- extends billing for mid-season signups before adding custom invoices
+- ensures parents are only charged for the remaining billable months of the calendar year
+- existing records and invoices remain untouched
+
+**Target outcome**
+- new agreements only: existing billing records and invoices are not affected
+- staff derives default first billing month from plan cutoff; may choose that month or a later month, never backdate
+- partial total = annual amount × remaining scheduled billable installments ÷ total plan installment count (skip months excluded from count)
+- family discount applied after partial calculation
+- staff may override total with a reason; system splits it across remaining scheduled installments
+- if no billable month remains in the calendar year, staff must explicitly select an active next-year plan before signing (never silently reuse current-year price)
+
+**Delivery state:** DEV COMPLETE. Implementation landed on `dev`. Focused P15/admin-family test suite 66 passed; full suite 1825 passed before a final deterministic test-only pin. `ruff`, `mypy`, and `makemigrations --check` green. Not yet LAN-signed-off. Design spec: `docs/superpowers/specs/2026-07-21-p15-calendar-year-partial-billing-design.md`. **Final full verification remains pending** until the controller reruns the full suite after all test/docs revisions are complete — the 1825 result is not final.
+
+### P16 — Custom invoices
+**Why sixteenth**
+- extends billing beyond membership dues after parent invoice visibility, client name mapping, family discount tiers, and calendar-year partial billing exist
 - covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
 
 **Target outcome**
@@ -391,8 +432,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent portal shows custom invoices alongside membership invoices
 - creation, push, send, failure, and payment-sync actions stay audited
 
-### P15 — Coaches and training groups
-**Why fifteenth**
+### P17 — Coaches and training groups
+**Why seventeenth**
 - extends the member/training-group admin model before adding attendance or coach-facing workflows
 - keeps coach data structured instead of burying it in free-text group names
 
@@ -403,7 +444,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent-visible coach info stays optional and explicitly scoped later
 - coach portal, attendance, and messaging remain out of this slice
 
-### P16 — Calendar + WhatsApp attendance integration
+### P18 — Calendar + WhatsApp attendance integration
 **Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
@@ -411,6 +452,20 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 **Target outcome**
 - calendar integration, likely external platform such as Google Calendar
 - automated WhatsApp attendance polling integration
+
+### P19 — Daily submitted-registration digest notification
+**Status:** full repository gate passed (2026-07-27: 1855 tests, ruff, mypy, migration check); LAN acceptance pending.
+
+**Why nineteenth**
+- staff need a dependable daily reminder for submissions without repeatedly polling the admin changelist
+- reuses the existing Django mail and django-q2 Schedule foundations; no new service or dependency
+
+**Target outcome**
+- one Latvian plain-text Bcc digest per day for configured active staff users
+- each row shows child and guardian names, Riga submission time, current status, and a direct admin link
+- recipients are configured by a superuser in Django admin; Schedule time is admin-editable after its 08:00 Europe/Riga seed
+- each initial submission and correction resubmission is delivered at least once; failed sends leave rows pending for the next daily run
+- contact details, personal IDs, addresses, documents, and review messages stay out of the email
 
 ---
 
@@ -924,8 +979,36 @@ P13 is complete when all of the following are true:
 5. Admin and parent surfaces still render the canonical parent display name clearly.
 6. Tests cover Latvian names, multi-token names where practical, empty/ambiguous names, and Invoice Ninja payload mapping.
 
-### P14 acceptance — Custom invoices
+### P14 acceptance — Family discount tiers ✅ COMPLETE (2026-07-15)
 P14 is complete when all of the following are true:
+
+1. All four tiers verified: 1st child 0 %, 2nd 50 %, 3rd 75 %, 4th+ 100 %.
+2. Signed-time ordering + pk tie-break verified.
+3. Guardian and season isolation verified.
+4. P9 billing-only renewal ranks the current signed family across target-plan seasons; no current signed agreement means full-price.
+5. Opt-out rank preserved (full-price, stores 0 % actual applied discount, but occupies rank).
+6. Discontinuation-before-first-due exclusion verified.
+7. Snapshot stability verified (old records retain stored tier).
+8. Concurrency guard verified (guardian-row `select_for_update`).
+9. Zero-record never produces an invoice or provider call.
+10. Override/reason/locking/audit verified (reason excluded from metadata).
+11. Old plan discount field (`sibling_discount_percent`) removed.
+12. Full verification passes: `uv run pytest -q`, `uv run ruff check .`, `uv run mypy .`.
+
+### P15 acceptance — Calendar-year partial billing ✅ DEV COMPLETE (2026-07-21)
+P15 is complete when all of the following are true:
+
+1. New agreements only: existing billing records and invoices untouched. ✅
+2. Staff derives default first billing month from plan cutoff; may choose later, never backdate. ✅
+3. Partial total = annual amount × remaining billable installments ÷ total installment count (skip months excluded). ✅
+4. Family discount applied after partial calculation. ✅
+5. Staff override splits across remaining scheduled installments. ✅
+6. No billable month remaining → staff must select active next-year plan (never silently reuse current-year price). ✅
+
+**Delivery state:** DEV COMPLETE. Focused P15/admin-family suite 66 passed; full suite 1825 passed before final deterministic test-only pin. `ruff`, `mypy`, `makemigrations --check` green. Not yet LAN-signed-off.
+
+### P16 acceptance — Custom invoices
+P16 is complete when all of the following are true:
 
 1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
 2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
@@ -935,8 +1018,8 @@ P14 is complete when all of the following are true:
 6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
 7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
 
-### P15 acceptance — Coaches and training groups
-P15 is complete when all of the following are true:
+### P17 acceptance — Coaches and training groups
+P17 is complete when all of the following are true:
 
 1. Staff can create and edit coach records in admin.
 2. Training groups can have one or more linked coaches.
@@ -946,8 +1029,8 @@ P15 is complete when all of the following are true:
 6. Coach portal, attendance, and messaging are not introduced in this milestone.
 7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
 
-### P16 acceptance — Calendar + WhatsApp attendance integration
-P16 is complete when all of the following are true:
+### P18 acceptance — Calendar + WhatsApp attendance integration
+P18 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -956,15 +1039,36 @@ P16 is complete when all of the following are true:
 5. Operational visibility exists for request/send/response state and failures.
 6. Consent / messaging controls are acceptable and configurable.
 7. Security / privacy posture is acceptable:
-   - data sharing minimized
-   - secrets/config externalized
-   - audit/log posture reasonable
+    - data sharing minimized
+    - secrets/config externalized
+    - audit/log posture reasonable
 8. Calendar adapter and messaging adapter remain separate and replaceable.
 9. Attendance responses for first slice are limited to:
-   - yes
-   - no
-   - maybe
+    - yes
+    - no
+    - maybe
 10. Tests cover critical mapping/failure behavior where testable.
+
+### P19 — Daily submitted-registration digest notification
+P19 delivers a daily Bcc email to configured staff summarising every submitted application that has not yet been included in a digest. The email lists child name, guardian name, Riga submission datetime, current status, and admin link per application. It omits contact data, personal IDs, addresses, documents, and review messages. The digest job uses a django-q2 daily Schedule (default 08:00 Europe/Riga, admin-editable after migration), per-row delivery flags on `RegistrationApplication`, and a singleton `RegistrationSubmissionDigestSettings` model for recipient management (superuser-only admin). At-least-once delivery semantics: send failures leave flags untouched so the next day retries.
+
+**Delivery state:** Full repository gate passed 2026-07-27: `uv run pytest -q` → 1855 passed; `uv run ruff check .`, `uv run mypy .`, and `uv run python manage.py makemigrations --check` clean. LAN acceptance pending.
+
+### P19 acceptance — Daily submitted-registration digest notification
+P19 is complete when all of the following are true:
+
+1. `RegistrationSubmissionDigestSettings` singleton exists after migration (pk=1).
+2. A django-q2 Schedule named `registrations-submission-digest` exists, pointing to `apps.registrations.tasks.send_submitted_registration_digest`, schedule type DAILY.
+3. Submitting a draft application sets `submitted_at` and clears `submission_digest_sent_at` to `NULL`.
+4. Running `send_submitted_registration_digest()` with configured recipients and pending rows sends one Bcc email and stamps `submission_digest_sent_at` on all included rows plus `last_successful_at` on the singleton.
+5. The email body contains only child name, guardian name, Riga datetime, status, and admin URL — no emails, phone, PID, address, docs, or review messages.
+6. With no recipients configured, the job returns 0 and leaves flags unchanged.
+7. With a send failure (SMTP error), the job returns 0 and leaves flags unchanged (retry next day).
+8. Resubmitting a fix_requested application clears `submission_digest_sent_at` so it appears in the next digest.
+9. Only superusers can access the digest settings in Django admin.
+10. The recipient picker shows only active staff Users.
+11. Full repository verification passes: `uv run pytest -q` (all tests), `uv run ruff check .`, `uv run mypy .`.
+12. Manual LAN acceptance confirms end-to-end: configure recipients, submit application, verify staff inbox receives digest, verify flag stamping, verify re-submit re-arms flag, verify failure handling.
 
 ---
 
@@ -996,8 +1100,9 @@ Remaining focus:
 - payment visibility and retry paths
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
-- custom one-off invoices (P14)
-- coaches linked to training groups (P15)
+- calendar-year partial billing (P15)
+- custom one-off invoices (P16)
+- coaches linked to training groups (P17)
 
 ### M5 — Admin operations completion
 Remaining focus:
@@ -1005,6 +1110,7 @@ Remaining focus:
 - export
 - filters/search polish
 - document/admin operations polish
+- daily submitted-registration digest notification (P19)
 
 ### M6 — Production readiness
 
@@ -1023,10 +1129,11 @@ Remaining focus:
 - agreement lifecycle: amendment, discontinuation, replacement rules (P8)
 - billing plan lifecycle and renewals (P9)
 - family admin action hub (P11)
-- custom one-off invoices (P14)
-- coaches linked to training groups (P15)
-- calendar integration (P16)
-- WhatsApp attendance polling (P16)
+- calendar-year partial billing (P15)
+- custom one-off invoices (P16)
+- coaches linked to training groups (P17)
+- calendar integration (P18)
+- WhatsApp attendance polling (P18)
 
 ---
 

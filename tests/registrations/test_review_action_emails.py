@@ -194,3 +194,24 @@ def test_email_uses_site_url_setting(submitted_application, staff_user):
     assert expected_url in body, (
         f"Email body must use SITE_URL override; expected {expected_url!r} in body: {body!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# P13 cleanup: context key is guardian_display_name (not guardian_full_name)
+# ---------------------------------------------------------------------------
+
+
+def test_review_email_context_uses_guardian_display_name_key(
+    submitted_application, staff_user
+):
+    """The email context must use 'guardian_display_name', not 'guardian_full_name'."""
+    from unittest.mock import patch
+
+    mail.outbox.clear()
+    with patch("apps.registrations.services.render_to_string") as mock_render:
+        mock_render.return_value = "body"
+        approve_application(submitted_application, staff_user)
+
+    context = mock_render.call_args[0][1]
+    assert "guardian_display_name" in context
+    assert "guardian_full_name" not in context

@@ -465,3 +465,36 @@ def test_hub_member_without_source_application_uses_member_anchor(
 
     # Inline training-group control renders so this is a real action-capable child
     assert 'value="assign_training_group"' in html
+
+
+# ---------------------------------------------------------------------------
+# P15 — family hub billing setup form uses native month input + required
+# ---------------------------------------------------------------------------
+
+
+def test_hub_billing_setup_month_input_is_native_and_required(
+    staff_client, approved_application, active_plan,
+):
+    """The hub billing-setup form must use native type='month' input (not
+    text) and mark it required so staff cannot submit blank months."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.billing_plan = None
+    agreement.save(update_fields=["billing_plan", "updated_at"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    # Must use native month input, not text
+    assert 'type="text" name="first_billing_month"' not in html
+    # Must be required
+    import re
+    month_input_pattern = re.compile(
+        r'<input[^>]*name="first_billing_month"[^>]*type="month"[^>]*>'
+    )
+    match = month_input_pattern.search(html)
+    assert match is not None, "Expected type='month' input for first_billing_month"
+    assert 'required' in match.group(0), "Expected required attribute on month input"

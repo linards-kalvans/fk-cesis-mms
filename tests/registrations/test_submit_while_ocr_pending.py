@@ -52,7 +52,8 @@ def _make_complete_draft(account: ParentAccount) -> RegistrationApplication:
     app = create_or_update_draft(
         data={
             "guardian_email": account.email,
-            "guardian_full_name": "Submit Parent",
+            "guardian_first_name": "Submit",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-99999",
             "guardian_phone": "+37120000001",
             "guardian_declared_address": "Riga 1",

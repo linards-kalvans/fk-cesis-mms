@@ -61,7 +61,8 @@ def _create_previous_app_with_guardian_doc(account: ParentAccount) -> Registrati
     app = create_or_update_draft(
         data={
             "guardian_email": account.email,
-            "guardian_full_name": "Previous Parent",
+            "guardian_first_name": "Previous",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-11111",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": "Riga 1",
@@ -111,7 +112,8 @@ class TestGuardianReuseFieldSources:
             "/applications/new/",
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "New Parent",
+                "guardian_first_name": "New",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-22222",
                 "guardian_phone": "+37130000000",
                 "guardian_declared_address": "Riga 2",
@@ -154,7 +156,8 @@ class TestGuardianReuseFieldSources:
             "/applications/new/",
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "NoReuse Parent",
+                "guardian_first_name": "NoReuse",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37140000000",
                 "guardian_declared_address": "Riga 3",
@@ -212,7 +215,8 @@ class TestGuardianReuseOcrFieldSources:
             "/applications/new/",
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "OCR Fields Parent",
+                "guardian_first_name": "OCR Fields",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-24242",
                 "guardian_phone": "+37150000000",
                 "guardian_declared_address": "Riga 4",
@@ -255,7 +259,8 @@ class TestGuardianReuseOcrFieldSources:
             "/applications/new/",
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Reuse Submit Parent",
+                "guardian_first_name": "Reuse Submit",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-23232",
                 "guardian_phone": "+37150000023",
                 "guardian_declared_address": "Riga 23",
@@ -357,7 +362,8 @@ class TestMemberPortraitOutsideOcrScope:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Portrait Parent",
+                "guardian_first_name": "Portrait",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-77777",
                 "guardian_phone": "+37120000027",
                 "guardian_declared_address": "Riga 7",
@@ -393,7 +399,8 @@ class TestMemberPortraitOutsideOcrScope:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Guardian OCR Parent",
+                "guardian_first_name": "Guardian OCR",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37120000028",
                 "guardian_declared_address": "Riga 8",
@@ -426,7 +433,8 @@ class TestMemberPortraitOutsideOcrScope:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Member OCR Parent",
+                "guardian_first_name": "Member OCR",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37120000029",
                 "guardian_declared_address": "Riga 9",

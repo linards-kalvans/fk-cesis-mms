@@ -60,7 +60,8 @@ def test_changelist_orders_action_needed_before_no_action(
     Document.objects.create(application=app, kind=Document.Kind.MEMBER_IDENTITY, file=png, original_filename="id.png", content_type="image/png", file_size=16)
     Document.objects.create(application=app, kind=Document.Kind.MEMBER_PORTRAIT, file=png, original_filename="id.png", content_type="image/png", file_size=16)
     payload = {
-        "guardian_full_name": "Action Guardian",
+        "guardian_first_name": "Action",
+        "guardian_family_name": "Guardian",
         "guardian_personal_id": "010101-99999",
         "guardian_email": action_account.email,
         "guardian_phone": "+37120000001",

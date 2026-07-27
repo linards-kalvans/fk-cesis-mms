@@ -74,7 +74,8 @@ def _create_submitted_app_with_ocr(
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "Admin OCR Parent",
+            "guardian_first_name": "Admin OCR",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-20202",
             "guardian_phone": "+37120000040",
             "guardian_declared_address": "Riga 40",

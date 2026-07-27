@@ -1,4 +1,8 @@
-"""Slice B1 — guardian-read accessors prefer the canonical Guardian / ParentAccount."""
+"""Slice B1 — guardian-read accessors prefer the canonical Guardian / ParentAccount.
+
+After P13 cleanup: guardian_name uses guardian.display_name (not full_name).
+No full_name field exists on Guardian.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +16,13 @@ pytestmark = pytest.mark.django_db
 
 
 def test_accessors_prefer_guardian_when_profile_populated():
-    account = ParentAccount.objects.create(email="acct@example.com", phone="+37120000000")
+    account = ParentAccount.objects.create(
+        email="acct@example.com", phone="+37120000000"
+    )
     guardian = Guardian.objects.create(
         parent_account=account,
-        full_name="Guardian Row",
+        first_name="Guardian",
+        family_name="Row",
         personal_id="010101-22222",
         address="Guardian Address 1",
     )
@@ -38,16 +45,21 @@ def test_email_accessor_prefers_parent_account_over_column():
 
 def test_linked_guardian_is_source_even_when_field_empty():
     """A linked Guardian is the source of truth: an empty Guardian field must NOT
-    fall back to a stale column (so clearing a field propagates)."""
+    fall back to a stale column."""
     account = ParentAccount.objects.create(email="empty@example.com")
     guardian = Guardian.objects.create(
-        parent_account=account, full_name="Has Name", personal_id="", address=""
+        parent_account=account,
+        first_name="Has",
+        family_name="Name",
+        personal_id="",
+        address="",
     )
     app = RegistrationApplication.objects.create(
-        parent_account=account, guardian=guardian,
+        parent_account=account,
+        guardian=guardian,
     )
     assert app.guardian_name == "Has Name"
-    assert app.guardian_pid == ""          # empty Guardian value wins, not the column
+    assert app.guardian_pid == ""
     assert app.guardian_contact_phone == ""
     assert app.guardian_address == ""
 
@@ -59,7 +71,8 @@ def test_draft_save_populates_the_guardian_profile():
     app = create_or_update_draft(
         data={
             "guardian_email": account.email,
-            "guardian_full_name": "Anna Bērziņa",
+            "guardian_first_name": "Anna",
+            "guardian_family_name": "Bērziņa",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000001",
             "guardian_declared_address": "Rīga, Brīvības 1",
@@ -68,10 +81,11 @@ def test_draft_save_populates_the_guardian_profile():
         verified_account=account,
     )
     guardian = Guardian.objects.get(parent_account=account)
-    assert guardian.full_name == "Anna Bērziņa"
+    assert guardian.first_name == "Anna"
+    assert guardian.family_name == "Bērziņa"
+    assert guardian.display_name == "Anna Bērziņa"
     assert guardian.personal_id == "010101-12345"
     assert guardian.address == "Rīga, Brīvības 1"
-    # phone is written to the account; the proxy reads it back through.
     assert guardian.parent_account.phone == "+37120000001"
     assert guardian.phone == "+37120000001"
 
@@ -83,70 +97,104 @@ def test_editing_guardian_on_second_app_propagates_to_first():
 
     account = ParentAccount.objects.create(email="prop@example.com")
     app1 = create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Old Name",
-              "guardian_phone": "+37120000000", "guardian_declared_address": "Addr 1",
-              "guardian_personal_id": "010101-11111"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "Old",
+            "guardian_family_name": "Name",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "Addr 1",
+            "guardian_personal_id": "010101-11111",
+        },
+        files={},
+        verified_account=account,
     )
     create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "New Name",
-              "guardian_phone": "+37120000000", "guardian_declared_address": "Addr 1",
-              "guardian_personal_id": "010101-11111"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "New",
+            "guardian_family_name": "Name",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "Addr 1",
+            "guardian_personal_id": "010101-11111",
+        },
+        files={},
+        verified_account=account,
     )
     app1.refresh_from_db()
     assert app1.guardian_name == "New Name"
 
 
-def test_admin_change_page_renders_guardian_via_read_through(client, django_user_model):
+def test_admin_change_page_renders_guardian_via_read_through(
+    client, django_user_model
+):
     from django.urls import reverse
 
     from apps.registrations.services import create_or_update_draft
 
     account = ParentAccount.objects.create(email="render@example.com")
     app = create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Render Name",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "Render Addr"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "Render",
+            "guardian_family_name": "Name",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "Render Addr",
+        },
+        files={},
+        verified_account=account,
     )
-    # Simulate a later shared-Guardian edit that the column on THIS app never saw.
+    # Simulate a later shared-Guardian edit
     guardian = Guardian.objects.get(parent_account=account)
-    guardian.full_name = "Edited Shared Name"
-    guardian.save(update_fields=["full_name"])
+    guardian.first_name = "Edited"
+    guardian.family_name = "Shared"
+    guardian.save(update_fields=["first_name", "family_name"])
 
     staff = django_user_model.objects.create_user(
-        username="staff-rt", password="pw", is_staff=True, is_superuser=True
+        username="staff-rt",
+        password="pw",
+        is_staff=True,
+        is_superuser=True,
     )
     client.force_login(staff)
     resp = client.get(
-        reverse("admin:registrations_registrationapplication_change", args=[app.id])
+        reverse(
+            "admin:registrations_registrationapplication_change",
+            args=[app.id],
+        )
     )
     assert resp.status_code == 200
     body = resp.content.decode()
-    assert "Edited Shared Name" in body          # read-through wins
-    assert "Render Name" not in body             # stale column value not shown
+    assert "Edited Shared" in body
+    assert "Render Name" not in body
 
 
 def test_prefill_uses_guardian_profile_for_returning_parent():
-    from apps.registrations.services import create_or_update_draft, get_application_prefill
+    from apps.registrations.services import (
+        create_or_update_draft,
+        get_application_prefill,
+    )
 
     account = ParentAccount.objects.create(email="prefill@example.com")
     create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Prefill Guardian",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "Prefill Addr"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "Prefill",
+            "guardian_family_name": "Guardian",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "Prefill Addr",
+        },
+        files={},
+        verified_account=account,
     )
-    # Edit the shared Guardian directly; prefill must reflect it, not a stale column.
+    # Edit the shared Guardian directly; prefill must reflect it.
     guardian = Guardian.objects.get(parent_account=account)
     guardian.first_name = "Updated"
     guardian.family_name = "Guardian"
-    guardian.sync_full_name()
-    guardian.save(update_fields=["first_name", "family_name", "full_name"])
+    guardian.save(update_fields=["first_name", "family_name"])
 
     prefill = get_application_prefill(account)
-    # P13 split: prefill surfaces the explicit parts, not the legacy combined key
     assert prefill["guardian_first_name"] == "Updated"
     assert prefill["guardian_family_name"] == "Guardian"
     assert "guardian_full_name" not in prefill
@@ -154,12 +202,19 @@ def test_prefill_uses_guardian_profile_for_returning_parent():
 
 def test_make_guardian_helper_links_a_populated_guardian(make_guardian):
     account = ParentAccount.objects.create(email="helper@example.com")
-    guardian = make_guardian(account, full_name="Helper Name", personal_id="010101-12345",
-                             phone="+37120000000", address="Helper Addr")
+    guardian = make_guardian(
+        account,
+        full_name="Helper Name",
+        personal_id="010101-12345",
+        phone="+37120000000",
+        address="Helper Addr",
+    )
     assert guardian.parent_account_id == account.id
-    assert guardian.full_name == "Helper Name"
-    assert guardian.email == "helper@example.com"  # read through the account proxy
-    app = RegistrationApplication.objects.create(parent_account=account, guardian=guardian)
+    assert guardian.display_name == "Helper Name"
+    assert guardian.email == "helper@example.com"
+    app = RegistrationApplication.objects.create(
+        parent_account=account, guardian=guardian
+    )
     assert app.guardian_name == "Helper Name"
 
 
@@ -169,49 +224,73 @@ def test_draft_save_writes_guardian_not_columns(make_guardian):
 
     account = ParentAccount.objects.create(email="nocol@example.com")
     app = create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Form Name",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "Form Addr"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "Form",
+            "guardian_family_name": "Name",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "Form Addr",
+        },
+        files={},
+        verified_account=account,
     )
     guardian = app.guardian
-    assert guardian.full_name == "Form Name"
+    assert guardian.first_name == "Form"
+    assert guardian.family_name == "Name"
+    assert guardian.display_name == "Form Name"
     assert guardian.personal_id == "010101-12345"
     assert guardian.address == "Form Addr"
-    # phone is written to the account; the proxy reads it back through.
     assert guardian.parent_account.phone == "+37120000000"
     assert guardian.phone == "+37120000000"
 
 
 def test_str_uses_account_email_not_column():
     account = ParentAccount.objects.create(email="str@example.com")
-    app = RegistrationApplication.objects.create(parent_account=account, member_full_name="Kid")
+    app = RegistrationApplication.objects.create(
+        parent_account=account, member_full_name="Kid"
+    )
     assert str(app) == "str@example.com — Kid"
 
 
 def test_accessors_return_empty_when_unlinked():
-    app = RegistrationApplication.objects.create(claimed_email="anon@example.com")
+    app = RegistrationApplication.objects.create(
+        claimed_email="anon@example.com"
+    )
     assert app.guardian_name == ""
     assert app.guardian_contact_email == ""
 
 
 def test_update_existing_draft_repopulates_guardian_profile():
     """create_or_update_draft on an existing draft updates the linked Guardian
-    from the new form data (the guardian_id-guarded write)."""
+    from the new form data."""
     from apps.registrations.services import create_or_update_draft
 
     account = ParentAccount.objects.create(email="update@example.com")
     app = create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "First",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "A"},
-        files={}, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "First",
+            "guardian_family_name": "Name",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "A",
+        },
+        files={},
+        verified_account=account,
     )
     create_or_update_draft(
-        data={"guardian_email": account.email, "guardian_full_name": "Second",
-              "guardian_personal_id": "010101-12345", "guardian_phone": "+37120000000",
-              "guardian_declared_address": "A"},
-        files={}, application=app, verified_account=account,
+        data={
+            "guardian_email": account.email,
+            "guardian_first_name": "Second",
+            "guardian_family_name": "Name",
+            "guardian_personal_id": "010101-12345",
+            "guardian_phone": "+37120000000",
+            "guardian_declared_address": "A",
+        },
+        files={},
+        application=app,
+        verified_account=account,
     )
     app.refresh_from_db()
-    assert app.guardian_name == "Second"
+    assert app.guardian_name == "Second Name"

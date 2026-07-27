@@ -507,7 +507,7 @@ def build_family_queue_rows() -> list[_QueueRow]:
     rows.sort(
         key=lambda r: (
             -r["highest_urgency"],
-            str(getattr(r["guardian"], "full_name", "")).lower(),
+            str(getattr(r["guardian"], "display_name", "")).lower(),
             int(r["guardian"].pk),
         )
     )

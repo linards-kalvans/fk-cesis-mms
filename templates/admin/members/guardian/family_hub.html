@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
-<h1>Ģimenes darbību centrs — {{ guardian.full_name|default:guardian.pk }}</h1>
+<h1>Ģimenes darbību centrs — {{ guardian.display_name|default:guardian.pk }}</h1>
 <p>
   <a class="button" href="{% url 'admin:members_guardian_change' guardian.pk %}">Atvērt detalizēti vecāka ierakstu →</a>
   {% if hub.members %}
@@ -97,8 +97,8 @@
             <option value="{{ plan.pk }}">{{ plan.name }} — {{ plan.season }}</option>
           {% endfor %}
         </select>
-        <label for="hub_first_month_{{ child.agreement.pk }}">Pirmais rēķina mēnesis (GGGG-MM):</label>
-        <input type="text" name="first_billing_month" id="hub_first_month_{{ child.agreement.pk }}" value="{{ child.agreement.first_billing_month }}" pattern="\d{4}-\d{2}" placeholder="2026-09">
+        <label for="hub_first_month_{{ child.agreement.pk }}">Pirmais rēķina mēnesis:</label>
+        <input name="first_billing_month" type="month" id="hub_first_month_{{ child.agreement.pk }}" value="{{ child.agreement.first_billing_month }}" required>
         <button type="submit">Saglabāt norēķinu plānu</button>
       </form>
     {% endif %}

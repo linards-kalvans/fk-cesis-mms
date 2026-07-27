@@ -36,4 +36,8 @@ def test_electronic_agreement_signed_completes_and_triggers_billing(active_plan,
     assert agreement.state == Agreement.State.SIGNED  # "completed" final state
     rec = BillingRecord.objects.get(member=member)
     assert rec.status == BillingRecord.Status.DRAFT
-    assert rec.final_amount == Decimal("300.00")
+    # P15: calendar-year partial base for first_billing_month='2026-09'
+    # with default skip_months='7,12' → 3 billable months (Sep/Oct/Nov),
+    # base = €300 * 3 / 10 = €90.00.
+    assert rec.scheduled_installment_count == 3
+    assert rec.final_amount == Decimal("90.00")

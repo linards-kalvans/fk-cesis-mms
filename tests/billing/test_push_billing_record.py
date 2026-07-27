@@ -286,3 +286,43 @@ def test_push_billing_record_does_not_retry_non_client_validation_error(billing_
     billing_record.refresh_from_db()
     assert billing_record.external_status == "failed"
     assert billing_record.external_error_code == "misconfigured"
+
+
+def test_push_zero_billing_record_synced_without_provider_calls(active_plan, guardian, monkeypatch):
+    """P14: A confirmed record with final_amount=0 becomes synced without calling the provider."""
+    from apps.billing.models import BillingRecord, BillingInvoice
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+    from apps.members.models import Member
+
+    member = Member.objects.create(full_name="Zero", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("0.00"),
+        payment_mode=BillingRecord.PaymentMode.INSTALLMENTS,
+        status=BillingRecord.Status.CONFIRMED,
+    )
+
+    called = []
+
+    def should_not_call(*args, **kwargs):
+        called.append(True)
+        raise AssertionError("provider must not be called for zero-amount records")
+
+    # P14: Patch the task-level helpers, not just the platform boundary.
+    monkeypatch.setattr(tasks, "_ensure_product_id", should_not_call)
+    monkeypatch.setattr(tasks, "_ensure_client_id", should_not_call)
+    monkeypatch.setattr(invoice_platform, "ensure_product", should_not_call)
+    monkeypatch.setattr(invoice_platform, "ensure_client", should_not_call)
+    monkeypatch.setattr(invoice_platform, "create_invoice", should_not_call)
+
+    tasks.push_billing_record(rec.pk)
+
+    rec.refresh_from_db()
+    assert rec.external_status == "synced"
+    assert rec.external_error_code == ""
+    assert not called, "provider functions must not be called for zero-amount records"
+    assert BillingInvoice.objects.filter(billing_record=rec).count() == 0

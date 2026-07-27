@@ -59,7 +59,8 @@ def _create_draft(acct: ParentAccount, *, child: str = "Visual Child", suffix: s
     return create_or_update_draft(
         data={
             "guardian_email": acct.email,
-            "guardian_full_name": "Visual Guardian",
+            "guardian_first_name": "Visual",
+            "guardian_family_name": "Guardian",
             "guardian_personal_id": f"010101-{suffix}111",
             "guardian_phone": "+37155555555",
             "guardian_declared_address": "Riga 1",

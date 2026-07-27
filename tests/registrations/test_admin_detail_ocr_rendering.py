@@ -70,7 +70,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Admin Parent",
+                "guardian_first_name": "Admin",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-50000",
                 "guardian_phone": "+37120000050",
                 "guardian_declared_address": "Riga 50",
@@ -134,7 +135,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Admin Parent",
+                "guardian_first_name": "Admin",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-51000",
                 "guardian_phone": "+37120000051",
                 "guardian_declared_address": "Riga 51",
@@ -190,7 +192,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Preview Parent",
+                "guardian_first_name": "Preview",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-52000",
                 "guardian_phone": "+37120000052",
                 "guardian_declared_address": "Riga 52",
@@ -242,7 +245,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Preview Parent",
+                "guardian_first_name": "Preview",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-52001",
                 "guardian_phone": "+37120000052",
                 "guardian_declared_address": "Riga 52",
@@ -302,7 +306,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Confidence Parent",
+                "guardian_first_name": "Confidence",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-53000",
                 "guardian_phone": "+37120000053",
                 "guardian_declared_address": "Riga 53",
@@ -368,7 +373,8 @@ class TestAdminDetailOcrDecryption:
         app = create_or_update_draft(
             data={
                 "guardian_email": "noocrexample@example.com",
-                "guardian_full_name": "No OCR Parent",
+                "guardian_first_name": "No OCR",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-56565",
                 "guardian_phone": "+37120000056",
                 "guardian_declared_address": "Riga 56",

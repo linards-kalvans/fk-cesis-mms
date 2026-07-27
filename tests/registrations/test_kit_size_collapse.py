@@ -128,7 +128,8 @@ class TestKitSizeCollapseDraftPersistence:
         app = create_or_update_draft(
             data={
                 "guardian_email": "kitdraft@example.com",
-                "guardian_full_name": "Draft Kit Parent",
+                "guardian_first_name": "Draft Kit",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00001",
                 "guardian_declared_address": "Riga 1",
                 "guardian_phone": "+37100000001",
@@ -163,7 +164,8 @@ class TestKitSizeCollapseSubmitValidation:
         app = create_or_update_draft(
             data={
                 "guardian_email": "kitmissing@example.com",
-                "guardian_full_name": "NoKit Parent",
+                "guardian_first_name": "NoKit",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00002",
                 "guardian_declared_address": "Riga 2",
                 "guardian_phone": "+37100000099",
@@ -195,7 +197,8 @@ class TestKitSizeCollapseSubmitValidation:
         app = create_or_update_draft(
             data={
                 "guardian_email": "kitshirtonly@example.com",
-                "guardian_full_name": "ShirtOnly Parent",
+                "guardian_first_name": "ShirtOnly",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00003",
                 "guardian_declared_address": "Riga 3",
                 "guardian_phone": "+37100000099",
@@ -235,7 +238,8 @@ class TestKitSizeCollapseWorkspaceRendering:
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
-                "guardian_full_name": "Render Parent",
+                "guardian_first_name": "Render",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00004",
                 "guardian_phone": "+37120000099",
                 "guardian_declared_address": "Riga 4",

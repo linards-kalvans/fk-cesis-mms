@@ -13,6 +13,7 @@ separate makes spying in tests trivial.
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -423,6 +424,17 @@ def push_billing_record(record_id: int) -> None:
     if record.status != BillingRecord.Status.CONFIRMED:
         return
     if record.external_status == "synced":
+        return
+
+    # P14: a 100 % tier record (final_amount == 0) is a local-only row —
+    # it must not touch the provider, the client, the product, or the
+    # invoice list. Mark it locally synced and return.
+    if record.final_amount == Decimal("0.00"):
+        record.external_status = "synced"
+        record.external_error_code = ""
+        record.save(
+            update_fields=["external_status", "external_error_code", "updated_at"]
+        )
         return
 
     record.external_status = "pending"
