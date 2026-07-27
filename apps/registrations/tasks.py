@@ -70,8 +70,11 @@ def send_submitted_registration_digest() -> int:
         # submitted → fix_requested → submitted (and ultimately to
         # approved / rejected) but each new submission event must still
         # be reported.
+        # `of=("self",)` restricts the row lock to RegistrationApplication
+        # only — the LEFT OUTER JOIN to nullable `guardian` would otherwise
+        # make PostgreSQL reject a bare FOR UPDATE (Django 6).
         locked_apps = list(
-            RegistrationApplication.objects.select_for_update()
+            RegistrationApplication.objects.select_for_update(of=("self",))
             .select_related("guardian")
             .filter(
                 submitted_at__isnull=False,

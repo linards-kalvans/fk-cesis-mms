@@ -1,7 +1,7 @@
 # P19 — Daily Submitted-Registration Digest: Design
 
 **Date:** 2026-07-27
-**Status:** Approved — implementation landed, code review accepted, and full repository gate passed (1855 tests, ruff, mypy, migration check) on 2026-07-27. LAN acceptance pending.
+**Status:** Approved — implementation landed and code review accepted. CI exposed a PostgreSQL lock regression; its root-cause fix passed the full CI-equivalent PostgreSQL suite locally (1855 tests) on 2026-07-27. GitHub CI rerun and LAN acceptance pending.
 
 ## 1. Problem
 

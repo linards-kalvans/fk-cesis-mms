@@ -454,7 +454,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - automated WhatsApp attendance polling integration
 
 ### P19 — Daily submitted-registration digest notification
-**Status:** full repository gate passed (2026-07-27: 1855 tests, ruff, mypy, migration check); LAN acceptance pending.
+**Status:** full CI-equivalent PostgreSQL suite passed locally (2026-07-27: 1855 tests, ruff, mypy, migration check); GitHub CI rerun and LAN acceptance pending.
 
 **Why nineteenth**
 - staff need a dependable daily reminder for submissions without repeatedly polling the admin changelist
@@ -1052,7 +1052,7 @@ P18 is complete when all of the following are true:
 ### P19 — Daily submitted-registration digest notification
 P19 delivers a daily Bcc email to configured staff summarising every submitted application that has not yet been included in a digest. The email lists child name, guardian name, Riga submission datetime, current status, and admin link per application. It omits contact data, personal IDs, addresses, documents, and review messages. The digest job uses a django-q2 daily Schedule (default 08:00 Europe/Riga, admin-editable after migration), per-row delivery flags on `RegistrationApplication`, and a singleton `RegistrationSubmissionDigestSettings` model for recipient management (superuser-only admin). At-least-once delivery semantics: send failures leave flags untouched so the next day retries.
 
-**Delivery state:** Full repository gate passed 2026-07-27: `uv run pytest -q` → 1855 passed; `uv run ruff check .`, `uv run mypy .`, and `uv run python manage.py makemigrations --check` clean. LAN acceptance pending.
+**Delivery state:** CI exposed and P19 fixed a PostgreSQL nullable-outer-join lock regression. Full CI-equivalent local PostgreSQL verification passed 2026-07-27: `uv run pytest -q` → 1855 passed; `uv run ruff check .`, `uv run mypy .`, and `uv run python manage.py makemigrations --check` clean. GitHub CI rerun and LAN acceptance pending.
 
 ### P19 acceptance — Daily submitted-registration digest notification
 P19 is complete when all of the following are true:

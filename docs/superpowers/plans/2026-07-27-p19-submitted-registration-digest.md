@@ -1,7 +1,7 @@
 # P19 — Daily Submitted-Registration Digest: Implementation Plan
 
 **Date:** 2026-07-27
-**Status:** Implementation accepted by focused tests + code review. Full repository verification passed on 2026-07-27: `1855 passed`, `ruff`, `mypy`, and migration check clean. LAN acceptance pending.
+**Status:** Implementation accepted by focused tests + code review. After a PostgreSQL CI lock regression, full CI-equivalent PostgreSQL verification passed locally on 2026-07-27: `1855 passed`; ruff, mypy, and migration check clean. GitHub CI rerun and LAN acceptance pending.
 
 ## 1. Task Breakdown
 
@@ -101,7 +101,7 @@ uv run pytest tests/registrations/test_submission_digest.py -q
 uv run pytest -q tests/registrations/test_submission_digest*.py -xvs
 ```
 
-### Full repository gate (passed 2026-07-27)
+### Full CI-equivalent PostgreSQL gate (passed locally 2026-07-27)
 ```bash
 uv run pytest -q && uv run ruff check . && uv run mypy .
 ```
@@ -143,7 +143,7 @@ uv run python manage.py migrate
 
 | Item | Status |
 |------|--------|
-| Full repository verification (`pytest -q && ruff check && mypy`) | Passed 2026-07-27 — 1855 tests, ruff, mypy, migration check clean |
+| Full CI-equivalent PostgreSQL verification | Passed locally 2026-07-27 — 1855 tests; ruff, mypy, migration check clean. GitHub CI rerun pending. |
 | LAN acceptance (live instance) | Pending |
 | Schedule time default (08:00 Riga) | Migration seed; admin-editable after deploy |
 | SMTP configuration for `DEFAULT_FROM_EMAIL` | Operational (env, not in scope) |
