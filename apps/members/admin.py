@@ -282,6 +282,12 @@ class GuardianAdmin(admin.ModelAdmin):
         guardian = get_object_or_404(
             Guardian.objects.select_related("parent_account"), pk=guardian_id
         )
+        # Pop the one-shot inline billing-setup error flash so a subsequent
+        # GET (or a successful POST) does not re-render the same error.
+        raw_errors = request.session.pop("hub_billing_setup_errors", {}) or {}
+        billing_setup_errors = {
+            int(pk): msg for pk, msg in raw_errors.items() if str(pk).isdigit()
+        }
         context = {
             **self.admin_site.each_context(request),
             "title": f"Ģimenes centrs — {guardian.display_name or guardian.pk}",
@@ -289,7 +295,9 @@ class GuardianAdmin(admin.ModelAdmin):
             "action_url": reverse(
                 "admin:members_guardian_family_hub_action", args=[guardian.pk]
             ),
-            "hub": build_family_hub_context(guardian),
+            "hub": build_family_hub_context(
+                guardian, billing_setup_errors=billing_setup_errors
+            ),
             "opts": self.model._meta,
         }
         return TemplateResponse(
@@ -553,10 +561,28 @@ class GuardianAdmin(admin.ModelAdmin):
                     "Izvēlētais mēnesis ir pirms pirmā pieejamā rēķina mēneša."
                 )
             else:
-                latvian = raw
-            self.message_user(request, latvian, level=messages.ERROR)
+                # Unmapped errors keep the existing top-level admin message
+                # behavior (out of scope for the inline-error spec).
+                self.message_user(request, raw, level=messages.ERROR)
+                return
+            # Mapped errors are surfaced as a one-shot inline error beside the
+            # matching agreement's billing-plan form on the next hub GET —
+            # never as a global admin message.
+            self._flash_billing_setup_error(request, agreement.pk, latvian)
             return
         self.message_user(request, "Norēķinu plāns saglabāts.")
+
+    def _flash_billing_setup_error(self, request, agreement_id, message):
+        """Persist a one-shot inline billing-setup error keyed by agreement id.
+
+        Consumed (and cleared) by ``family_hub_view`` on the next GET. Stays
+        local to this handler — only the mapped errors from
+        ``_family_hub_handle_set_billing_setup`` take this path; everything
+        else keeps the existing top-level admin-message behavior.
+        """
+        bucket = dict(request.session.get("hub_billing_setup_errors") or {})
+        bucket[str(agreement_id)] = message
+        request.session["hub_billing_setup_errors"] = bucket
 
     def _family_hub_handle_retry_docuseal(self, request, guardian):
 

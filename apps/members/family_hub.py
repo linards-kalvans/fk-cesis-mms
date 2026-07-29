@@ -96,6 +96,7 @@ class _Child(TypedDict):
     billing_groups: list[_BillingGroup]
     deep_links: dict[str, str]
     anchor_id: str
+    billing_setup_error: str
 
 
 def _child_anchor_id(
@@ -514,7 +515,10 @@ def build_family_queue_rows() -> list[_QueueRow]:
     return rows
 
 
-def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
+def build_family_hub_context(
+    guardian: "Guardian",
+    billing_setup_errors: dict[int, str] | None = None,
+) -> dict[str, object]:
     """Return the full per-family hub context."""
     from apps.billing.models import MembershipPlan
     from apps.members.models import TrainingGroup
@@ -534,6 +538,7 @@ def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
         .prefetch_related("invoices")
         .order_by("member__full_name", "-season", "pk")
     )
+    billing_setup_errors = billing_setup_errors or {}
 
     # Group billing records by member for the unified billing block
     billing_groups: list[_BillingGroup] = []
@@ -579,6 +584,7 @@ def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
                     "agreement": _agreement_deep_link(agreement) if agreement else "",
                 },
                 "anchor_id": _child_anchor_id(application, member),
+                "billing_setup_error": billing_setup_errors.get(agreement.pk, "") if agreement else "",
             }
         )
 
@@ -603,6 +609,7 @@ def build_family_hub_context(guardian: "Guardian") -> dict[str, object]:
                     "agreement": "",
                 },
                 "anchor_id": _child_anchor_id(application, None),
+                "billing_setup_error": "",
             }
         )
 

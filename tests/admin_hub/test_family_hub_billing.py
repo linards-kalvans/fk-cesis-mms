@@ -108,3 +108,52 @@ def test_discontinue_disclosure_renders_invoice_checkboxes_when_invoices_exist(
     assert f'value="{invoice.pk}"' in html
     # The checkbox lives inside the discontinue disclosure.
     assert "Pārtraukt dalību" in html
+
+
+# ---------------------------------------------------------------------------
+# Defect 2: pending billing shows syncing copy, no push action.
+# ---------------------------------------------------------------------------
+
+
+def test_billing_pending_shows_syncing_copy_no_push_action(
+    staff_client, approved_application, billing_record_factory,
+):
+    """A confirmed BillingRecord with external_status='pending' must render
+    exact Latvian syncing copy 'Rēķini tiek sinhronizēti…' and must NOT
+    render the 'Izrakstīt rēķinus' push action."""
+    member = approved_application.approved_member
+    record = billing_record_factory(
+        member,
+        status="confirmed",
+        external_status="pending",
+    )
+    guardian = approved_application.guardian
+
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    # Exact syncing copy must be present.
+    assert "Rēķini tiek sinhronizēti…" in html
+
+    # Push action button must NOT be present.
+    assert "Izrakstīt rēķinus" not in html
+
+
+def test_billing_blank_external_status_shows_push_action(
+    staff_client, approved_application, billing_record_factory,
+):
+    """A confirmed BillingRecord with blank external_status must still render
+    the 'Izrakstīt rēķinus' push action."""
+    member = approved_application.approved_member
+    record = billing_record_factory(
+        member,
+        status="confirmed",
+        external_status="",
+    )
+    guardian = approved_application.guardian
+
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    # Push action button must be present.
+    assert "Izrakstīt rēķinus" in html

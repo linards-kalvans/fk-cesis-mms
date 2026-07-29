@@ -327,10 +327,44 @@ def _classify_invoice_error(exc: Exception) -> tuple[str, bool]:
 
 
 def enqueue_push_billing_record(record_id: int) -> None:
-    try:
-        async_task("apps.integrations.tasks.push_billing_record", record_id)
-    except RetryableInvoiceError:
-        return
+    """Owns the pre-enqueue state transition for a BillingRecord push.
+
+    Blank or failed confirmed records become ``external_status="pending"``
+    (with the prior error code cleared) BEFORE the django-q task is queued,
+    so the UI can immediately render the "Rēķini tiek sinhronizēti…" lane
+    and hide the push action. A record already in ``pending`` or ``synced``
+    is a no-op (idempotent re-enqueue is a no-op), and a non-confirmed record
+    never reaches the worker.
+
+    The state transition and ``async_task`` call share one DB transaction
+    (django-q2's ORM broker writes its ``OrmQ`` row in the same atomic
+    block), so a queue failure rolls the pending save back together — a
+    committed pending record with no queued job cannot strand the UI in a
+    no-retry state.
+    """
+    from apps.billing.models import BillingRecord
+
+    with transaction.atomic():
+        try:
+            record = (
+                BillingRecord.objects.select_for_update().get(pk=record_id)
+            )
+        except BillingRecord.DoesNotExist:
+            return
+        if record.status != BillingRecord.Status.CONFIRMED:
+            return
+        if record.external_status in ("synced", "pending"):
+            return
+        record.external_status = "pending"
+        record.external_error_code = ""
+        record.save(
+            update_fields=["external_status", "external_error_code", "updated_at"]
+        )
+
+        try:
+            async_task("apps.integrations.tasks.push_billing_record", record_id)
+        except RetryableInvoiceError:
+            return
 
 
 def _ensure_product_id(plan_id: int) -> str:

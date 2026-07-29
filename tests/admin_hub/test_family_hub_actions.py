@@ -648,3 +648,119 @@ def test_docuseal_pdf_error_fallback_preserves_return_anchor(
     response = staff_client.get(f"{url}?return_anchor={anchor}")
 
     assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+
+
+# ---------------------------------------------------------------------------
+# Defect 1: billing-plan setup error must show inline, not as top-level message.
+# ---------------------------------------------------------------------------
+
+
+def test_billing_setup_error_shows_inline_not_top_level(
+    staff_client, approved_application, active_plan,
+):
+    """POSTing set_billing_setup with missing first_billing_month must show
+    the mapped Latvian error inline (inside the billing-plan form/card for
+    that specific agreement), NOT as a Django admin global messagelist entry."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.billing_plan = None
+    agreement.first_billing_month = ""
+    agreement.save(update_fields=["billing_plan", "first_billing_month", "updated_at"])
+
+    guardian = approved_application.guardian
+    anchor = f"child-application-{approved_application.pk}"
+
+    # POST with missing first_billing_month → ValueError("first billing month required")
+    response = staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "set_billing_setup",
+            "agreement_id": agreement.pk,
+            "billing_plan": active_plan.pk,
+            "first_billing_month": "",  # invalid → triggers mapped error
+            "return_anchor": anchor,
+        },
+    )
+    assert response.status_code == 302
+
+    # Follow redirect to hub
+    hub_response = staff_client.get(_hub_url(guardian))
+    html = hub_response.content.decode()
+
+    # The mapped Latvian error must appear in the HTML.
+    assert "Pirmais rēķina mēnesis ir obligāts." in html
+
+    # The error must NOT appear in the Django admin messagelist (top-level).
+    # Django admin renders messages inside <ul class="messagelist">.
+    if 'class="messagelist"' in html:
+        messagelist_section = html.split('class="messagelist"')[1].split("</ul>")[0]
+        assert "Pirmais rēķina mēnesis ir obligāts." not in messagelist_section
+
+    # The error must be inside the specific agreement's card region.
+    # Each child card has id="child-application-<pk>". Extract the segment
+    # after this anchor and assert the error is in that bounded region.
+    anchor_marker = f'id="{anchor}"'
+    assert anchor_marker in html, f"Anchor {anchor} must be present in hub HTML"
+
+    # Split on the anchor and take everything after it (the card content).
+    # Since there's only one child in this test, the segment extends to the end.
+    card_segment = html.split(anchor_marker, 1)[1]
+
+    # The error must be in this card segment (proves it's tied to this agreement).
+    assert "Pirmais rēķina mēnesis ir obligāts." in card_segment
+
+    # Additionally, the billing-plan form controls for this agreement must be present
+    # in the same card (proves the error is near the controls, not just anywhere).
+    billing_plan_field_id = f'id="hub_billing_plan_{agreement.pk}"'
+    first_month_field_id = f'id="hub_first_month_{agreement.pk}"'
+    assert billing_plan_field_id in card_segment, "Billing plan field must be in the same card"
+    assert first_month_field_id in card_segment, "First billing month field must be in the same card"
+
+
+def test_billing_setup_error_is_one_shot(
+    staff_client, approved_application, active_plan,
+):
+    """After the POST-redirect-GET shows the inline error, a subsequent GET
+    must no longer show it (one-shot error)."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.billing_plan = None
+    agreement.first_billing_month = ""
+    agreement.save(update_fields=["billing_plan", "first_billing_month", "updated_at"])
+
+    guardian = approved_application.guardian
+    anchor = f"child-application-{approved_application.pk}"
+
+    # POST invalid billing setup
+    staff_client.post(
+        _action_url(guardian),
+        {
+            "action": "set_billing_setup",
+            "agreement_id": agreement.pk,
+            "billing_plan": active_plan.pk,
+            "first_billing_month": "",
+            "return_anchor": anchor,
+        },
+    )
+
+    # First GET after POST → error present INLINE (not in messagelist).
+    first_get = staff_client.get(_hub_url(guardian))
+    first_html = first_get.content.decode()
+    assert "Pirmais rēķina mēnesis ir obligāts." in first_html
+    # Must NOT be in messagelist (top-level).
+    if 'class="messagelist"' in first_html:
+        messagelist_section = first_html.split('class="messagelist"')[1].split("</ul>")[0]
+        assert "Pirmais rēķina mēnesis ir obligāts." not in messagelist_section
+    # Must be inside the specific agreement's card region.
+    anchor_marker = f'id="child-application-{approved_application.pk}"'
+    first_card_segment = first_html.split(anchor_marker, 1)[1]
+    assert "Pirmais rēķina mēnesis ir obligāts." in first_card_segment
+
+    # Second GET → error absent (one-shot)
+    second_get = staff_client.get(_hub_url(guardian))
+    second_html = second_get.content.decode()
+    assert "Pirmais rēķina mēnesis ir obligāts." not in second_html
