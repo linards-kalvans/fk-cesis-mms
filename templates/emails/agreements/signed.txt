@@ -1,4 +1,4 @@
-Sveiki, {{ guardian_full_name }}!
+Sveiki, {{ guardian_display_name }}!
 
 Apstiprinām, ka {{ member_full_name }} līgums ir parakstīts.
 

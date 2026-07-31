@@ -172,7 +172,7 @@ class TestIdentityUploadCreatesEncryptedExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Parent",
+                "guardian_first_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",
@@ -207,7 +207,7 @@ class TestIdentityUploadCreatesEncryptedExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Parent",
+                "guardian_first_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",
@@ -242,7 +242,7 @@ class TestIdentityUploadCreatesEncryptedExtraction:
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Parent",
+                "guardian_first_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",

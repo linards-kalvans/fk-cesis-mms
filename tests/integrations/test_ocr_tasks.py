@@ -204,7 +204,8 @@ def test_upload_enqueues_ocr_job_instead_of_running_inline(settings):
         app = create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Enqueue Parent",
+                "guardian_first_name": "Enqueue",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00002",
                 "guardian_phone": "+37120000002",
                 "guardian_declared_address": "Riga 2",
@@ -297,7 +298,8 @@ def test_upload_does_not_enqueue_for_member_portrait(settings):
         create_or_update_draft(
             data={
                 "guardian_email": account.email,
-                "guardian_full_name": "Portrait Parent",
+                "guardian_first_name": "Portrait",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-00003",
                 "guardian_phone": "+37120000003",
                 "guardian_declared_address": "Riga 3",

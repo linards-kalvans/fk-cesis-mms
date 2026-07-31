@@ -15,7 +15,6 @@ def active_plan(db):
         name="Sezona 2026/2027",
         season="2026/2027",
         annual_amount=Decimal("300.00"),
-        sibling_discount_percent=Decimal("50.00"),
         installment_count=10,
         first_installment_month=9,
         is_active=True,

@@ -630,3 +630,25 @@ class TestResubmissionClearsReviewFields:
         assert fix_requested_application.reviewed_at is None, (
             "reviewed_at must be cleared on resubmission."
         )
+
+
+class TestResubmissionClearsDigestSentAt:
+    """Correction resubmission must clear submission_digest_sent_at (P19)."""
+
+    def test_resubmission_clears_submission_digest_sent_at(
+        self, fix_requested_application, parent_account
+    ):
+        """After correction resubmission, submission_digest_sent_at must be cleared."""
+        from datetime import datetime, timezone
+
+        # Simulate that the digest was already sent for this application
+        fix_requested_application.submission_digest_sent_at = datetime.now(timezone.utc)
+        fix_requested_application.save(update_fields=["submission_digest_sent_at"])
+
+        from apps.registrations.services import submit_application
+
+        submit_application(fix_requested_application, parent_account)
+        fix_requested_application.refresh_from_db()
+        assert fix_requested_application.submission_digest_sent_at is None, (
+            "submission_digest_sent_at must be cleared on correction resubmission."
+        )

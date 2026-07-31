@@ -121,7 +121,8 @@ class TestPortalWithDraft:
         return create_or_update_draft(
             data={
                 "guardian_email": email,
-                "guardian_full_name": "DraftPortal Guardian",
+                "guardian_first_name": "DraftPortal",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37166666666",
                 "guardian_declared_address": "Riga 5",
@@ -244,7 +245,8 @@ class TestPortalWithSubmittedApplication:
         app = create_or_update_draft(
             data={
                 "guardian_email": email,
-                "guardian_full_name": "SubmittedPortal Guardian",
+                "guardian_first_name": "SubmittedPortal",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-88888",
                 "guardian_phone": "+37199999999",
                 "guardian_declared_address": "Riga 8",
@@ -345,7 +347,8 @@ class TestPortalHeroPrimaryCta:
         return create_or_update_draft(
             data={
                 "guardian_email": "herocta@example.com",
-                "guardian_full_name": "HeroCTA Guardian",
+                "guardian_first_name": "HeroCTA",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 9",
@@ -402,7 +405,8 @@ class TestPortalHeroPrimaryCta:
         app = create_or_update_draft(
             data={
                 "guardian_email": "herocta@example.com",
-                "guardian_full_name": "HeroCTA Guardian",
+                "guardian_first_name": "HeroCTA",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-99999",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 9",
@@ -476,7 +480,8 @@ class TestPortalStatusBadgeRendering:
         app = create_or_update_draft(
             data={
                 "guardian_email": "statustest@example.com",
-                "guardian_full_name": "StatusTest Guardian",
+                "guardian_first_name": "StatusTest",
+                "guardian_family_name": "Guardian",
                 "guardian_personal_id": "010101-44444",
                 "guardian_phone": "+37144455566",
                 "guardian_declared_address": "Riga 4",

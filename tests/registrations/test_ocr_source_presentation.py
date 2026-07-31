@@ -40,9 +40,10 @@ def _create_workspace_draft_with_field_sources(email="srcpres@example.com"):
     )
     app = create_or_update_draft(
         data={
-            "guardian_email": email,
-            "guardian_full_name": "SourcePres Parent",
-            "guardian_personal_id": "010101-12345",
+                "guardian_email": email,
+                "guardian_first_name": "SourcePres",
+                "guardian_family_name": "Parent",
+                "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": "Riga 1",
             "member_full_name": "SourcePres Child",
@@ -155,7 +156,8 @@ class TestOcrExtractedBadgeVisible:
         app = create_or_update_draft(
             data={
                 "guardian_email": "ocrexample@example.com",
-                "guardian_full_name": "OcrExtract Parent",
+                "guardian_first_name": "OcrExtract",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-70000",
                 "guardian_phone": "+37130000001",
                 "guardian_declared_address": "Riga 7",
@@ -215,7 +217,8 @@ class TestErrorSummaryFullBehavior:
             f"/applications/{app.pk}/",
             {
                 "guardian_email": "",  # invalid — empty
-                "guardian_full_name": "Valid Parent",
+                "guardian_first_name": "Valid",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-12345",
                 "guardian_phone": "+37120000000",
                 "guardian_declared_address": "Riga 1",
@@ -315,7 +318,8 @@ class TestReviewHintExtractedSource:
         app = create_or_update_draft(
             data={
                 "guardian_email": "reviewhint@example.com",
-                "guardian_full_name": "ReviewHint Parent",
+                "guardian_first_name": "ReviewHint",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-40001",
                 "guardian_phone": "+37140000001",
                 "guardian_declared_address": "Riga 4",

@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
-<h1>Ģimenes darbību centrs — {{ guardian.full_name|default:guardian.pk }}</h1>
+<h1>Ģimenes darbību centrs — {{ guardian.display_name|default:guardian.pk }}</h1>
 <p>
   <a class="button" href="{% url 'admin:members_guardian_change' guardian.pk %}">Atvērt detalizēti vecāka ierakstu →</a>
   {% if hub.members %}
@@ -79,6 +79,11 @@
     <p>
       {% include "admin/members/guardian/_lane_status.html" with status=child.agreement_status %}
     </p>
+    {% if child.billing_setup_error %}
+      <p class="errornote">
+        <strong>Kļūda:</strong> {{ child.billing_setup_error }}
+      </p>
+    {% endif %}
     {% if child.agreement.state == "generated" or child.agreement.state == "sent" %}
     {% if not child.agreement.billing_plan_id %}
       <p class="errornote">
@@ -97,8 +102,8 @@
             <option value="{{ plan.pk }}">{{ plan.name }} — {{ plan.season }}</option>
           {% endfor %}
         </select>
-        <label for="hub_first_month_{{ child.agreement.pk }}">Pirmais rēķina mēnesis (GGGG-MM):</label>
-        <input type="text" name="first_billing_month" id="hub_first_month_{{ child.agreement.pk }}" value="{{ child.agreement.first_billing_month }}" pattern="\d{4}-\d{2}" placeholder="2026-09">
+        <label for="hub_first_month_{{ child.agreement.pk }}">Pirmais rēķina mēnesis:</label>
+        <input name="first_billing_month" type="month" id="hub_first_month_{{ child.agreement.pk }}" value="{{ child.agreement.first_billing_month }}" required>
         <button type="submit">Saglabāt norēķinu plānu</button>
       </form>
     {% endif %}
@@ -248,7 +253,11 @@
   {% for group in child.billing_groups %}
     <div class="module">
       <h4>{{ group.member.full_name }} — {{ group.season }} — {{ group.record.final_amount }} {{ group.record.plan.currency }}</h4>
-      <p>{% include "admin/members/guardian/_lane_status.html" with status=group.status %}</p>
+      {% if group.record.status == "confirmed" and group.record.external_status == "pending" %}
+        <p>Rēķini tiek sinhronizēti…</p>
+      {% else %}
+        <p>{% include "admin/members/guardian/_lane_status.html" with status=group.status %}</p>
+      {% endif %}
       {% if group.error_message %}
         <p><strong style="color:#b3261e">Kļūda:</strong> {{ group.error_message }}</p>
       {% endif %}
@@ -260,6 +269,8 @@
           <input type="hidden" name="billing_record_id" value="{{ group.record.pk }}">
           <button type="submit" class="default">Apstiprināt ierakstu</button>
         </form>
+      {% elif group.record.status == "confirmed" and group.record.external_status == "pending" %}
+        {# Push action intentionally hidden while pending — see enqueue_push_billing_record. #}
       {% elif group.record.status == "confirmed" and group.record.external_status != "synced" %}
         <form method="post" action="{{ action_url }}" style="display:inline">
           {% csrf_token %}

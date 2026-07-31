@@ -286,3 +286,199 @@ def test_push_billing_record_does_not_retry_non_client_validation_error(billing_
     billing_record.refresh_from_db()
     assert billing_record.external_status == "failed"
     assert billing_record.external_error_code == "misconfigured"
+
+
+def test_push_zero_billing_record_synced_without_provider_calls(active_plan, guardian, monkeypatch):
+    """P14: A confirmed record with final_amount=0 becomes synced without calling the provider."""
+    from apps.billing.models import BillingRecord, BillingInvoice
+    from apps.integrations import invoice_platform
+    from apps.integrations import tasks
+    from apps.members.models import Member
+
+    member = Member.objects.create(full_name="Zero", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("0.00"),
+        payment_mode=BillingRecord.PaymentMode.INSTALLMENTS,
+        status=BillingRecord.Status.CONFIRMED,
+    )
+
+    called = []
+
+    def should_not_call(*args, **kwargs):
+        called.append(True)
+        raise AssertionError("provider must not be called for zero-amount records")
+
+    # P14: Patch the task-level helpers, not just the platform boundary.
+    monkeypatch.setattr(tasks, "_ensure_product_id", should_not_call)
+    monkeypatch.setattr(tasks, "_ensure_client_id", should_not_call)
+    monkeypatch.setattr(invoice_platform, "ensure_product", should_not_call)
+    monkeypatch.setattr(invoice_platform, "ensure_client", should_not_call)
+    monkeypatch.setattr(invoice_platform, "create_invoice", should_not_call)
+
+    tasks.push_billing_record(rec.pk)
+
+    rec.refresh_from_db()
+    assert rec.external_status == "synced"
+    assert rec.external_error_code == ""
+    assert not called, "provider functions must not be called for zero-amount records"
+    assert BillingInvoice.objects.filter(billing_record=rec).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Defect 3: shared enqueue_push_billing_record behavior.
+# ---------------------------------------------------------------------------
+
+
+def test_enqueue_push_billing_record_sets_pending_before_async_task(active_plan, guardian, monkeypatch):
+    """Confirmed blank record must become external_status='pending' BEFORE
+    async_task is called. The mock's side_effect refreshes from DB and asserts
+    the state at the instant async_task is invoked, proving ordering."""
+    from apps.billing.models import BillingRecord
+    from apps.integrations import tasks
+    from apps.members.models import Member
+    from unittest.mock import MagicMock
+
+    member = Member.objects.create(full_name="Enqueue Test", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+        status=BillingRecord.Status.CONFIRMED,
+        external_status="",
+    )
+
+    # The side_effect runs at the instant async_task is called. It refreshes
+    # from DB and asserts the record is already pending — proving the DB write
+    # happened BEFORE the async_task call.
+    def assert_pending_at_call_time(*args, **kwargs):
+        rec.refresh_from_db()
+        assert rec.external_status == "pending", (
+            f"Expected 'pending' at async_task call time, got '{rec.external_status}'. "
+            "DB write must happen BEFORE async_task is called."
+        )
+
+    async_task_mock = MagicMock(side_effect=assert_pending_at_call_time)
+    monkeypatch.setattr(tasks, "async_task", async_task_mock)
+
+    tasks.enqueue_push_billing_record(rec.pk)
+
+    # async_task must have been called (and the side_effect passed).
+    async_task_mock.assert_called_once()
+
+    # Final state check.
+    rec.refresh_from_db()
+    assert rec.external_status == "pending"
+
+
+def test_enqueue_push_billing_record_skips_when_already_pending(active_plan, guardian, monkeypatch):
+    """A pending record must NOT schedule a second task."""
+    from apps.billing.models import BillingRecord
+    from apps.integrations import tasks
+    from apps.members.models import Member
+    from unittest.mock import MagicMock
+
+    member = Member.objects.create(full_name="Pending Test", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+        status=BillingRecord.Status.CONFIRMED,
+        external_status="pending",
+    )
+
+    async_task_mock = MagicMock()
+    monkeypatch.setattr(tasks, "async_task", async_task_mock)
+
+    tasks.enqueue_push_billing_record(rec.pk)
+
+    # async_task must NOT have been called.
+    async_task_mock.assert_not_called()
+
+
+def test_enqueue_push_billing_record_retries_failed_record(active_plan, guardian, monkeypatch):
+    """A failed confirmed record must be eligible for retry: scheduled again
+    and its error status clears or transitions to pending."""
+    from apps.billing.models import BillingRecord
+    from apps.integrations import tasks
+    from apps.members.models import Member
+    from unittest.mock import MagicMock
+
+    member = Member.objects.create(full_name="Retry Test", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+        status=BillingRecord.Status.CONFIRMED,
+        external_status="failed",
+        external_error_code="auth_failed",
+    )
+
+    async_task_mock = MagicMock()
+    monkeypatch.setattr(tasks, "async_task", async_task_mock)
+
+    tasks.enqueue_push_billing_record(rec.pk)
+
+    # async_task must have been called.
+    async_task_mock.assert_called_once()
+
+    # Record must transition to pending (or clear error status).
+    rec.refresh_from_db()
+    assert rec.external_status == "pending"
+    assert rec.external_error_code == ""
+
+
+def test_enqueue_push_billing_record_rolls_back_pending_when_async_task_raises(
+    active_plan, guardian, monkeypatch
+):
+    """Crash-window regression: if async_task raises AFTER the pending save
+    commits, the record is stuck pending with no queued job and no UI retry.
+
+    The async_task call must happen inside the SAME transaction as the pending
+    save. A RuntimeError from the queue must propagate AND the record must
+    retain its original blank unpushed state (transaction rolled back).
+    """
+    from apps.billing.models import BillingRecord
+    from apps.integrations import tasks
+    from apps.members.models import Member
+
+    member = Member.objects.create(full_name="Crash Window", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season="2026/2027",
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+        status=BillingRecord.Status.CONFIRMED,
+        external_status="",
+        external_error_code="",
+    )
+
+    def queue_unavailable(*args, **kwargs):
+        raise RuntimeError("queue unavailable")
+
+    monkeypatch.setattr(tasks, "async_task", queue_unavailable)
+
+    with pytest.raises(RuntimeError, match="queue unavailable"):
+        tasks.enqueue_push_billing_record(rec.pk)
+
+    # The pending save must have been rolled back — record stays unpushed.
+    rec.refresh_from_db()
+    assert rec.external_status == "", (
+        "Record must retain blank external_status when async_task raises; "
+        "got 'pending' — the state transition and enqueue are not atomic."
+    )
+    assert rec.external_error_code == ""

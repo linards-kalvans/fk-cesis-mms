@@ -17,7 +17,7 @@
   <tbody>
     {% for row in rows %}
     <tr>
-      <td><strong>{{ row.guardian.full_name|default:"—" }}</strong></td>
+      <td><strong>{{ row.guardian.display_name|default:"—" }}</strong></td>
       <td>{{ row.guardian.email|default:"—" }}</td>
       <td class="fk-hub-lanes">
         {% for status in row.statuses %}

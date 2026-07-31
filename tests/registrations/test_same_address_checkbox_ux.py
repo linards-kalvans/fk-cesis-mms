@@ -64,7 +64,8 @@ def _create_draft(
     return create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "SameAddr Guardian",
+            "guardian_first_name": "SameAddr",
+            "guardian_family_name": "Guardian",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": guardian_address,

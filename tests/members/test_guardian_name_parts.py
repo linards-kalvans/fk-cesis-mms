@@ -1,158 +1,102 @@
-"""P13 — Guardian first_name / family_name fields, split helper, mirror helper, and backfill migration."""
+"""P13 cleanup — Guardian.display_name derived property, __str__, and migration state."""
 
 from __future__ import annotations
 
 import pytest
 
+from apps.members.models import Guardian
 
 pytestmark = pytest.mark.django_db
 
 
-# ---------------------------------------------------------------------------
-# Pure helper — split_guardian_full_name
-# ---------------------------------------------------------------------------
-
-
-class TestSplitGuardianFullName:
-    """split_guardian_full_name(last-token-is-family-name rule)."""
-
-    @pytest.mark.parametrize(
-        ("full_name", "expected"),
-        [
-            ("", ("", "")),
-            ("   ", ("", "")),
-            ("Jānis", ("Jānis", "")),
-            ("Jānis Kalniņš", ("Jānis", "Kalniņš")),
-            ("Anna Marija Ozola", ("Anna Marija", "Ozola")),
-            ("  Anna   Marija   Ozola  ", ("Anna Marija", "Ozola")),
-        ],
-    )
-    def test_split_last_token_is_family_name(self, full_name, expected):
-        from apps.members.models import split_guardian_full_name
-
-        assert split_guardian_full_name(full_name) == expected
-
-
-# ---------------------------------------------------------------------------
-# Guardian.sync_full_name()
-# ---------------------------------------------------------------------------
-
-
-class TestGuardianSyncFullName:
-    def test_sync_full_name_joins_explicit_fields(self, parent_account):
-        from apps.members.models import Guardian
-
+class TestGuardianDisplayName:
+    def test_display_name_joins_first_and_family_name(self, parent_account):
         guardian = Guardian(
             parent_account=parent_account,
             first_name="Anna Marija",
             family_name="Ozola",
         )
-        guardian.sync_full_name()
-        assert guardian.full_name == "Anna Marija Ozola"
+        assert guardian.display_name == "Anna Marija Ozola"
 
-    def test_sync_full_name_strips_blank_parts(self, parent_account):
-        from apps.members.models import Guardian
-
+    def test_display_name_skips_blank_family_name(self, parent_account):
         guardian = Guardian(
-            parent_account=parent_account, first_name="Jānis", family_name=""
+            parent_account=parent_account,
+            first_name="Jānis",
+            family_name="",
         )
-        guardian.sync_full_name()
-        assert guardian.full_name == "Jānis"
+        assert guardian.display_name == "Jānis"
 
-    def test_sync_full_name_both_empty_gives_empty(self, parent_account):
-        from apps.members.models import Guardian
-
+    def test_display_name_skips_blank_first_name(self, parent_account):
         guardian = Guardian(
-            parent_account=parent_account, first_name="", family_name=""
+            parent_account=parent_account,
+            first_name="",
+            family_name="Ozola",
         )
-        guardian.sync_full_name()
-        assert guardian.full_name == ""
+        assert guardian.display_name == "Ozola"
+
+    def test_display_name_both_empty_gives_empty(self, parent_account):
+        guardian = Guardian(
+            parent_account=parent_account,
+            first_name="",
+            family_name="",
+        )
+        assert guardian.display_name == ""
+
+    def test_display_name_strips_whitespace(self, parent_account):
+        guardian = Guardian(
+            parent_account=parent_account,
+            first_name="  Anna  ",
+            family_name="  Ozola  ",
+        )
+        assert guardian.display_name == "Anna Ozola"
 
 
-# ---------------------------------------------------------------------------
-# Migration backfill
-# ---------------------------------------------------------------------------
+class TestGuardianStr:
+    def test_str_uses_display_name(self, parent_account):
+        guardian = Guardian.objects.create(
+            parent_account=parent_account,
+            first_name="Anna",
+            family_name="Ozola",
+        )
+        assert str(guardian) == "Anna Ozola"
+
+    def test_str_falls_back_to_pk_when_display_name_empty(self, parent_account):
+        guardian = Guardian.objects.create(
+            parent_account=parent_account,
+            first_name="",
+            family_name="",
+        )
+        assert str(guardian) == str(guardian.pk)
 
 
-class TestBackfillGuardianNameParts:
-    """Migration 0010 backfill: existing full_name → first_name / family_name."""
+class TestGuardianMigrationState:
+    def test_latest_guardian_model_has_no_full_name_field(self):
+        field_names = {field.name for field in Guardian._meta.fields}
+        assert "full_name" not in field_names
 
-    def test_backfill_splits_two_token_name(self, parent_account):
+    def test_migration_0011_removes_full_name(self):
+        """Migration 0011 must exist and remove Guardian.full_name."""
         from importlib import import_module
 
-        from apps.members.models import Guardian
-
-        g = Guardian.objects.create(
-            parent_account=parent_account, full_name="Jānis Kalniņš"
-        )
-
         module = import_module(
-            "apps.members.migrations.0010_guardian_name_parts"
+            "apps.members.migrations.0011_remove_guardian_full_name"
         )
-        from django.apps import apps
+        ops = module.Migration.operations
+        remove_ops = [
+            op
+            for op in ops
+            if hasattr(op, "name")
+            and op.name == "full_name"
+            and getattr(op, "model_name", "") == "guardian"
+        ]
+        assert len(remove_ops) == 1
 
-        module.backfill_guardian_name_parts(apps, None)
 
-        g.refresh_from_db()
-        assert g.first_name == "Jānis"
-        assert g.family_name == "Kalniņš"
+class TestProductionCleanup:
+    def test_no_sync_full_name_method(self):
+        assert not hasattr(Guardian, "sync_full_name")
 
-    def test_backfill_splits_multi_token_first_name(self, parent_account):
-        from importlib import import_module
+    def test_no_split_guardian_full_name_in_models(self):
+        import apps.members.models as mod
 
-        from apps.members.models import Guardian
-
-        Guardian.objects.create(
-            parent_account=parent_account, full_name="Anna Marija Ozola"
-        )
-
-        module = import_module(
-            "apps.members.migrations.0010_guardian_name_parts"
-        )
-        from django.apps import apps
-
-        module.backfill_guardian_name_parts(apps, None)
-
-        g = Guardian.objects.get(parent_account=parent_account)
-        assert g.first_name == "Anna Marija"
-        assert g.family_name == "Ozola"
-
-    def test_backfill_single_token_goes_to_first_name(self, parent_account):
-        from importlib import import_module
-
-        from apps.members.models import Guardian
-
-        Guardian.objects.create(
-            parent_account=parent_account, full_name="Jānis"
-        )
-
-        module = import_module(
-            "apps.members.migrations.0010_guardian_name_parts"
-        )
-        from django.apps import apps
-
-        module.backfill_guardian_name_parts(apps, None)
-
-        g = Guardian.objects.get(parent_account=parent_account)
-        assert g.first_name == "Jānis"
-        assert g.family_name == ""
-
-    def test_backfill_blank_full_name_gives_empty_parts(self, parent_account):
-        from importlib import import_module
-
-        from apps.members.models import Guardian
-
-        Guardian.objects.create(
-            parent_account=parent_account, full_name=""
-        )
-
-        module = import_module(
-            "apps.members.migrations.0010_guardian_name_parts"
-        )
-        from django.apps import apps
-
-        module.backfill_guardian_name_parts(apps, None)
-
-        g = Guardian.objects.get(parent_account=parent_account)
-        assert g.first_name == ""
-        assert g.family_name == ""
+        assert not hasattr(mod, "split_guardian_full_name")

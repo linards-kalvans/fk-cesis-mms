@@ -255,3 +255,34 @@ def test_sent_email_body_includes_portal_url_from_settings(agreement_member, act
         a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
         mark_agreement_sent(a, actor)
     assert "https://test.example" in mail.outbox[0].body
+
+
+# --- P13 cleanup: context key is guardian_display_name ---
+
+
+def test_sent_email_body_contains_guardian_display_name(
+    agreement_member, agreement_guardian, actor
+):
+    """Email body must contain the guardian's derived display name."""
+    mail.outbox.clear()
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    mark_agreement_sent(a, actor)
+    assert "Anna Bērziņa" in mail.outbox[0].body
+
+
+def test_void_email_body_contains_guardian_display_name(
+    agreement_member, agreement_guardian, actor
+):
+    mail.outbox.clear()
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    void_agreement(a, actor, "test reason")
+    assert "Anna Bērziņa" in mail.outbox[0].body
+
+
+def test_signed_email_body_contains_guardian_display_name(
+    agreement_member, agreement_guardian, actor, default_plan
+):
+    mail.outbox.clear()
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    mark_agreement_signed(a, actor)
+    assert "Anna Bērziņa" in mail.outbox[0].body

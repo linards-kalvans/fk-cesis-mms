@@ -31,7 +31,9 @@ def docuseal_settings(settings):
 
 
 class _FakeGuardian:
-    full_name = "Anna Bērziņa"
+    display_name = "Anna Bērziņa"
+    first_name = "Anna"
+    family_name = "Bērziņa"
     personal_id = "111111-11111"
     email = "anna@example.test"
     phone = "+37120000000"
@@ -123,6 +125,8 @@ def test_create_submission_request_shape_and_normalization(
     assert body["template_id"] == 7
     submitter = body["submitters"][0]
     assert submitter["email"] == "anna@example.test"
+    # P13 cleanup: submitter name uses guardian.display_name (not full_name).
+    assert submitter["name"] == "Anna Bērziņa"
     # No role sent: the template owns the role name; DocuSeal rejects a
     # mismatching role once values are present.
     assert "role" not in submitter
@@ -144,6 +148,8 @@ def test_create_submission_request_shape_and_normalization(
     assert by_name["child_address"]["default_value"] == "Sporta iela 1, Cēsis"
     assert by_name["guardian_email"]["default_value"] == "anna@example.test"
     assert by_name["guardian_phone"]["default_value"] == "+37120000000"
+    # P13 cleanup: guardian_name field uses guardian.display_name.
+    assert by_name["guardian_name"]["default_value"] == "Anna Bērziņa"
     assert all(f["readonly"] is True for f in fields)
     assert "training_group" not in by_name
     # agreement_date is auto-filled by the DocuSeal template (current date),

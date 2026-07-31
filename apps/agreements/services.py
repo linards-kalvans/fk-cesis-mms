@@ -105,6 +105,11 @@ def create_agreement_for_member(
     override either field via the admin ``set_billing_setup`` action before
     signing. ``mark_agreement_signed`` raises if ``billing_plan`` is missing.
 
+    P15: the default plan + month is preselected only when the cutoff-derived
+    month, after plan skip-month normalization, lands in the plan's season
+    start year. If it normalizes into a different year, both fields stay
+    empty so staff must explicitly pick a next-year plan.
+
     The fresh-create path runs inside ``transaction.atomic()`` and snapshots
     ``timezone.now()`` exactly once, so the year used for the agreement
     number allocation matches the row's ``generated_at`` (a single
@@ -120,14 +125,25 @@ def create_agreement_for_member(
     # Lazy import to avoid an apps.billing → apps.agreements → apps.billing
     # cycle at import time.
     from apps.billing.services import (
+        _plan_season_start_year,
         derive_first_billing_month,
         get_default_billing_plan,
+        normalize_first_billing_month,
     )
 
     default_plan = get_default_billing_plan()
-    first_billing_month = (
-        derive_first_billing_month(default_plan) if default_plan is not None else ""
-    )
+    first_billing_month = ""
+    if default_plan is not None:
+        raw_month = derive_first_billing_month(default_plan)
+        try:
+            normalized = normalize_first_billing_month(default_plan, raw_month)
+            season_year = _plan_season_start_year(default_plan)
+            if int(normalized.split("-")[0]) == season_year:
+                first_billing_month = normalized
+            else:
+                default_plan = None  # leave empty: staff must pick next-year plan
+        except ValueError:
+            default_plan = None  # leave empty: nothing billable in the cut-off year
     with transaction.atomic():
         agreement = Agreement.objects.create(
             member=member,
@@ -186,6 +202,21 @@ def mark_agreement_signed(
     P9: refuses to mutate state when ``billing_plan`` is missing — the signed
     transition must realise a billing draft, so the plan choice must be
     explicit before signing.
+
+    P15: validates first — then mutates. Pre-mutation guards, in order:
+
+      * state is ``generated`` or ``sent``;
+      * ``billing_plan`` is set (P9 missing-plan guard);
+      * ``first_billing_month`` is non-blank (P15 required-month guard);
+      * the plan is active (P15 inactive-plan guard);
+      * the staff-confirmed month normalizes into the plan's season start
+        year (P15 next-year guard — admin surfaces the Latvian
+        "Nākamajam gadam izvēlieties aktīvu norēķinu plānu." message).
+
+    No current-date re-derivation — the staff-confirmed month is the source
+    of truth. The ``agreement_signed`` signal (billing listens) only fires
+    after every guard has passed, so a refused signing creates no
+    ``BillingRecord``.
     """
     if agreement.state not in (Agreement.State.GENERATED, Agreement.State.SENT):
         raise ValueError(
@@ -193,6 +224,25 @@ def mark_agreement_signed(
         )
     if agreement.billing_plan_id is None:
         raise ValueError("billing plan required")
+    if not agreement.first_billing_month:
+        raise ValueError("first billing month required")
+    plan = agreement.billing_plan
+    if not plan.is_active:
+        raise ValueError("billing plan inactive")
+    from apps.billing.services import (
+        _plan_season_start_year,
+        normalize_first_billing_month,
+    )
+
+    try:
+        season_year = _plan_season_start_year(plan)
+        normalized = normalize_first_billing_month(
+            plan, agreement.first_billing_month
+        )
+    except ValueError:
+        raise ValueError("next year plan required")
+    if int(normalized.split("-")[0]) != season_year:
+        raise ValueError("next year plan required")
     agreement.state = Agreement.State.SIGNED
     agreement.signed_at = timezone.now()
     agreement.save(update_fields=["state", "signed_at"])
@@ -288,37 +338,86 @@ def set_billing_setup(
     (billing is already realised against the locked record). Idempotent on
     the same values — no audit row when nothing changed. Audits only on real
     mutation.
-    """
+
+    P15: validates first — then mutates and audits. Validation steps (in
+    order, all raise before any write):
+
+      * non-blank first_billing_month is required (blank → ValueError);
+      * the supplied plan is active (inactive → ValueError);
+      * raw ``YYYY-MM`` parses (malformed → ValueError);
+      * raw month normalizes past plan skip months (e.g. ``2026-07`` →
+        ``2026-08`` for a plan that skips July+December);
+      * normalized month is not before the cutoff-derived default
+        (no backdating, but a skip-raw month that advances to the floor
+        is valid);
+      * normalized month year matches the plan's season start year
+        (rollover to a different calendar year is refused — staff must
+        pick a next-year plan).
+
+    On success, the persisted ``first_billing_month`` is the normalized
+    form, not the raw input. The audit metadata carries the planned
+    ``scheduled_installment_count`` (when one is supplied) so downstream
+    readers can reconstruct the partial-year snapshot."""
     if agreement.state in (
         Agreement.State.SIGNED,
         Agreement.State.SUPERSEDED,
         Agreement.State.DISCONTINUED,
     ):
         raise ValueError("cannot change billing setup after signing")
-    if first_billing_month:
-        from apps.billing.services import parse_first_billing_month
 
-        parse_first_billing_month(first_billing_month)
+    new_plan_id = getattr(billing_plan, "pk", billing_plan)
+    if not first_billing_month:
+        raise ValueError("first billing month required")
+    if not getattr(billing_plan, "is_active", False):
+        raise ValueError("billing plan inactive")
+
+    normalized_month = ""
+    scheduled_count: int | None = None
+    from apps.billing.services import (
+        _plan_season_start_year,
+        count_calendar_year_billable_installments,
+        derive_first_billing_month,
+        normalize_first_billing_month,
+        parse_first_billing_month,
+    )
+
+    parse_first_billing_month(first_billing_month)
+    normalized_month = normalize_first_billing_month(billing_plan, first_billing_month)
+    cutoff_default = derive_first_billing_month(billing_plan)
+    if normalized_month < cutoff_default:
+        raise ValueError(
+            "first billing month cannot be before cutoff-derived default"
+        )
+    season_year = _plan_season_start_year(billing_plan)
+    if int(normalized_month.split("-")[0]) != season_year:
+        raise ValueError("next year plan required")
+    scheduled_count = count_calendar_year_billable_installments(
+        billing_plan, normalized_month
+    )
+
     old_plan_id = agreement.billing_plan_id
     old_month = agreement.first_billing_month
-    new_plan_id = getattr(billing_plan, "pk", billing_plan)
-    if old_plan_id == new_plan_id and old_month == first_billing_month:
+    persisted_month = normalized_month
+    if old_plan_id == new_plan_id and old_month == persisted_month:
         return agreement
     agreement.billing_plan_id = new_plan_id
-    agreement.first_billing_month = first_billing_month
+    agreement.first_billing_month = persisted_month
     agreement.save(
         update_fields=["billing_plan", "first_billing_month", "updated_at"]
     )
+    audit_metadata = {
+        "old_plan_id": old_plan_id,
+        "new_plan_id": new_plan_id,
+        "old_first_billing_month": old_month,
+        "new_first_billing_month": persisted_month,
+    }
+    if scheduled_count is not None:
+        audit_metadata["scheduled_installment_count"] = scheduled_count
     record_audit_event(
         action=str(AuditEvent.Action.BILLING_PLAN_ASSIGNED),
         actor=actor,
         target=agreement,
-        metadata={
-            "old_plan_id": old_plan_id,
-            "new_plan_id": new_plan_id,
-            "old_first_billing_month": old_month,
-            "new_first_billing_month": first_billing_month,
-        },
+        metadata=audit_metadata,
     )
     return agreement
 
@@ -576,7 +675,7 @@ def _render_and_send_discontinued_email(
     guardian = member.guardian
     portal_url = f"{settings.SITE_URL}{reverse('registrations:parent-portal')}"
     context = {
-        "guardian_full_name": guardian.full_name,
+        "guardian_display_name": guardian.display_name,
         "member_full_name": member.full_name,
         "effective_date": effective_date,
         "reason": reason,
@@ -615,7 +714,7 @@ def _render_and_send_agreement_email(
     guardian = member.guardian
     portal_url = f"{settings.SITE_URL}{reverse('registrations:parent-portal')}"
     context = {
-        "guardian_full_name": guardian.full_name,
+        "guardian_display_name": guardian.display_name,
         "member_full_name": member.full_name,
         "signing_path": agreement.signing_path,
         "void_reason": agreement.void_reason,

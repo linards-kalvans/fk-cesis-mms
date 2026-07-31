@@ -22,7 +22,8 @@ pytestmark = pytest.mark.django_db
 def _application():
     acct = ParentAccount.objects.create(email="parent@example.com", phone="+37129999999")
     g = resolve_guardian_for_account(acct)
-    g.full_name = "Anna Ozola"
+    g.first_name = "Anna"
+    g.family_name = "Ozola"
     g.personal_id = "010180-12345"
     g.address = "Rīga"
     g.save()

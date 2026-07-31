@@ -1,4 +1,4 @@
-Sveiki, {{ guardian_full_name }}!
+Sveiki, {{ guardian_display_name }}!
 
 Jūsu pieteikums dalībai FK Cēsis ir apstiprināts.
 

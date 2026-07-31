@@ -2,6 +2,7 @@
 
 from urllib.parse import urlencode
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect
@@ -26,12 +27,60 @@ from apps.core.models import AuditEvent
 @admin.register(MembershipPlan)
 class MembershipPlanAdmin(admin.ModelAdmin):
     list_display = (
-        "name", "season", "annual_amount", "sibling_discount_percent",
+        "name", "season", "annual_amount",
         "installment_count", "first_installment_month", "payment_due_day",
         "is_default", "billing_start_cutoff_day", "is_active",
     )
     list_filter = ("season", "is_active", "is_default")
     search_fields = ("name", "season")
+
+
+class BillingRecordAdminForm(forms.ModelForm):
+    """P14 — draft-only staff override on a BillingRecord.
+
+    Only three fields are editable in the admin: ``manual_amount_override``,
+    ``manual_override_reason``, and ``status``. A non-null override (including
+    zero) requires a trimmed reason. Non-DRAFT records refuse any change to
+    the override / reason (preserves the existing override on confirmation).
+    On save, ``final_amount`` is set to the override when one is supplied;
+    clearing the override restores the natural snapshot total.
+    """
+
+    class Meta:
+        model = BillingRecord
+        fields = ("manual_amount_override", "manual_override_reason", "status")
+
+    def clean(self):
+        cleaned = super().clean()
+        override = cleaned.get("manual_amount_override")
+        reason = (cleaned.get("manual_override_reason") or "").strip()
+        original = (
+            BillingRecord.objects.only(
+                "status", "manual_amount_override", "manual_override_reason"
+            ).get(pk=self.instance.pk)
+            if self.instance.pk
+            else None
+        )
+
+        if override is not None and not reason:
+            self.add_error("manual_override_reason", "Ievadiet iemeslu.")
+        if original is not None and original.status != BillingRecord.Status.DRAFT:
+            if (
+                original.manual_amount_override != override
+                or original.manual_override_reason != reason
+            ):
+                self.add_error(
+                    "manual_amount_override",
+                    "Apstiprinātiem ierakstiem pārrēķins nav pieejams.",
+                )
+
+        self.instance.manual_override_reason = reason
+        self.instance.final_amount = (
+            override
+            if override is not None
+            else self.instance.base_amount - self.instance.discount_amount
+        )
+        return cleaned
 
 
 class BillingInvoiceInline(admin.TabularInline):
@@ -89,7 +138,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
     )
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
-    search_fields = ("member__full_name", "member__guardian__full_name")
+    search_fields = (
+        "member__full_name",
+        "member__guardian__first_name",
+        "member__guardian__family_name",
+    )
 
     class Media:
         css = {"all": ["admin/fk_badges.css"]}
@@ -98,6 +151,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
         "reassign_link",
         "member", "plan", "agreement", "season",
         "first_billing_month",
+        "scheduled_installment_count",
         "base_amount", "is_full_price",
         "sibling_discount_percent_applied", "discount_amount", "final_amount",
         "payment_mode", "full_price_opt_out", "external_status", "external_error_code",
@@ -109,6 +163,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
     )
     inlines = (BillingInvoiceInline,)
     actions = ("recompute_from_plan", "push_to_invoice_ninja", "sync_payments")
+    form = BillingRecordAdminForm
 
     def has_add_permission(self, request):
         # Billing records are created by the billing service, never hand-added in
@@ -122,20 +177,42 @@ class BillingRecordAdmin(admin.ModelAdmin):
         )
 
     def save_model(self, request, obj, form, change):
-        # Audit a DRAFT→CONFIRMED transition made via the change form's status
-        # dropdown + Save (the one-click buttons go through confirm_view instead).
-        was_draft = bool(
-            change
-            and obj.pk
-            and BillingRecord.objects.filter(
-                pk=obj.pk, status=BillingRecord.Status.DRAFT
-            ).exists()
+        # Capture the persisted original BEFORE super() so we can audit
+        # both the DRAFT→CONFIRMED status transition (legacy behaviour)
+        # AND the manual-override change (P14) in this single save path.
+        previous = (
+            BillingRecord.objects.only(
+                "status", "manual_amount_override", "manual_override_reason"
+            ).get(pk=obj.pk)
+            if change and obj.pk
+            else None
         )
         super().save_model(request, obj, form, change)
-        if was_draft and obj.status == BillingRecord.Status.CONFIRMED:
+        if previous is not None and previous.status == BillingRecord.Status.DRAFT:
+            if obj.status == BillingRecord.Status.CONFIRMED:
+                record_audit_event(
+                    action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                    actor=request.user, request=request, target=obj,
+                )
+        if previous is not None and (
+            previous.manual_amount_override != obj.manual_amount_override
+            or previous.manual_override_reason != obj.manual_override_reason
+        ):
             record_audit_event(
-                action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                action=str(AuditEvent.Action.BILLING_RECORD_AMOUNT_OVERRIDDEN),
                 actor=request.user, request=request, target=obj,
+                metadata={
+                    "old_override": (
+                        str(previous.manual_amount_override)
+                        if previous.manual_amount_override is not None
+                        else None
+                    ),
+                    "new_override": (
+                        str(obj.manual_amount_override)
+                        if obj.manual_amount_override is not None
+                        else None
+                    ),
+                },
             )
 
     def get_urls(self):
@@ -213,8 +290,18 @@ class BillingRecordAdmin(admin.ModelAdmin):
                         )
                     except ValueError as exc:
                         raw = str(exc)
-                        if "first billing month" in raw:
+                        if raw == "next year plan required":
+                            latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
+                        elif raw == "first billing month required":
+                            latvian = "Pirmais rēħina mēnesis ir obligāts."
+                        elif raw == "billing plan inactive":
+                            latvian = "Izvēlētais norēķinu plāns nav aktīvs."
+                        elif "first billing month must use YYYY-MM" in raw:
                             latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                        elif "cannot be before cutoff-derived default" in raw:
+                            latvian = (
+                                "Izvēlētais mēnesis ir pirms pirmā pieejamā rēķina mēneša."
+                            )
                         else:
                             latvian = raw
                         self.message_user(request, latvian, level=messages.ERROR)

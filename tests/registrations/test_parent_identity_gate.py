@@ -77,7 +77,8 @@ class TestNoCrossRegistrationExposure:
         app_a = create_or_update_draft(
             data={
                 "guardian_email": "parenta@example.com",
-                "guardian_full_name": "Parent A",
+                "guardian_first_name": "Parent",
+                "guardian_family_name": "A",
                 "guardian_personal_id": "010101-11111",
                 "guardian_phone": "+37122222222",
                 "guardian_declared_address": "Riga 1",
@@ -94,7 +95,8 @@ class TestNoCrossRegistrationExposure:
         app_b = create_or_update_draft(
             data={
                 "guardian_email": "parenta@example.com",
-                "guardian_full_name": "Parent B Impostor",
+                "guardian_first_name": "Parent B",
+                "guardian_family_name": "Impostor",
                 "guardian_personal_id": "010101-22222",
                 "guardian_phone": "+37133333333",
                 "guardian_declared_address": "Riga 2",
@@ -124,7 +126,8 @@ class TestNoCrossRegistrationExposure:
         create_or_update_draft(
             data={
                 "guardian_email": "secureparent@example.com",
-                "guardian_full_name": "Secure Parent",
+                "guardian_first_name": "Secure",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-44444",
                 "guardian_phone": "+37155555555",
                 "guardian_declared_address": "Riga 4",
@@ -164,7 +167,8 @@ class TestCrossBrowserDraftProtection:
         app = create_or_update_draft(
             data={
                 "guardian_email": "crossbrowser@example.com",
-                "guardian_full_name": "Cross Browser",
+                "guardian_first_name": "Cross",
+                "guardian_family_name": "Browser",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37144444444",
                 "guardian_declared_address": "Riga 3",
@@ -205,7 +209,8 @@ class TestMagicLinkForClaimedEmail:
         app = create_or_update_draft(
             data={
                 "guardian_email": "noaccount@example.com",
-                "guardian_full_name": "No Account",
+                "guardian_first_name": "No",
+                "guardian_family_name": "Account",
                 "guardian_personal_id": "010101-55555",
                 "guardian_phone": "+37166666666",
                 "guardian_declared_address": "Riga 5",
@@ -256,7 +261,8 @@ class TestPostVerificationPortalVisibility:
         app = create_or_update_draft(
             data={
                 "guardian_email": "verifyportal@example.com",
-                "guardian_full_name": "Verify Portal",
+                "guardian_first_name": "Verify",
+                "guardian_family_name": "Portal",
                 "guardian_personal_id": "010101-12121",
                 "guardian_phone": "+37123232323",
                 "guardian_declared_address": "Riga 12",
@@ -325,7 +331,8 @@ class TestPortalQueriesByVerifiedParent:
         app_a = create_or_update_draft(
             data={
                 "guardian_email": "portalquery@example.com",
-                "guardian_full_name": "Portal Query A",
+                "guardian_first_name": "Portal Query",
+                "guardian_family_name": "A",
                 "guardian_personal_id": "010101-34343",
                 "guardian_phone": "+37145454545",
                 "guardian_declared_address": "Riga 34",
@@ -389,7 +396,8 @@ class TestSubmittedApplicationsReadOnly:
         app = create_or_update_draft(
             data={
                 "guardian_email": "readonly@example.com",
-                "guardian_full_name": "Read Only",
+                "guardian_first_name": "Read",
+                "guardian_family_name": "Only",
                 "guardian_personal_id": "010101-56565",
                 "guardian_phone": "+37167676767",
                 "guardian_declared_address": "Riga 56",
@@ -434,7 +442,8 @@ class TestSubmittedApplicationsReadOnly:
         app = create_or_update_draft(
             data={
                 "guardian_email": "portalro@example.com",
-                "guardian_full_name": "Portal RO",
+                "guardian_first_name": "Portal",
+                "guardian_family_name": "RO",
                 "guardian_personal_id": "010101-78787",
                 "guardian_phone": "+37189898989",
                 "guardian_declared_address": "Riga 78",

@@ -1,4 +1,4 @@
-Labdien, {{ guardian_full_name }}!
+Labdien, {{ guardian_display_name }}!
 
 FK Cēsis dalība bērnam {{ member_full_name }} ir pārtraukta no {{ effective_date|date:"Y-m-d" }}.
 

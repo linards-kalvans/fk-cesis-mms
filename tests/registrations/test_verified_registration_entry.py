@@ -368,7 +368,8 @@ class TestCrossAccountRegression:
         app_b = create_or_update_draft(
             data={
                 "guardian_email": "crossb@example.com",
-                "guardian_full_name": "Cross B",
+                "guardian_first_name": "Cross",
+                "guardian_family_name": "B",
                 "guardian_personal_id": "010101-33333",
                 "guardian_phone": "+37144444444",
                 "guardian_address": "Riga B",

@@ -1,0 +1,99 @@
+# P19 Submitted Registration Digest - Stage 1 Spec-Compliance Review
+
+## Changes Made
+
+### 1. Removed unapproved `create_digest_defaults` public API contract
+
+**File:** `tests/registrations/test_submission_digest_schedule.py`
+
+- Removed reference to `apps.registrations.services.create_digest_defaults`
+- Updated migration seed test to import the migration module directly and call its callback function
+- Expected callback name: `create_digest_defaults(apps, schema_editor)` (Django convention)
+- Updated module docstring to document this as a migration-local callback, not a public API
+
+### 2. Fixed admin authorization test to check exact 403 status
+
+**File:** `tests/registrations/test_submission_digest.py`
+
+- Changed `test_non_superuser_staff_gets_403` to assert `status_code == 403` (not 403 or 302)
+- Non-superuser staff users are authenticated, so they should receive 403, not redirect
+
+### 3. Added singleton add/delete blocking tests
+
+**File:** `tests/registrations/test_submission_digest.py`
+
+- Added `test_superuser_cannot_add_second_singleton` - asserts add URL returns 403/302
+- Added `test_superuser_cannot_delete_singleton` - asserts delete URL returns 403/302
+- Both tests verify the ModelAdmin permission methods block these operations
+
+### 4. Fixed `_make_minimal_submitted()` to handle multi-child-discount validation
+
+**File:** `tests/registrations/test_submission_digest.py`
+
+- Added logic to detect if parent already has a non-rejected application
+- When `has_prior` is True, supplies `support_club_instead_of_multi_child_discount=True`
+- This allows the helper to be called multiple times for the same parent without validation errors
+
+### 5. Updated module docstrings
+
+**Files:** Both test files
+
+- Updated `test_submission_digest.py` docstring to include admin contract coverage
+- Updated `test_submission_digest_schedule.py` docstring to clarify migration callback contract
+- Removed any references to unapproved public APIs
+
+## Test Results
+
+### Focused Command
+```bash
+uv run pytest tests/registrations/test_submission_digest.py tests/registrations/test_submission_digest_schedule.py tests/registrations/test_application_workflow.py::TestResubmissionClearsDigestSentAt -v
+```
+
+### Red Output Summary
+- **29 tests failed** (expected RED phase)
+- **0 tests passed**
+- All existing tests in `test_application_workflow.py` still pass (25 passed)
+
+### Failure Categories
+
+1. **ModuleNotFoundError: `apps.registrations.tasks`** (11 tests)
+   - Tasks module doesn't exist yet
+
+2. **ImportError: `RegistrationSubmissionDigestSettings`** (15 tests)
+   - Model doesn't exist yet
+
+3. **AssertionError/DoesNotExist: Schedule row** (4 tests)
+   - Schedule row not seeded yet
+
+4. **ValueError: field `submission_digest_sent_at`** (1 test)
+   - Field doesn't exist on model yet
+
+All failures are **feature-only** (missing implementation), not fixture setup issues.
+
+## Spec Compliance Checklist
+
+- ✅ Admin authorization: non-superuser staff gets 403
+- ✅ Admin blocking: superuser cannot add second singleton
+- ✅ Admin blocking: superuser cannot delete singleton
+- ✅ Admin recipient picker: includes active staff, excludes inactive/non-staff
+- ✅ Bcc privacy: envelope has bcc, serialized MIME has no Bcc: header
+- ✅ Email content: child name, guardian name, exact Riga-local time, status label, exact admin URL
+- ✅ Email content: excludes PII (email, phone, personal IDs, addresses, review message)
+- ✅ Success state: returns count, updates rows, updates singleton
+- ✅ Empty pending: returns 0, no email, no state advance
+- ✅ Error handling: no recipients / no email / send raises / send returns 0 → returns 0, no state advance
+- ✅ Transactional locking: sent rows excluded, resubmitted rows re-included
+- ✅ Migration seed: singleton at pk=1, Schedule row with correct name/func/type/time
+- ✅ Migration seed: idempotent callback (rerunning leaves one of each)
+- ✅ Resubmission: clears `submission_digest_sent_at` (in workflow test file)
+- ✅ Multi-child validation: helper supplies opt-out when needed
+
+## Next Steps
+
+Implementation must provide:
+1. `apps/registrations/models.py`: `RegistrationSubmissionDigestSettings` model with singleton at pk=1
+2. `apps/registrations/models.py`: `RegistrationApplication.submission_digest_sent_at` field
+3. `apps/registrations/tasks.py`: `send_submitted_registration_digest()` function
+4. `apps/registrations/migrations/0012_submission_digest_settings.py`: migration with `create_digest_defaults(apps, schema_editor)` callback
+5. `apps/registrations/admin.py`: `RegistrationSubmissionDigestSettingsAdmin` with permission overrides
+6. `apps/registrations/services.py`: `submit_application()` must clear `submission_digest_sent_at` on resubmission

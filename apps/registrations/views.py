@@ -568,12 +568,8 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
         app.lifecycle_history_items = lifecycle_history_items(agreement)
     # Personalized hero greeting — the account's canonical Guardian name, if on
     # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
-    greeting_name = (
-        Guardian.objects.filter(parent_account=account)
-        .values_list("full_name", flat=True)
-        .first()
-        or ""
-    )
+    guardian = Guardian.objects.filter(parent_account=account).first()
+    greeting_name = guardian.display_name if guardian is not None else ""
     return render(
         request,
         "registrations/parent_portal.html",

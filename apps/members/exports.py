@@ -16,7 +16,7 @@ def member_row(member: Member, *, sensitive: bool) -> list:
         member.pk,
         member.full_name,
         member.birth_date,
-        g.full_name,
+        g.display_name,
         member.training_group.name if member.training_group_id else "",
     ]
     if sensitive:

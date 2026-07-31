@@ -178,7 +178,7 @@ def ensure_client(guardian) -> ClientResult:
     if existing:
         return ClientResult(external_id=existing)
     body = {
-        "name": guardian.full_name,
+        "name": guardian.display_name,
         "custom_value1": str(guardian.pk),
         "contacts": [
             {

@@ -4,6 +4,7 @@ import datetime
 from urllib.parse import urlencode
 
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -38,7 +39,10 @@ from apps.integrations.tasks import (
 from apps.members.models import TrainingGroup
 from apps.members.services import assign_training_group
 from apps.registrations.exports import application_columns, application_row
-from apps.registrations.models import RegistrationApplication
+from apps.registrations.models import (
+    RegistrationApplication,
+    RegistrationSubmissionDigestSettings,
+)
 from apps.registrations.services import (
     approve_application,
     reject_application,
@@ -60,7 +64,12 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     list_filter = ("status", "preferred_agreement_signing")
     date_hierarchy = "submitted_at"
     ordering = ("-submitted_at",)
-    search_fields = ("member_full_name", "parent_account__email", "guardian__full_name")
+    search_fields = (
+        "member_full_name",
+        "parent_account__email",
+        "guardian__first_name",
+        "guardian__family_name",
+    )
     readonly_fields = (
         "status",
         "submitted_at",
@@ -216,6 +225,12 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 raw = str(exc)
                 if raw == "billing plan required":
                     latvian = "Pirms parakstīšanas jāizvēlas norēķinu plāns."
+                elif raw == "next year plan required":
+                    latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
+                elif raw == "first billing month required":
+                    latvian = "Pirmais rēķina mēnesis ir obligāts."
+                elif raw == "billing plan inactive":
+                    latvian = "Izvēlētais norēķinu plāns nav aktīvs."
                 else:
                     latvian = raw
                 self.message_user(request, latvian, level=messages.ERROR)
@@ -255,8 +270,18 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 )
             except ValueError as exc:
                 raw = str(exc)
-                if "first billing month" in raw:
+                if raw == "next year plan required":
+                    latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
+                elif raw == "first billing month required":
+                    latvian = "Pirmais rēķina mēnesis ir obligāts."
+                elif raw == "billing plan inactive":
+                    latvian = "Izvēlētais norēķinu plāns nav aktīvs."
+                elif "first billing month must use YYYY-MM" in raw:
                     latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                elif "cannot be before cutoff-derived default" in raw:
+                    latvian = (
+                        "Izvēlētais mēnesis ir pirms pirmā pieejamā rēķina mēneša."
+                    )
                 else:
                     latvian = raw
                 self.message_user(request, latvian, level=messages.ERROR)
@@ -465,7 +490,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and
-        # guardian__full_name is searched — select_related avoids a changelist N+1.
+        # guardian__first_name/family_name is searched — select_related avoids a changelist N+1.
         # approved_member is select_related so the quick_actions agreement lookup
         # doesn't re-fetch the member per row; the per-row get_current_agreement
         # query itself is acceptable for the modest review-queue size.
@@ -581,3 +606,33 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         the active agreement when it is still in `generated` state."""
         super().save_model(request, obj, form, change)
         sync_application_signing_path_to_agreement(obj)
+
+
+@admin.register(RegistrationSubmissionDigestSettings)
+class RegistrationSubmissionDigestSettingsAdmin(admin.ModelAdmin):
+    """Singleton digest settings — superuser-only, last success is readonly."""
+
+    readonly_fields = ("last_successful_at",)
+    filter_horizontal = ("recipients",)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        User = get_user_model()
+
+        if db_field.name == "recipients":
+            field = super().formfield_for_manytomany(db_field, request, **kwargs)
+            field.queryset = User.objects.filter(is_active=True, is_staff=True)
+            field.label_from_instance = lambda user: user.email
+            return field
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

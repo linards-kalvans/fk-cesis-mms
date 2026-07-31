@@ -1,9 +1,10 @@
-"""P13 — registration form uses explicit guardian_first_name / guardian_family_name fields."""
+"""P13 cleanup — registration form uses explicit guardian_first_name /
+guardian_family_name fields. Production service no longer accepts
+guardian_full_name as an alias."""
 
 from __future__ import annotations
 
 import pytest
-
 
 pytestmark = pytest.mark.django_db
 
@@ -43,12 +44,12 @@ class TestGuardianNameFormFields:
 
 
 # ---------------------------------------------------------------------------
-# Service — draft save writes explicit fields and mirror
+# Service — draft save writes explicit fields only
 # ---------------------------------------------------------------------------
 
 
 class TestDraftSaveGuardianNameParts:
-    def test_draft_save_writes_explicit_fields_and_mirror(self, parent_account):
+    def test_draft_save_writes_explicit_fields(self, parent_account):
         from apps.registrations.services import create_or_update_draft
 
         app = create_or_update_draft(
@@ -67,9 +68,12 @@ class TestDraftSaveGuardianNameParts:
         guardian.refresh_from_db()
         assert guardian.first_name == "Anna Marija"
         assert guardian.family_name == "Ozola"
-        assert guardian.full_name == "Anna Marija Ozola"
+        assert guardian.display_name == "Anna Marija Ozola"
 
-    def test_draft_save_accepts_legacy_guardian_full_name_alias(self, parent_account):
+    def test_service_does_not_accept_legacy_guardian_full_name_alias(
+        self, parent_account
+    ):
+        """Posting only guardian_full_name should NOT populate name parts."""
         from apps.registrations.services import create_or_update_draft
 
         app = create_or_update_draft(
@@ -81,9 +85,8 @@ class TestDraftSaveGuardianNameParts:
             verified_account=parent_account,
         )
         app.guardian.refresh_from_db()
-        assert app.guardian.first_name == "Jānis"
-        assert app.guardian.family_name == "Kalniņš"
-        assert app.guardian.full_name == "Jānis Kalniņš"
+        assert app.guardian.first_name == ""
+        assert app.guardian.family_name == ""
 
 
 # ---------------------------------------------------------------------------
@@ -92,14 +95,18 @@ class TestDraftSaveGuardianNameParts:
 
 
 class TestGuardianDisplayName:
-    def test_application_guardian_name_uses_parts(self, parent_account):
+    def test_application_guardian_name_uses_display_name(self, parent_account):
         from apps.members.models import Guardian
         from apps.registrations.models import RegistrationApplication
 
-        g = Guardian(first_name="Anna", family_name="Ozola", parent_account=parent_account)
-        g.sync_full_name()
-        g.save()
+        g = Guardian.objects.create(
+            first_name="Anna",
+            family_name="Ozola",
+            parent_account=parent_account,
+        )
         app = RegistrationApplication.objects.create(
-            guardian=g, parent_account=parent_account, status=RegistrationApplication.Status.DRAFT,
+            guardian=g,
+            parent_account=parent_account,
+            status=RegistrationApplication.Status.DRAFT,
         )
         assert app.guardian_name == "Anna Ozola"

@@ -82,7 +82,8 @@ def _create_workspace_draft_with_guardian_doc(email="docstate@example.com"):
     app = create_or_update_draft(
         data={
             "guardian_email": email,
-            "guardian_full_name": "DocState Parent",
+            "guardian_first_name": "DocState",
+            "guardian_family_name": "Parent",
             "guardian_personal_id": "010101-12345",
             "guardian_phone": "+37120000000",
             "guardian_declared_address": "Riga 1",
@@ -132,7 +133,8 @@ class TestActiveDocumentFilenameVisible:
         app = create_or_update_draft(
             data={
                 "guardian_email": "docmember@example.com",
-                "guardian_full_name": "DocMember Parent",
+                "guardian_first_name": "DocMember",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-30000",
                 "guardian_phone": "+37130000000",
                 "guardian_declared_address": "Riga 3",
@@ -168,7 +170,8 @@ class TestActiveDocumentFilenameVisible:
         app = create_or_update_draft(
             data={
                 "guardian_email": "docportrait@example.com",
-                "guardian_full_name": "DocPortrait Parent",
+                "guardian_first_name": "DocPortrait",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-40000",
                 "guardian_phone": "+37140000000",
                 "guardian_declared_address": "Riga 4",
@@ -276,7 +279,8 @@ class TestWorkspaceWithoutDocuments:
         app = create_or_update_draft(
             data={
                 "guardian_email": "nodocs@example.com",
-                "guardian_full_name": "NoDocs Parent",
+                "guardian_first_name": "NoDocs",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-50000",
                 "guardian_phone": "+37150000000",
                 "guardian_declared_address": "Riga 5",
@@ -345,7 +349,8 @@ class TestReplaceUploadLinksPointToFileInputs:
         app = create_or_update_draft(
             data={
                 "guardian_email": "uploadlink@example.com",
-                "guardian_full_name": "UploadLink Parent",
+                "guardian_first_name": "UploadLink",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-20001",
                 "guardian_phone": "+37120000001",
                 "guardian_declared_address": "Riga 1",
@@ -390,7 +395,8 @@ class TestDocumentCardsReadOnlyMode:
         app = create_or_update_draft(
             data={
                 "guardian_email": "readonly@example.com",
-                "guardian_full_name": "ReadOnly Parent",
+                "guardian_first_name": "ReadOnly",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-20002",
                 "guardian_phone": "+37120000002",
                 "guardian_declared_address": "Riga 1",
@@ -505,7 +511,8 @@ class TestEmptyStateDocumentKindLabels:
         app = create_or_update_draft(
             data={
                 "guardian_email": "emptystate@example.com",
-                "guardian_full_name": "EmptyState Parent",
+                "guardian_first_name": "EmptyState",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-70000",
                 "guardian_phone": "+37170000000",
                 "guardian_declared_address": "Riga 7",
@@ -557,7 +564,8 @@ class TestEmptyStateDocumentKindLabels:
         app = create_or_update_draft(
             data={
                 "guardian_email": "emptystate2@example.com",
-                "guardian_full_name": "EmptyState2 Parent",
+                "guardian_first_name": "EmptyState2",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-70001",
                 "guardian_phone": "+37170000001",
                 "guardian_declared_address": "Riga 7",
@@ -606,7 +614,8 @@ class TestEmptyStateDocumentKindLabels:
         app = create_or_update_draft(
             data={
                 "guardian_email": "emptystate3@example.com",
-                "guardian_full_name": "EmptyState3 Parent",
+                "guardian_first_name": "EmptyState3",
+                "guardian_family_name": "Parent",
                 "guardian_personal_id": "010101-70002",
                 "guardian_phone": "+37170000002",
                 "guardian_declared_address": "Riga 7",

@@ -1,0 +1,6 @@
+{% for entry in entries %}Bērns: {{ entry.child }}
+Vecāks: {{ entry.guardian }}
+Datums un laiks: {{ entry.submitted_at }}
+Pašreizējais statuss: {{ entry.status }}
+Atvērt administrācijā: {{ entry.admin_url }}
+{% endfor %}

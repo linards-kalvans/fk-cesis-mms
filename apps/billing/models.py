@@ -33,9 +33,6 @@ class MembershipPlan(TimeStampedModel):
     annual_amount = models.DecimalField(
         max_digits=8, decimal_places=2, default=Decimal("300.00")
     )
-    sibling_discount_percent = models.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal("0.00")
-    )
     installment_count = models.PositiveSmallIntegerField(default=1)
     first_installment_month = models.PositiveSmallIntegerField(default=9)
     payment_due_day = models.PositiveSmallIntegerField(
@@ -147,6 +144,12 @@ class BillingRecord(TimeStampedModel):
 
     # P9: override the plan's first_installment_month anchor for this record.
     first_billing_month = models.CharField(max_length=7, blank=True, default="")
+
+    # P15: nullable snapshot of scheduled installments for this record. NULL
+    # means the legacy full plan schedule applies; non-null means the record
+    # was created (or reassigned) to a partial-year calendar window and the
+    # materialization must use the saved count.
+    scheduled_installment_count = models.PositiveSmallIntegerField(null=True, blank=True)
 
     manual_amount_override = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True

@@ -34,7 +34,11 @@ def test_signing_creates_draft_billing(active_plan, guardian):
     rec = BillingRecord.objects.get(member=member)
     assert rec.status == BillingRecord.Status.DRAFT
     assert rec.agreement_id == agreement.pk
-    assert rec.final_amount == Decimal("300.00")
+    # P15: calendar-year partial base for first_billing_month='2026-09'
+    # with default skip_months='7,12' → 3 billable months (Sep/Oct/Nov),
+    # base = €300 * 3 / 10 = €90.00.
+    assert rec.scheduled_installment_count == 3
+    assert rec.final_amount == Decimal("90.00")
 
 
 def test_signing_without_billing_plan_raises_and_creates_no_record(db, guardian):
