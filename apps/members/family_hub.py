@@ -97,6 +97,7 @@ class _Child(TypedDict):
     deep_links: dict[str, str]
     anchor_id: str
     billing_setup_error: str
+    document_links: list[dict[str, object]]
 
 
 def _child_anchor_id(
@@ -532,6 +533,17 @@ def build_family_hub_context(
             "training_group", "source_application"
         )
     )
+    # Prefetch each member's non-empty-external_id agreements once per
+    # request so the per-child document list stays in-memory and the hub
+    # does not N+1 over ``Agreement`` (it would otherwise issue one query
+    # per child for the historical agreements). Ordering matches the
+    # spec: most-recent first, ties broken by pk.
+    members_with_agreements = (
+        guardian.members.prefetch_related(
+            "agreements",
+        )
+    )
+    members_by_pk = {m.pk: m for m in members_with_agreements}
     billing_records = list(
         BillingRecord.objects.filter(member__guardian=guardian)
         .select_related("member", "plan", "agreement")
@@ -568,6 +580,8 @@ def build_family_hub_context(
         application = getattr(member, "source_application", None)
         agreement = get_current_agreement(member)
         kit_size_label = canonical_kit_size_label(member) if application is None else canonical_kit_size_label(application)
+        prefetched = members_by_pk.get(member.pk)
+        document_links = _build_member_document_links(prefetched, member)
         children.append(
             {
                 "member": member,
@@ -585,6 +599,7 @@ def build_family_hub_context(
                 },
                 "anchor_id": _child_anchor_id(application, member),
                 "billing_setup_error": billing_setup_errors.get(agreement.pk, "") if agreement else "",
+                "document_links": document_links,
             }
         )
 
@@ -610,6 +625,7 @@ def build_family_hub_context(
                 },
                 "anchor_id": _child_anchor_id(application, None),
                 "billing_setup_error": "",
+                "document_links": [],
             }
         )
 
@@ -654,6 +670,42 @@ def build_family_hub_context(
         ),
         "next_action": ", ".join(dict.fromkeys(next_action_parts)) or "—",
     }
+
+
+def _build_member_document_links(
+    prefetched_member: "Member | None", member: "Member | None"
+) -> list[dict[str, object]]:
+    """Build the per-child document list, filtered to non-empty external_ids.
+
+    Reads from the prefetched ``member.agreements`` cache (populated by the
+    hub builder) so this helper stays N+1-free. The list is built via
+    :func:`apps.agreements.presentation.build_agreement_document_links` with
+    a closure over the guardian id — every URL points at the family hub's
+    own document route (with ``?disposition=attachment`` appended at the
+    template layer).
+    """
+    if prefetched_member is None or member is None:
+        return []
+    from apps.agreements.presentation import build_agreement_document_links
+    from django.urls import reverse
+
+    guardian_id = member.guardian_id
+    agreements = [
+        a for a in prefetched_member.agreements.all()  # type: ignore[attr-defined]
+        if a.external_id
+    ]
+    if not agreements:
+        return []
+
+    def _url_builder(agreement):
+        return str(
+            reverse(
+                "admin:members_guardian_docuseal_document",
+                args=[guardian_id, agreement.pk],
+            )
+        )
+
+    return build_agreement_document_links(agreements, url_builder=_url_builder)
 
 
 def _blank_application() -> RegistrationApplication:

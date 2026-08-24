@@ -4,6 +4,7 @@ missing."""
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -220,10 +221,18 @@ class TestP15AdminSigningRefusesNextYearLatvian:
 
 class TestP15SetBillingSetupNormalizesSkipMonth:
     def test_post_with_skip_month_persists_normalized(
-        self, staff_client, submitted_application, reviewer
+        self, staff_client, submitted_application, reviewer, monkeypatch
     ):
         """Admin set_billing_setup with raw '2026-07' (a skip month for a
-        plan with skip_months='7,12') persists the normalized '2026-08'."""
+        plan with skip_months='7,12') persists the normalized '2026-08'.
+
+        The billing clock is pinned to 2026-07-01 so the no-backdate guard
+        derives a July default (advancing to August), keeping the persisted
+        '2026-08' deterministic regardless of run date."""
+        monkeypatch.setattr(
+            "apps.billing.services.timezone.localdate",
+            lambda: date(2026, 7, 1),
+        )
         plan = _make_plan(skip_months="7,12")
         app = approve_application(submitted_application, reviewer)
         agreement = create_agreement_for_member(

@@ -72,6 +72,39 @@ def test_mark_agreement_sent_from_hub(staff_client, approved_application):
     assert agreement.state == Agreement.State.SENT
 
 
+def test_retry_docuseal_paper_sends_email_false(
+    staff_client, approved_application,
+):
+    """Retrying a failed paper-path DocuSeal submission must enqueue with
+    send_email=False — the club's own Latvian email already informed the
+    guardian, so DocuSeal must not send a duplicate."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.signing_path = Agreement.SigningPath.PAPER
+    agreement.external_state = "failed"
+    agreement.external_error_code = "unavailable"
+    agreement.save(
+        update_fields=[
+            "signing_path",
+            "external_state",
+            "external_error_code",
+            "updated_at",
+        ]
+    )
+
+    guardian = approved_application.guardian
+    with patch("apps.members.admin.enqueue_create_agreement_submission") as enqueue:
+        response = staff_client.post(
+            _action_url(guardian),
+            {"action": "retry_docuseal", "agreement_id": agreement.pk},
+        )
+
+    assert response.status_code == 302
+    enqueue.assert_called_once_with(agreement.id, send_email=False)
+
+
 def test_void_agreement_does_not_discontinue_member(
     staff_client, approved_application,
 ):
@@ -350,37 +383,80 @@ def test_mark_agreement_signed_after_set_billing_setup(
     assert agreement.state == Agreement.State.SIGNED
 
 
-def test_docuseal_document_endpoint_redirects_to_pdf(
-    staff_client, approved_application,
+def test_docuseal_document_endpoint_streams_pdf(
+    settings, staff_client, approved_application,
 ):
-    """DocuSeal document proxy endpoint must redirect to the first PDF URL
-    returned by list_submission_documents."""
+    """DocuSeal document endpoint must stream the PDF through the shared
+    proxy (not redirect). Stub mode yields deterministic %PDF- bytes with
+    application/pdf content type."""
     from apps.agreements.models import Agreement
-    from apps.integrations.agreement_platform import DocumentResult
 
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
     member = approved_application.approved_member
     agreement = Agreement.objects.get(member=member, is_current=True)
     agreement.external_id = "1001"
     agreement.save(update_fields=["external_id", "updated_at"])
 
     guardian = approved_application.guardian
-    pdf_url = "https://sign.example/docs/501.pdf"
+    response = staff_client.get(_docuseal_document_url(guardian, agreement))
 
-    with patch(
-        "apps.members.admin.agreement_platform.list_submission_documents"
-    ) as list_docs:
-        list_docs.return_value = [
-            DocumentResult(
-                filename="agreement.pdf",
-                url=pdf_url,
-                content_type="application/pdf",
-            )
-        ]
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/pdf"
+    assert b"".join(response.streaming_content).startswith(b"%PDF-")
 
-        response = staff_client.get(_docuseal_document_url(guardian, agreement))
 
-    assert response.status_code == 302
-    assert response["Location"] == pdf_url
+def test_docuseal_document_endpoint_defaults_to_attachment(
+    settings, staff_client, approved_application,
+):
+    """Attachment is the default disposition (family hub download link)."""
+    from apps.agreements.models import Agreement
+
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = "1001"
+    agreement.save(update_fields=["external_id", "updated_at"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_docuseal_document_url(guardian, agreement))
+    assert "attachment" in response["Content-Disposition"]
+
+
+def test_docuseal_document_endpoint_inline_disposition(
+    settings, staff_client, approved_application,
+):
+    """?disposition=inline must be honored."""
+    from apps.agreements.models import Agreement
+
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = "1001"
+    agreement.save(update_fields=["external_id", "updated_at"])
+
+    guardian = approved_application.guardian
+    url = f"{_docuseal_document_url(guardian, agreement)}?disposition=inline"
+    response = staff_client.get(url)
+    assert response.status_code == 200
+    assert "inline" in response["Content-Disposition"]
+
+
+def test_docuseal_document_endpoint_invalid_disposition_404(
+    settings, staff_client, approved_application,
+):
+    """An invalid disposition must be a 404."""
+    from apps.agreements.models import Agreement
+
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = "1001"
+    agreement.save(update_fields=["external_id", "updated_at"])
+
+    guardian = approved_application.guardian
+    url = f"{_docuseal_document_url(guardian, agreement)}?disposition=bogus"
+    response = staff_client.get(url)
+    assert response.status_code == 404
 
 
 def test_docuseal_document_endpoint_rejects_cross_family(
@@ -408,53 +484,54 @@ def test_docuseal_document_endpoint_rejects_cross_family(
     assert response.status_code == 404
 
 
-def test_docuseal_document_endpoint_redirects_back_when_no_external_id(
-    staff_client, approved_application,
+def test_docuseal_document_endpoint_no_external_id_redirects_with_message(
+    settings, staff_client, approved_application,
 ):
-    """When the agreement has no DocuSeal submission id, endpoint must
-    redirect back to the hub with an admin message."""
+    """No external id → Latvian admin message + redirect to the family hub
+    (not 404)."""
     from apps.agreements.models import Agreement
 
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
     member = approved_application.approved_member
     agreement = Agreement.objects.get(member=member, is_current=True)
     agreement.external_id = ""
     agreement.save(update_fields=["external_id", "updated_at"])
 
     response = staff_client.get(
-        _docuseal_document_url(approved_application.guardian, agreement), follow=True
+        _docuseal_document_url(approved_application.guardian, agreement),
+        follow=True,
     )
-
     assert response.status_code == 200
-    messages = [m.message for m in response.context["messages"]]
-    assert any("DocuSeal sūtījums vēl nav izveidots" in msg for msg in messages)
+    assert "DocuSeal sūtījums vēl nav izveidots" in response.content.decode()
 
 
-def test_docuseal_document_endpoint_redirects_back_when_no_documents(
-    staff_client, approved_application,
+def test_docuseal_document_endpoint_provider_error_redirects_with_latvian_message(
+    settings, staff_client, approved_application,
 ):
-    """When list_submission_documents returns empty, endpoint must redirect
-    back to the hub with an admin message."""
+    """A provider error must surface a fixed Latvian generic error on the
+    hub — never the raw provider exception text."""
     from apps.agreements.models import Agreement
+    from apps.integrations import agreement_platform as ap
 
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
     member = approved_application.approved_member
     agreement = Agreement.objects.get(member=member, is_current=True)
     agreement.external_id = "1001"
     agreement.save(update_fields=["external_id", "updated_at"])
 
     guardian = approved_application.guardian
-
     with patch(
-        "apps.members.admin.agreement_platform.list_submission_documents"
-    ) as list_docs:
-        list_docs.return_value = []
-
+        "apps.integrations.agreement_platform.stream_submission_document",
+        side_effect=ap.AgreementPlatformNotFoundError("gone"),
+        create=True,
+    ):
         response = staff_client.get(
             _docuseal_document_url(guardian, agreement), follow=True
         )
-
     assert response.status_code == 200
-    messages = [m.message for m in response.context["messages"]]
-    assert any("DocuSeal dokuments nav atrasts" in msg for msg in messages)
+    html = response.content.decode()
+    assert "Radās kļūda saziņā ar DocuSeal" in html
+    assert "gone" not in html
 
 
 def test_assign_training_group_from_hub(
@@ -629,25 +706,31 @@ def test_hub_action_discards_invalid_return_anchor(
     assert response["Location"] == _hub_url(guardian)
 
 
-def test_docuseal_pdf_error_fallback_preserves_return_anchor(
-    staff_client, approved_application,
+def test_docuseal_document_endpoint_streams_for_history_agreement(
+    settings, staff_client, approved_application,
 ):
-    """DocuSeal PDF endpoint fallback (no external_id) must redirect to
-    hub + #anchor when return_anchor query param is valid."""
+    """A non-current (history) agreement with an external_id must also be
+    streamable through the same endpoint (guardian ownership enforced)."""
+    from django.utils import timezone
+
     from apps.agreements.models import Agreement
 
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
     member = approved_application.approved_member
-    agreement = Agreement.objects.get(member=member, is_current=True)
-    agreement.external_id = ""
-    agreement.save(update_fields=["external_id", "updated_at"])
+    history = Agreement.objects.create(
+        member=member,
+        is_current=False,
+        state=Agreement.State.SIGNED,
+        signing_path=Agreement.SigningPath.ELECTRONIC,
+        generated_at=timezone.now(),
+        external_id="hist-1",
+    )
 
     guardian = approved_application.guardian
-    anchor = f"child-application-{approved_application.pk}"
-    url = _docuseal_document_url(guardian, agreement)
+    response = staff_client.get(_docuseal_document_url(guardian, history))
 
-    response = staff_client.get(f"{url}?return_anchor={anchor}")
-
-    assert response["Location"] == f"{_hub_url(guardian)}#{anchor}"
+    assert response.status_code == 200
+    assert b"".join(response.streaming_content).startswith(b"%PDF-")
 
 
 # ---------------------------------------------------------------------------

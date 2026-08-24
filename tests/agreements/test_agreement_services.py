@@ -6,6 +6,7 @@ import pytest
 from django.core import mail
 from django.db import connection
 from django.test.utils import CaptureQueriesContext, override_settings
+from unittest.mock import patch
 
 from apps.agreements.models import Agreement
 from apps.agreements.services import (
@@ -286,3 +287,41 @@ def test_signed_email_body_contains_guardian_display_name(
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
     mark_agreement_signed(a, actor)
     assert "Anna Bērziņa" in mail.outbox[0].body
+
+
+# --- send_email flag on the create enqueue (both signing paths) ---
+
+
+def test_mark_sent_electronic_enqueues_create_with_send_email_true(
+    agreement_member, actor
+):
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    with patch("apps.integrations.tasks.enqueue_create_agreement_submission") as spy:
+        mark_agreement_sent(a, actor)
+    spy.assert_called_once_with(a.id, send_email=True)
+
+
+def test_mark_sent_paper_enqueues_create_with_send_email_false(
+    agreement_member, actor
+):
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    with patch("apps.integrations.tasks.enqueue_create_agreement_submission") as spy:
+        mark_agreement_sent(a, actor)
+    spy.assert_called_once_with(a.id, send_email=False)
+
+
+# --- void archives any external_id regardless of signing path ---
+
+
+def test_void_paper_agreement_with_external_id_archives_and_retains_id(
+    agreement_member, actor
+):
+    a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    a.external_id = "ds-9"
+    a.save(update_fields=["external_id"])
+    with patch("apps.integrations.tasks.enqueue_archive_agreement_submission") as spy:
+        void_agreement(a, actor, "reason")
+    spy.assert_called_once_with("ds-9")
+    a.refresh_from_db()
+    assert a.state == Agreement.State.VOID
+    assert a.external_id == "ds-9"  # archive must not clear the stored id

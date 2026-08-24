@@ -166,12 +166,12 @@ All three admin surfaces use native `<input type="month" required>`:
 ## Verification evidence
 
 - Focused P15/admin-family test suite: **66 passed** (controller report).
-- Full suite: **1825 passed** before a final deterministic test-only pin (controller report).
+- Full suite: **1956 passed** (deterministic test-only clock pin applied).
 - `ruff check .` → clean.
 - `mypy .` → clean.
 - `makemigrations --check` → no changes.
 
-**Note:** Final full verification remains pending until the controller reruns the full suite after all test/docs revisions are complete. Do not treat the 1825 result as final.
+**Note:** Date pin is test-only; the production no-backdate rule is unchanged. LAN acceptance pending.
 
 ## Implementation decisions
 

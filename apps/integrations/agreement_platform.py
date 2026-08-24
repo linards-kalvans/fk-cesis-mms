@@ -9,6 +9,7 @@ raises these. Mode is selected by settings.AGREEMENT_PROVIDER_MODE
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterator
 
 from django.conf import settings
 
@@ -47,6 +48,21 @@ class DocumentResult:
     content_type: str
 
 
+@dataclass(frozen=True)
+class DocumentStream:
+    """Streaming bytes for a generated agreement document.
+
+    ``chunks`` is a one-shot iterator that always closes the upstream response
+    in a ``finally`` block (even on consumer-side iteration errors) so a partial
+    fetch never leaks a connection. Disposition is applied by the agreement-layer
+    proxy — the platform layer is disposition-agnostic.
+    """
+
+    filename: str
+    content_type: str
+    chunks: Iterator[bytes]
+
+
 def _stub_create(agreement) -> SubmissionResult:
     return SubmissionResult(
         external_id=f"stub-{agreement.id}",
@@ -73,18 +89,28 @@ def _stub_documents(external_id: str) -> list[DocumentResult]:
     ]
 
 
+def _stub_stream(external_id: str) -> DocumentStream:
+    """Deterministic PDF bytes for stub mode — yields the %PDF- magic header."""
+    payload = b"%PDF-1.4 stub"
+    return DocumentStream(
+        filename=f"agreement-{external_id}.pdf",
+        content_type="application/pdf",
+        chunks=iter([payload]),
+    )
+
+
 def _mode() -> str:
     return getattr(settings, "AGREEMENT_PROVIDER_MODE", "stub")
 
 
-def create_submission(agreement) -> SubmissionResult:
+def create_submission(agreement, send_email: bool = True) -> SubmissionResult:
     mode = _mode()
     if mode == "stub":
         return _stub_create(agreement)
     if mode == "docuseal":
         from apps.integrations import docuseal
 
-        return docuseal.create_submission(agreement)
+        return docuseal.create_submission(agreement, send_email=send_email)
     raise AgreementPlatformConfigError(f"unknown agreement provider mode: {mode}")
 
 
@@ -128,4 +154,23 @@ def list_submission_documents(external_id: str) -> list[DocumentResult]:
         from apps.integrations import docuseal
 
         return docuseal.list_submission_documents(external_id)
+    raise AgreementPlatformConfigError(f"unknown agreement provider mode: {mode}")
+
+
+def stream_submission_document(external_id: str) -> DocumentStream:
+    """Stream a generated agreement document through the active provider.
+
+    Stub mode yields a deterministic ``%PDF-`` payload without HTTP. DocuSeal
+    mode delegates to ``apps.integrations.docuseal.stream_submission_document``
+    which selects the best document and fetches it server-side with
+    ``stream=True``. Disposition is intentionally not a parameter — the
+    agreement-layer proxy applies it on top of the stream.
+    """
+    mode = _mode()
+    if mode == "stub":
+        return _stub_stream(external_id)
+    if mode == "docuseal":
+        from apps.integrations import docuseal
+
+        return docuseal.stream_submission_document(external_id)
     raise AgreementPlatformConfigError(f"unknown agreement provider mode: {mode}")

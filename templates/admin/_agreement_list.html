@@ -1,0 +1,37 @@
+{% comment %}Shared app-neutral partial for the admin "agreement documents" list.
+
+   Input: ``agreements`` is a list of ``AgreementDocumentLink`` items (from
+   ``apps.agreements.presentation.build_agreement_document_links``). Each
+   item carries ``agreement``, ``state_label``, ``signing_path_label``, and
+   ``download_url`` (a fully built same-origin URL). The DocuSeal document
+   URL itself is never on the link — the proxy lives at ``download_url``.
+
+   Used by:
+   * Family hub — links point at the guardian-scoped document route and
+     append ``?disposition=attachment`` so the browser downloads the file.
+   * Registration admin — links point at the application+agreement-scoped
+     document route (same disposition).
+
+   The download anchor is rendered conditionally so a blank ``external_id``
+   row never produces a clickable link. The status / signing-path label
+   pair lets staff distinguish a voided agreement from a generated one
+   at a glance.{% endcomment %}
+
+{% if agreements %}
+  <ul class="mms-agreement-document-list">
+    {% for link in agreements %}
+      {% if link.agreement.external_id %}
+        <li>
+          <strong>{{ link.state_label }}</strong>
+          —
+          <em>{{ link.signing_path_label }}</em>
+          —
+          <a href="{{ link.download_url }}?disposition=attachment"
+             class="mms-agreement-document-download-link">
+            Lejupielādēt ģenerēto līgumu
+          </a>
+        </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+{% endif %}

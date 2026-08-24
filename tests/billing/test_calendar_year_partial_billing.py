@@ -16,6 +16,7 @@ rows. Manual override remains final total and splits across saved count.
 from __future__ import annotations
 
 import datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -686,11 +687,21 @@ class TestApprovedFormulaPartialBaseOnPlanStartMonth:
 
 
 class TestReassignLegacyNullCountTransforms:
-    def test_reassign_with_plan_and_month_transforms_legacy_draft(self, member):
+    def test_reassign_with_plan_and_month_transforms_legacy_draft(
+        self, member, monkeypatch
+    ):
         """Explicit reassignment of a legacy (scheduled_installment_count=NULL)
         DRAFT BillingRecord with a new plan + first_billing_month='2026-08'
         recalculates count=4 (Aug-Nov; Dec skipped) and partial base
-        €300 * 4 / 10 = €120.00. The saved count is updated from NULL to 4."""
+        €300 * 4 / 10 = €120.00. The saved count is updated from NULL to 4.
+
+        The billing clock is pinned to 2026-07-01 so the no-backdate guard
+        derives a July default (advancing to August) rather than September,
+        keeping '2026-08' a valid forward month regardless of run date."""
+        monkeypatch.setattr(
+            "apps.billing.services.timezone.localdate",
+            lambda: date(2026, 7, 1),
+        )
         from apps.billing.models import BillingRecord
         from apps.billing.services import reassign_draft_billing_record
 

@@ -234,6 +234,27 @@ def test_create_submission_requires_agreement_number(docuseal_settings):
         docuseal.create_submission(MissingNumberAgreement())
 
 
+def test_list_submission_documents_invalid_json_raises_config_error(
+    docuseal_settings, monkeypatch
+):
+    """A 200 whose body is not valid JSON must raise the agreement-platform
+    taxonomy (config error) — never leak a raw ValueError out of the adapter."""
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = "not json"
+        resp.json.side_effect = ValueError("invalid JSON")
+        return resp
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    with pytest.raises(ap.AgreementPlatformConfigError):
+        docuseal.list_submission_documents("1001")
+
+
 def test_list_submission_documents_parses_pdf_documents(docuseal_settings, monkeypatch):
     """list_submission_documents must GET /submissions/{id}/documents with
     auth header and parse the response into DocumentResult instances."""
@@ -283,3 +304,311 @@ def test_list_submission_documents_parses_pdf_documents(docuseal_settings, monke
     assert results[1].filename == "attachment.png"
     assert results[1].url == "https://sign.example/docs/502.png"
     assert results[1].content_type == "image/png"
+
+
+# ---------------------------------------------------------------------------
+# stream_submission_document — document streaming (P-something DocuSeal preview)
+# ---------------------------------------------------------------------------
+
+
+def _doc_stream_response(chunk=b"%PDF-1.7 fake bytes", url=""):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.iter_content = lambda chunk_size: iter([chunk])
+    resp.close = MagicMock()
+    resp.url = url
+    return resp
+
+
+def test_stream_submission_document_selects_pdf_first_and_streams(
+    docuseal_settings, monkeypatch
+):
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        captured["method"] = method
+        captured["url"] = url
+        captured["stream"] = kwargs.get("stream")
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        },
+                        {
+                            "filename": "attachment.png",
+                            "content_type": "image/png",
+                            "url": "https://sign.example/docs/502.png",
+                        },
+                    ]
+                },
+            )
+        resp = _doc_stream_response()
+        captured["response"] = resp
+        return resp
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    stream = docuseal.stream_submission_document("1001")
+
+    assert stream.filename == "agreement.pdf"
+    assert stream.content_type == "application/pdf"
+    assert b"".join(stream.chunks).startswith(b"%PDF-")
+    assert captured["url"] == "https://sign.example/docs/501.pdf"
+    assert captured["stream"] is True
+    captured["response"].close.assert_called_once()
+
+
+def test_stream_submission_document_falls_back_to_first_item_without_pdf(
+    docuseal_settings, monkeypatch
+):
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "attachment.png",
+                            "content_type": "image/png",
+                            "url": "https://sign.example/docs/502.png",
+                        }
+                    ]
+                },
+            )
+        captured["url"] = url
+        resp = _doc_stream_response(chunk=b"PNG")
+        captured["response"] = resp
+        return resp
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    stream = docuseal.stream_submission_document("1001")
+    assert stream.filename == "attachment.png"
+    assert stream.content_type == "image/png"
+    assert captured["url"] == "https://sign.example/docs/502.png"
+    assert b"".join(stream.chunks) == b"PNG"
+    captured["response"].close.assert_called_once()
+
+
+def test_stream_submission_document_empty_documents_raises_not_found(
+    docuseal_settings, monkeypatch
+):
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request",
+        lambda *a, **kw: _mock_response(200, {"documents": []}),
+    )
+    with pytest.raises(ap.AgreementPlatformNotFoundError):
+        docuseal.stream_submission_document("1001")
+
+
+def test_stream_submission_document_fetch_404_raises_not_found(
+    docuseal_settings, monkeypatch
+):
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        }
+                    ]
+                },
+            )
+        return _mock_response(404, {"error": "gone"})
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+    with pytest.raises(ap.AgreementPlatformNotFoundError):
+        docuseal.stream_submission_document("1001")
+
+
+def test_stream_submission_document_fetch_5xx_raises_transient(
+    docuseal_settings, monkeypatch
+):
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        }
+                    ]
+                },
+            )
+        return _mock_response(502, {"error": "boom"})
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+    with pytest.raises(ap.AgreementPlatformTransientError):
+        docuseal.stream_submission_document("1001")
+
+
+def test_stream_submission_document_fetch_401_raises_auth(
+    docuseal_settings, monkeypatch
+):
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        }
+                    ]
+                },
+            )
+        return _mock_response(401, {"error": "unauthorized"})
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+    with pytest.raises(ap.AgreementPlatformAuthError):
+        docuseal.stream_submission_document("1001")
+
+
+def test_stream_submission_document_timeout_raises_transient(
+    docuseal_settings, monkeypatch
+):
+    import requests
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        }
+                    ]
+                },
+            )
+        raise requests.Timeout("slow")
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+    with pytest.raises(ap.AgreementPlatformTransientError):
+        docuseal.stream_submission_document("1001")
+
+
+def test_stream_submission_document_closes_response_on_iteration_error(
+    docuseal_settings, monkeypatch
+):
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        if url.endswith("/documents"):
+            return _mock_response(
+                200,
+                {
+                    "documents": [
+                        {
+                            "filename": "agreement.pdf",
+                            "content_type": "application/pdf",
+                            "url": "https://sign.example/docs/501.pdf",
+                        }
+                    ]
+                },
+            )
+        resp = MagicMock()
+        resp.status_code = 200
+
+        def boom(chunk_size):
+            raise RuntimeError("mid-stream")
+
+        resp.iter_content = boom
+        resp.close = MagicMock()
+        captured["response"] = resp
+        return resp
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    with pytest.raises(RuntimeError):
+        list(docuseal.stream_submission_document("1001").chunks)
+    captured["response"].close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# create_submission send_email flag
+# ---------------------------------------------------------------------------
+
+
+def test_create_submission_defaults_send_email_true(
+    docuseal_settings, monkeypatch
+):
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return _mock_response(
+            201,
+            [
+                {
+                    "submission_id": 1001,
+                    "status": "sent",
+                    "embed_src": "https://sign.example/s/abc",
+                }
+            ],
+        )
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    docuseal.create_submission(_FakeAgreement())
+    assert captured["json"]["send_email"] is True
+
+
+def test_create_submission_passes_send_email_false(
+    docuseal_settings, monkeypatch
+):
+    captured = {}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        captured["json"] = kwargs.get("json")
+        return _mock_response(
+            201,
+            [
+                {
+                    "submission_id": 1001,
+                    "status": "sent",
+                    "embed_src": "https://sign.example/s/abc",
+                }
+            ],
+        )
+
+    monkeypatch.setattr(
+        "apps.integrations.docuseal.requests.request", fake_request
+    )
+
+    docuseal.create_submission(_FakeAgreement(), send_email=False)
+    assert captured["json"]["send_email"] is False

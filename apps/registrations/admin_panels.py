@@ -5,8 +5,11 @@ Hosts the document-preview classification and per-kind panel builder
 which assembles the full panels + agreement + training-group context.
 """
 
+from django.urls import reverse
+
 from apps.agreements.messages import get_agreement_error_message
 from apps.agreements.models import Agreement
+from apps.agreements.presentation import build_agreement_document_links
 from apps.core.admin_links import admin_link, admin_links
 from apps.agreements.services import get_current_agreement
 from apps.billing.models import BillingAdjustment, BillingInvoice, MembershipPlan, PaymentStatus
@@ -156,6 +159,34 @@ def build_review_context(
             agreement.lifecycle_events.order_by("created_at")
         )
 
+    # All non-empty-external-id agreements for the approved member —
+    # current + history (generated, sent, signed, void, superseded,
+    # discontinued). Ordered most-recent-first with pk as the stable tie
+    # breaker. Powers the shared admin/_agreement_list.html partial so
+    # staff can preview/download any document that ever had a DocuSeal
+    # submission. The filter is non-empty external_id only — agreements
+    # that never reached DocuSeal are excluded.
+    document_links: list[dict] = []
+    if member is not None:
+        history_agreements = list(
+            Agreement.objects.filter(member=member)
+            .exclude(external_id="")
+            .order_by("-generated_at", "-pk")
+        )
+        if history_agreements:
+
+            def _url_builder(agreement_obj):
+                return str(
+                    reverse(
+                        "admin:registrations_registrationapplication_docuseal_document",
+                        args=[application.pk, agreement_obj.pk],
+                    )
+                )
+
+            document_links = build_agreement_document_links(
+                history_agreements, url_builder=_url_builder
+            )
+
     discontinuation_invoice_candidates = []
     billing_adjustments = []
     discontinued_billing_invoices = []
@@ -195,6 +226,7 @@ def build_review_context(
         "agreement": agreement,
         "agreement_error_message": agreement_error_message,
         "agreement_lifecycle_events": agreement_lifecycle_events,
+        "document_links": document_links,
         "discontinuation_invoice_candidates": discontinuation_invoice_candidates,
         "discontinued_billing_invoices": discontinued_billing_invoices,
         "billing_adjustments": billing_adjustments,

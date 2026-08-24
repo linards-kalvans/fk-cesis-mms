@@ -40,9 +40,10 @@ Process the family in this order — each step lives on the hub:
 1. **Pieteikumi → Apstiprināt** (submitted application). Pick a training group from the
    `<select>` in the disclosure, click *Apstiprināt*. The application moves to approved
    and a `Member` + `Agreement` are created.
-2. **Līgumi → Atzīmēt nosūtītu** (generated agreement). For the electronic path the
-   hub enqueues a DocuSeal submission automatically; for the paper path a notification
-   email goes to the parent. The agreement moves to `sent`.
+2. **Līgumi → Atzīmēt nosūtītu** (generated agreement). Both signing paths enqueue a
+   DocuSeal submission: electronic with `send_email=True` (DocuSeal sends the signing
+   email to the parent) and paper with `send_email=False` (the club's own Latvian
+   notification already informed the guardian). The agreement moves to `sent`.
 3. **Līgumi → Saglabāt norēķinu plānu** (generated/sent agreement). If the agreement
    has no billing plan, choose **Norēķinu plāns** and optionally **Pirmais rēķina mēnesis**
    directly in the hub. The **Atzīmēt parakstītu** button appears only after this setup.
@@ -60,10 +61,23 @@ Process the family in this order — each step lives on the hub:
 If DocuSeal fails on step 2, the lane shows the Latvian error tooltip plus two buttons:
 *Mēģināt vēlreiz* (re-enqueues create) and *Pārbaudīt DocuSeal statusu* (enqueues sync).
 
-When DocuSeal has created a submission, the Līgumi lane also shows
-**Lejupielādēt līguma PDF no DocuSeal**. Before signing, this opens the partially
-filled agreement PDF from DocuSeal; after completion, DocuSeal returns the final
-signed PDF.
+When DocuSeal has created a submission (any state, any signing path), the Līgumi
+lane lists every agreement for the child with a non-empty `external_id` and renders
+the download link **Lejupielādēt ģenerēto līgumu** for each — current row plus
+history (generated, sent, signed, void, superseded, discontinued). The link goes
+through the staff-only proxy at
+`/admin/members/guardian/<guardian_id>/family-hub/agreement/<agreement_id>/docuseal-document/`
+with `?disposition=attachment`, which streams the generated PDF from DocuSeal
+through Django (the DocuSeal URL itself is never rendered, bookmarkable, or
+persisted to the database).
+
+The paper signing path also gets a DocuSeal submission — `mark_agreement_sent`
+always enqueues the create job, but with `send_email=False` so DocuSeal does not
+send its own signing email to the parent (the club's own Latvian notification
+already informed them). The paper path therefore appears in the same download list
+once the submission completes. Voiding any agreement with a non-empty
+`external_id` archives the DocuSeal submission regardless of signing path while
+retaining the stored id, so historical download controls stay visible after void.
 
 ## Void agreement vs discontinue membership
 
@@ -134,8 +148,20 @@ queue list display:
 - Member: full name, personal ID, birth date, training group (via the registration
   review queue's training-group module).
 - Registration application: full form fields, all review actions including training
-  group assignment, document preview.
-- Agreement: agreement number, lifecycle events, deep amendment history.
+  group assignment, document preview. The Līgums (agreement) module on the review
+  page renders the same `Lejupielādēt ģenerēto līgumu` list as the Family hub for
+  every agreement of the approved member with a non-empty `external_id`, served
+  through the same shared proxy at
+  `/admin/registrations/registrationapplication/<id>/agreement/<agreement_id>/docuseal-document/`.
+  Cross-application agreement requests return 404 (the route enforces
+  `member_id=application.approved_member_id`). The retired "Atvērt DocuSeal ↗"
+  external link is gone — the document URL never leaves the server.
+- Agreement: agreement number, lifecycle events, deep amendment history. The
+  Agreement admin change page is view-only (`has_change_permission=False`,
+  `has_view_permission` returns true for any signed-in staff). When the row has
+  a non-empty `external_id`, the change page embeds the PDF in an iframe at
+  `?disposition=inline` and renders the **Lejupielādēt ģenerēto līgumu** download
+  anchor next to the iframe. The page never renders the DocuSeal document URL.
 - BillingRecord: amount override + reason, plan reassignment, full invoice inline.
 
 Anything the hub doesn't expose lives on the deep admin page. The two routes never

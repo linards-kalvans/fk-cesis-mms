@@ -6,13 +6,16 @@ from urllib.parse import urlencode
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from apps.agreements.document_proxy import build_agreement_document_response
 from apps.agreements.models import Agreement
+from apps.integrations import agreement_platform
 from apps.agreements.services import (
     discontinue_agreement,
     get_current_agreement,
@@ -117,6 +120,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.approve_view),
                 name="registrations_registrationapplication_approve",
             ),
+            path(
+                "<int:object_id>/agreement/<int:agreement_id>/docuseal-document/",
+                self.admin_site.admin_view(self.docuseal_document_view),
+                name="registrations_registrationapplication_docuseal_document",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -137,6 +145,60 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         ):
             return redirect(nxt)
         return self._change_redirect(object_id)
+
+    def docuseal_document_view(self, request, object_id, agreement_id):
+        """Stream the generated agreement PDF through the shared proxy.
+
+        Authorization chain: ``has_change_permission`` on the application,
+        then ownership of the agreement is enforced by the
+        ``member_id=application.approved_member_id`` filter — a request for
+        a foreign agreement is a deterministic 404. Default disposition is
+        ``attachment`` (matches the family-hub link contract); ``inline`` is
+        supported for iframe embeds; anything else is a 404.
+
+        Latvian admin messages cover two error paths:
+
+        * blank ``external_id`` — submission still pending;
+        * ``AgreementPlatformError`` — provider failure surfaced as a
+          fixed Latvian copy (never the raw provider exception text).
+
+        Both paths redirect to the application's change page (the staff
+        surface where the agreement actions already live).
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        # Ownership guard: the agreement must belong to the application's
+        # approved member, otherwise a cross-application guess of the
+        # agreement pk is a deterministic 404.
+        agreement = get_object_or_404(
+            Agreement,
+            pk=agreement_id,
+            member_id=application.approved_member_id,
+        )
+        disposition = request.GET.get("disposition", "attachment")
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
+        if not agreement.external_id:
+            self.message_user(
+                request,
+                "DocuSeal sūtījums vēl nav izveidots.",
+                level=messages.ERROR,
+            )
+            return self._change_redirect(object_id)
+        try:
+            return build_agreement_document_response(
+                agreement, disposition=disposition
+            )
+        except Http404:
+            raise
+        except agreement_platform.AgreementPlatformError:
+            self.message_user(
+                request,
+                "Radās kļūda saziņā ar DocuSeal.",
+                level=messages.ERROR,
+            )
+            return self._change_redirect(object_id)
 
     def review_action_view(self, request, object_id):
         """Port of admin_review_detail's POST dispatch (every action except approve)."""
@@ -348,7 +410,12 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return self._change_redirect(object_id)
-            enqueue_create_agreement_submission(agreement.id)
+            enqueue_create_agreement_submission(
+                agreement.id,
+                send_email=(
+                    agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+                ),
+            )
             return self._change_redirect(object_id)
 
         elif action == "sync_docuseal":
@@ -486,7 +553,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             self.message_user(request, latvian, level=messages.ERROR)
             return self._change_redirect(object_id)
         self.message_user(request, "Pieteikums apstiprināts.")
-        return self._changelist_redirect()
+        return self._change_redirect(object_id)
 
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and
