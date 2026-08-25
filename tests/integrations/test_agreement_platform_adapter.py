@@ -62,3 +62,71 @@ def test_exception_hierarchy():
     assert issubclass(ap.AgreementPlatformAuthError, ap.AgreementPlatformError)
     assert issubclass(ap.AgreementPlatformNotFoundError, ap.AgreementPlatformError)
     assert issubclass(ap.AgreementPlatformTransientError, ap.AgreementPlatformError)
+
+
+# ---------------------------------------------------------------------------
+# DocumentStream + stream_submission_document (boundary)
+# ---------------------------------------------------------------------------
+
+
+def test_document_stream_dataclass_shape():
+    ds = ap.DocumentStream(
+        filename="a.pdf",
+        content_type="application/pdf",
+        chunks=iter([b"%PDF-"]),
+    )
+    assert ds.filename == "a.pdf"
+    assert ds.content_type == "application/pdf"
+    assert b"".join(ds.chunks).startswith(b"%PDF-")
+
+
+def test_document_stream_is_frozen():
+    from dataclasses import FrozenInstanceError
+
+    ds = ap.DocumentStream(
+        filename="a.pdf",
+        content_type="application/pdf",
+        chunks=iter([b"%PDF-"]),
+    )
+    with pytest.raises(FrozenInstanceError):
+        ds.filename = "b.pdf"
+
+
+def test_stub_stream_submission_document_yields_pdf_bytes(settings):
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    stream = ap.stream_submission_document("stub-42")
+    assert stream.content_type == "application/pdf"
+    assert b"".join(stream.chunks).startswith(b"%PDF-")
+
+
+def test_docuseal_mode_stream_dispatches_to_provider(settings):
+    settings.AGREEMENT_PROVIDER_MODE = "docuseal"
+    fake = ap.DocumentStream(
+        filename="a.pdf",
+        content_type="application/pdf",
+        chunks=iter([b"%PDF-"]),
+    )
+    with patch(
+        "apps.integrations.docuseal.stream_submission_document", return_value=fake
+    ) as spy:
+        result = ap.stream_submission_document("ds-1")
+    assert result is fake
+    spy.assert_called_once_with("ds-1")
+
+
+def test_stub_create_submission_accepts_send_email(settings):
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    result = ap.create_submission(_FakeAgreement(), send_email=False)
+    assert result.external_id == "stub-42"
+
+
+def test_create_submission_dispatches_send_email_to_provider(settings):
+    settings.AGREEMENT_PROVIDER_MODE = "docuseal"
+    fake = ap.SubmissionResult(
+        external_id="ds-1", external_url="https://sign/x", external_state="pending"
+    )
+    with patch(
+        "apps.integrations.docuseal.create_submission", return_value=fake
+    ) as spy:
+        ap.create_submission(_FakeAgreement(), send_email=False)
+    assert spy.call_args.kwargs.get("send_email") is False

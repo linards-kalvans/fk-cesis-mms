@@ -213,10 +213,10 @@ def test_discontinue_lives_under_daliba_heading_and_void_under_ligumi(
 def test_hub_shows_docuseal_pdf_link_when_external_id_exists(
     staff_client, approved_application,
 ):
-    """Hub must show 'Lejupielādēt līguma PDF no DocuSeal' link when the
-    agreement has an external_id (DocuSeal submission id). The href must
-    include ?return_anchor=child-application-<pk> so the PDF fallback
-    returns staff to the correct child card."""
+    """Hub must show the download link with the exact label
+    'Lejupielādēt ģenerēto līgumu' when the agreement has an external_id.
+    The href must be the same-origin internal document endpoint (never a
+    DocuSeal URL)."""
     from apps.agreements.models import Agreement
 
     member = approved_application.approved_member
@@ -228,21 +228,20 @@ def test_hub_shows_docuseal_pdf_link_when_external_id_exists(
     response = staff_client.get(_hub_url(guardian))
     html = response.content.decode()
 
-    assert "Lejupielādēt līguma PDF no DocuSeal" in html
+    assert "Lejupielādēt ģenerēto līgumu" in html
     expected_url = reverse(
         "admin:members_guardian_docuseal_document",
         args=[guardian.pk, agreement.pk],
     )
-    anchor = f"child-application-{approved_application.pk}"
     assert expected_url in html
-    # The href must include the return_anchor query param
-    assert f'?return_anchor={anchor}' in html
+    # The rendered download anchor must request the attachment disposition.
+    assert f"{expected_url}?disposition=attachment" in html
 
 
 def test_hub_hides_docuseal_pdf_link_without_external_id(
     staff_client, approved_application,
 ):
-    """Hub must NOT show the DocuSeal PDF link when agreement.external_id
+    """Hub must NOT show the download link when agreement.external_id
     is empty (no DocuSeal submission created yet)."""
     from apps.agreements.models import Agreement
 
@@ -255,7 +254,132 @@ def test_hub_hides_docuseal_pdf_link_without_external_id(
     response = staff_client.get(_hub_url(guardian))
     html = response.content.decode()
 
+    assert "Lejupielādēt ģenerēto līgumu" not in html
+
+
+def test_hub_lists_download_links_for_every_agreement_with_external_id(
+    staff_client, approved_application,
+):
+    """The hub must list a download link for every agreement on the member
+    with a nonempty external_id, including history states (generated/sent/
+    signed/void/superseded/discontinued)."""
+    from django.utils import timezone
+
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    current = Agreement.objects.get(member=member, is_current=True)
+    current.external_id = "cur-1"
+    current.save(update_fields=["external_id", "updated_at"])
+
+    history = Agreement.objects.create(
+        member=member,
+        is_current=False,
+        state=Agreement.State.SUPERSEDED,
+        signing_path=Agreement.SigningPath.ELECTRONIC,
+        generated_at=timezone.now(),
+        external_id="hist-1",
+    )
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert "Lejupielādēt ģenerēto līgumu" in html
+    assert reverse(
+        "admin:members_guardian_docuseal_document", args=[guardian.pk, current.pk]
+    ) in html
+    assert reverse(
+        "admin:members_guardian_docuseal_document", args=[guardian.pk, history.pk]
+    ) in html
+
+
+def test_hub_does_not_leak_docuseal_document_url(
+    staff_client, approved_application,
+):
+    """No rendered hub HTML may contain the DocuSeal document URL — the
+    download must go through the same-origin proxy endpoint."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = "1001"
+    agreement.external_url = "https://sign.example/s/abc"
+    agreement.save(update_fields=["external_id", "external_url", "updated_at"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert "https://sign.example" not in html
+    assert "sign.example" not in html
+    # Retired label must be gone too.
     assert "Lejupielādēt līguma PDF no DocuSeal" not in html
+
+
+def test_hub_no_leaked_multiline_django_comment_text(
+    staff_client, approved_application,
+):
+    """Multi-line Django `{# #}` comments leak their literal body into the
+    rendered page (Django `{# #}` is single-line only). The shared
+    agreement-list partial prose must never appear in the hub HTML."""
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    agreement = Agreement.objects.get(member=member, is_current=True)
+    agreement.external_id = "1001"
+    agreement.save(update_fields=["external_id", "updated_at"])
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert "Document list — every non-empty-external-id agreement" not in html
+    assert "Shared app-neutral partial" not in html
+
+
+@pytest.mark.parametrize(
+    "state, label",
+    [
+        ("generated", "Sagatavots"),
+        ("sent", "Nosūtīts parakstīšanai"),
+        ("signed", "Parakstīts"),
+        ("void", "Atcelts"),
+        ("superseded", "Aizvietots"),
+        ("discontinued", "Pārtraukts"),
+    ],
+)
+def test_hub_renders_history_state_label_and_download_link(
+    staff_client, approved_application, state, label,
+):
+    """For each agreement state, the hub must render the exact state display
+    and the corresponding same-origin download endpoint for a history row."""
+    from django.utils import timezone
+
+    from apps.agreements.models import Agreement
+
+    member = approved_application.approved_member
+    current = Agreement.objects.get(member=member, is_current=True)
+    current.external_id = "cur-1"
+    current.save(update_fields=["external_id", "updated_at"])
+
+    history = Agreement.objects.create(
+        member=member,
+        is_current=False,
+        state=state,
+        signing_path=Agreement.SigningPath.ELECTRONIC,
+        generated_at=timezone.now(),
+        external_id="hist-1",
+    )
+
+    guardian = approved_application.guardian
+    response = staff_client.get(_hub_url(guardian))
+    html = response.content.decode()
+
+    assert label in html
+    assert reverse(
+        "admin:members_guardian_docuseal_document", args=[guardian.pk, history.pk]
+    ) in html
 
 
 def _make_group(name="U10 A"):

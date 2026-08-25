@@ -8,7 +8,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Case, Exists, IntegerField, OuterRef, Q, Value, When
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -305,6 +305,19 @@ class GuardianAdmin(admin.ModelAdmin):
         )
 
     def family_hub_docuseal_document_view(self, request, guardian_id, agreement_id):
+        """Stream the agreement PDF through the shared proxy.
+
+        Refactored from a DocuSeal-URL redirect to a server-side stream so
+        the same path serves both the inline preview (``?disposition=...``)
+        and the forced download. Guardian ownership is enforced here; the
+        proxy itself is a pure adapter. ``?disposition=attachment`` is the
+        default (mirrors the hub download link); ``?disposition=inline``
+        is supported for the iframe embed; any other value is a 404.
+        """
+        from django.http import Http404
+
+        from apps.agreements.document_proxy import build_agreement_document_response
+
         if not self.has_change_permission(request):
             raise PermissionDenied
         guardian = get_object_or_404(
@@ -312,6 +325,9 @@ class GuardianAdmin(admin.ModelAdmin):
         )
         agreement = self._get_guardian_agreement(guardian, agreement_id)
         return_anchor = request.GET.get("return_anchor", "")
+        disposition = request.GET.get("disposition", "attachment")
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
         if not agreement.external_id:
             self.message_user(
                 request,
@@ -320,22 +336,19 @@ class GuardianAdmin(admin.ModelAdmin):
             )
             return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
         try:
-            docs = agreement_platform.list_submission_documents(agreement.external_id)
-        except agreement_platform.AgreementPlatformError as exc:
-            self.message_user(request, str(exc), level=messages.ERROR)
-            return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
-        selected = next(
-            (d for d in docs if d.content_type == "application/pdf"),
-            docs[0] if docs else None,
-        )
-        if selected is None:
+            return build_agreement_document_response(
+                agreement, disposition=disposition
+            )
+        except Http404:
+            raise
+        except agreement_platform.AgreementPlatformError:
+            # Latvian generic error — never the raw provider exception text.
             self.message_user(
                 request,
-                "DocuSeal dokuments nav atrasts.",
+                "Radās kļūda saziņā ar DocuSeal.",
                 level=messages.ERROR,
             )
             return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
-        return HttpResponseRedirect(selected.url)
 
     def family_hub_action_view(self, request, guardian_id):
         if not self.has_change_permission(request):
@@ -596,7 +609,10 @@ class GuardianAdmin(admin.ModelAdmin):
                 level=messages.ERROR,
             )
             return
-        enqueue_create_agreement_submission(agreement.id)
+        enqueue_create_agreement_submission(
+            agreement.id,
+            send_email=agreement.signing_path == Agreement.SigningPath.ELECTRONIC,
+        )
         self.message_user(request, "DocuSeal izsūtīšana ielikta rindā.")
 
     def _family_hub_handle_sync_docuseal(self, request, guardian):

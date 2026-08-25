@@ -1,5 +1,6 @@
-"""Electronic mark-sent enqueues DocuSeal create; paper does not; empty
-guardian email falls back to paper; void archives (P5 Slice D)."""
+"""Mark-sent enqueues a DocuSeal submission for both paths — DocuSeal
+emails the guardian only on the electronic path; empty guardian email
+falls back to paper; void archives electronic submissions (P5 Slice D)."""
 
 from __future__ import annotations
 
@@ -32,16 +33,16 @@ def test_electronic_mark_sent_enqueues_create(agreement_member, actor):
         mark_agreement_sent(a, actor)
     a.refresh_from_db()
     assert a.state == Agreement.State.SENT
-    spy.assert_called_once_with(a.id)
+    spy.assert_called_once_with(a.id, send_email=True)
 
 
-def test_paper_mark_sent_does_not_enqueue(agreement_member, actor):
+def test_paper_mark_sent_enqueues_create_without_email(agreement_member, actor):
     with patch(
         "apps.integrations.tasks.enqueue_create_agreement_submission"
     ) as spy:
         a = _agreement(agreement_member, Agreement.SigningPath.PAPER)
         mark_agreement_sent(a, actor)
-    spy.assert_not_called()
+    spy.assert_called_once_with(a.id, send_email=False)
 
 
 def test_electronic_no_email_falls_back_to_paper(agreement_member, actor):
@@ -54,7 +55,7 @@ def test_electronic_no_email_falls_back_to_paper(agreement_member, actor):
         mark_agreement_sent(a, actor)
     a.refresh_from_db()
     assert a.signing_path == Agreement.SigningPath.PAPER
-    spy.assert_not_called()
+    spy.assert_called_once_with(a.id, send_email=False)
 
 
 def test_electronic_void_enqueues_archive(agreement_member, actor):

@@ -68,7 +68,7 @@ Schema-only migration. No backfill. NULL default.
 - `test_create_draft_billing_no_agreement` — legacy full annual + rank 0.
 - 50+ P15 tests total across the focused suite.
 
-**Full suite: 1825 passed** (before final deterministic test-only pin — see Verification).
+**Full suite: 1956 passed** (deterministic test-only clock pin applied).
 
 ## Acceptance criteria (final)
 
@@ -84,9 +84,9 @@ Schema-only migration. No backfill. NULL default.
 ## Verification
 
 - Focused P15/admin-family test suite: **66 passed**.
-- Full suite: **1825 passed** before a final deterministic test-only pin.
+- Full suite: **1956 passed**.
 - `ruff check .` → clean.
 - `mypy .` → clean.
 - `makemigrations --check` → no changes.
 
-**Note:** Final full verification remains pending until the controller reruns the full suite after all test/docs revisions are complete. Do not treat the 1825 result as final.
+Deterministic test-only clock pin applied to the P15 no-backdate tests; production billing rules unchanged. Full verification: `uv run pytest -q` → 1956 passed; `ruff`, `mypy`, and `makemigrations --check` clean. LAN acceptance remains pending.

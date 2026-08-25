@@ -209,10 +209,23 @@ def _mark_agreement_failed(agreement: Agreement, code: str) -> None:
     )
 
 
-def enqueue_create_agreement_submission(agreement_id: int) -> None:
+def enqueue_create_agreement_submission(
+    agreement_id: int, send_email: bool = True
+) -> None:
+    """Hand the agreement-submission job to django-q2.
+
+    ``send_email`` is passed through to ``create_submission`` as the
+    DocuSeal ``send_email`` flag (electronic path: True; paper path: False —
+    the club's own Latvian email already informed the guardian). It rides
+    as a positional argument to ``async_task`` so the job body picks it up
+    by position, matching the ``create_agreement_submission(agreement_id,
+    send_email=...)`` signature.
+    """
     try:
         async_task(
-            "apps.integrations.tasks.create_agreement_submission", agreement_id
+            "apps.integrations.tasks.create_agreement_submission",
+            agreement_id,
+            send_email,
         )
     except RetryableAgreementError:
         return
@@ -233,7 +246,7 @@ def enqueue_archive_agreement_submission(external_id: str) -> None:
     )
 
 
-def create_agreement_submission(agreement_id: int) -> None:
+def create_agreement_submission(agreement_id: int, send_email: bool = True) -> None:
     try:
         agreement = Agreement.objects.select_related(
             "member__guardian__parent_account"
@@ -243,7 +256,9 @@ def create_agreement_submission(agreement_id: int) -> None:
     except Agreement.DoesNotExist:
         return
     try:
-        result = agreement_platform.create_submission(agreement)
+        result = agreement_platform.create_submission(
+            agreement, send_email=send_email
+        )
     except Exception as exc:
         code, retry = _classify_agreement_error(exc)
         _mark_agreement_failed(agreement, code)

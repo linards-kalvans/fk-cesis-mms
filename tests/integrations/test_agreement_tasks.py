@@ -124,3 +124,46 @@ def test_enqueue_helpers_call_async_task():
         tasks.enqueue_sync_agreement_submission(2)
         tasks.enqueue_archive_agreement_submission("x")
     assert spy.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# send_email propagation through enqueue + job body
+# ---------------------------------------------------------------------------
+
+
+def test_create_job_passes_send_email_false_to_platform(
+    settings, electronic_agreement
+):
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    fake = ap.SubmissionResult(
+        external_id="stub-x", external_url="", external_state="pending"
+    )
+    with patch(
+        "apps.integrations.tasks.agreement_platform.create_submission",
+        return_value=fake,
+    ) as spy:
+        tasks.create_agreement_submission(electronic_agreement.id, send_email=False)
+    assert spy.call_args.kwargs.get("send_email") is False
+
+
+def test_create_job_defaults_send_email_true(settings, electronic_agreement):
+    settings.AGREEMENT_PROVIDER_MODE = "stub"
+    fake = ap.SubmissionResult(
+        external_id="stub-x", external_url="", external_state="pending"
+    )
+    with patch(
+        "apps.integrations.tasks.agreement_platform.create_submission",
+        return_value=fake,
+    ) as spy:
+        tasks.create_agreement_submission(electronic_agreement.id)
+    assert spy.call_args.kwargs.get("send_email") is True
+
+
+def test_enqueue_create_passes_send_email_argument():
+    with patch("apps.integrations.tasks.async_task") as spy:
+        tasks.enqueue_create_agreement_submission(1, send_email=False)
+    assert spy.call_args.args == (
+        "apps.integrations.tasks.create_agreement_submission",
+        1,
+        False,
+    )

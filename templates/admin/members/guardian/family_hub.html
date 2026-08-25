@@ -141,12 +141,8 @@
         <button type="submit">Pārbaudīt DocuSeal statusu</button>
       </form>
     {% endif %}
-    {% if child.agreement.external_id %}
-      <p>
-        <a href="{% url 'admin:members_guardian_docuseal_document' guardian.pk child.agreement.pk %}?return_anchor={{ child.anchor_id }}">
-          Lejupielādēt līguma PDF no DocuSeal
-        </a>
-      </p>
+    {% if child.document_links %}
+      {% include "admin/_agreement_list.html" with agreements=child.document_links %}
     {% endif %}
     {% if child.agreement.state == "signed" %}
       <details>

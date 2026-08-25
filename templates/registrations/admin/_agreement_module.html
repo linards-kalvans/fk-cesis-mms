@@ -40,8 +40,11 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
   </form>
   {% endif %}
 
-  {% if agreement.external_url %}
-  <p><a href="{{ agreement.external_url }}" target="_blank" rel="noopener">Atvērt DocuSeal ↗</a></p>
+  {% comment %}Document list — every non-empty-external-id agreement for this
+     approved member (current + history) rendered through the shared
+     admin partial. The DocuSeal URL itself is never exposed.{% endcomment %}
+  {% if document_links %}
+    {% include "admin/_agreement_list.html" with agreements=document_links %}
   {% endif %}
 
   {% if agreement.external_id %}

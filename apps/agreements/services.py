@@ -185,10 +185,15 @@ def mark_agreement_sent(
     )
     _render_and_send_agreement_email(agreement, template_name="sent")
 
-    if agreement.signing_path == Agreement.SigningPath.ELECTRONIC:
-        from apps.integrations.tasks import enqueue_create_agreement_submission
+    # Every sent agreement (electronic OR paper) gets a DocuSeal submission so
+    # staff can preview/download the generated PDF through the shared proxy.
+    # The paper path passes ``send_email=False`` because the club's own
+    # Latvian email already informed the guardian — DocuSeal must not send a
+    # second signing email for paper agreements.
+    from apps.integrations.tasks import enqueue_create_agreement_submission
 
-        enqueue_create_agreement_submission(agreement.id)
+    send_email = agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+    enqueue_create_agreement_submission(agreement.id, send_email=send_email)
     return agreement
 
 
@@ -266,8 +271,12 @@ def void_agreement(
     reason: str,
 ) -> Agreement:
     """Any non-void state → void. Keeps is_current=True. Sends a Latvian
-    plain-text notification to the guardian (both paths). For an electronic
-    agreement with a live DocuSeal submission, also enqueues an archive job.
+    plain-text notification to the guardian (both paths). For any agreement
+    with a live DocuSeal submission (both signing paths), enqueues an
+    archive job — the existing club paper email handles the guardian
+    notification. ``external_id`` is intentionally retained on the row so
+    the historical download controls stay visible.
+
     Idempotent on void → void (early return, no UPDATE, no second email)."""
     if agreement.state == Agreement.State.VOID:
         return agreement
@@ -282,10 +291,7 @@ def void_agreement(
     )
     _render_and_send_agreement_email(agreement, template_name="void")
 
-    if (
-        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
-        and agreement.external_id
-    ):
+    if agreement.external_id:
         from apps.integrations.tasks import enqueue_archive_agreement_submission
 
         enqueue_archive_agreement_submission(agreement.external_id)

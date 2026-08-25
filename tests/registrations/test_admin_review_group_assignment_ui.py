@@ -85,7 +85,7 @@ def test_approve_post_with_group_assigns_member(
         _approve_url(submitted_application.id),
         {"training_group": str(group_a.id)},
     )
-    assert resp.status_code == 302  # redirect to changelist
+    assert resp.status_code == 302  # redirect to application change page
     submitted_application.refresh_from_db()
     assert submitted_application.approved_member is not None
     assert submitted_application.approved_member.training_group_id == group_a.id

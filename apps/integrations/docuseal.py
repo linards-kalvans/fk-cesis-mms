@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import logging
 import time
+from typing import Iterator
 
 import requests
 from django.conf import settings
@@ -20,6 +21,7 @@ from apps.integrations.agreement_platform import (
     AgreementPlatformNotFoundError,
     AgreementPlatformTransientError,
     DocumentResult,
+    DocumentStream,
     SubmissionResult,
 )
 
@@ -117,7 +119,7 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
     return resp
 
 
-def create_submission(agreement) -> SubmissionResult:
+def create_submission(agreement, send_email: bool = True) -> SubmissionResult:
     api_url, api_key, template_int = _require_config()
     # Prefill as readonly fields, not a `values` map: readonly fields are
     # non-interactive, so the signer skips field-by-field re-confirmation and
@@ -133,6 +135,7 @@ def create_submission(agreement) -> SubmissionResult:
     body = {
         "template_id": template_int,
         "submitters": [submitter],
+        "send_email": send_email,
     }
     resp = _request("POST", f"{api_url}/submissions", api_key, json=body)
     payload = resp.json()
@@ -168,7 +171,15 @@ def list_submission_documents(external_id: str) -> list[DocumentResult]:
     resp = _request(
         "GET", f"{api_url}/submissions/{external_id}/documents", api_key
     )
-    payload = resp.json()
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        # Malformed JSON body — never leak a raw ValueError out of the
+        # adapter. Treat as an invalid provider response (terminal config
+        # contract failure); the caller maps it to a Latvian admin message.
+        raise AgreementPlatformConfigError(
+            f"invalid JSON in DocuSeal documents response: {exc}"
+        ) from exc
     if not isinstance(payload, dict):
         return []
     raw_docs = payload.get("documents")
@@ -189,6 +200,48 @@ def list_submission_documents(external_id: str) -> list[DocumentResult]:
             )
         )
     return results
+
+
+def stream_submission_document(external_id: str) -> DocumentStream:
+    """Stream the generated agreement PDF through Django, server-side.
+
+    Selection rule: prefer the first ``application/pdf`` document so the
+    consumer gets a true PDF; fall back to the first available document when
+    the submission has no PDF (e.g. paper path with only an attachment). An
+    empty document list maps to ``AgreementPlatformNotFoundError`` so the
+    caller can surface a Latvian admin message instead of leaking upstream
+    state.
+
+    The fetch reuses the existing ``_request`` helper so the standard
+    auth/not-found/transient/config taxonomy applies, and ``stream=True``
+    keeps the upstream response unbuffered. The chunk iterator calls
+    ``response.close()`` in ``finally`` so a consumer-side iteration error
+    never leaks a connection to DocuSeal.
+
+    No ``disposition`` argument here — the agreement-layer proxy applies
+    ``inline`` vs. ``attachment`` after the stream lands in Django.
+    """
+    api_url, api_key, _ = _require_config()
+    documents = list_submission_documents(external_id)
+    selected = next(
+        (item for item in documents if item.content_type == "application/pdf"),
+        documents[0] if documents else None,
+    )
+    if selected is None:
+        raise AgreementPlatformNotFoundError("submission document not found")
+    response = _request("GET", selected.url, api_key, stream=True)
+
+    def chunks() -> Iterator[bytes]:
+        try:
+            yield from response.iter_content(chunk_size=64 * 1024)
+        finally:
+            response.close()
+
+    return DocumentStream(
+        filename=selected.filename,
+        content_type=selected.content_type,
+        chunks=chunks(),
+    )
 
 
 _WEBHOOK_TOLERANCE_SECONDS = 300

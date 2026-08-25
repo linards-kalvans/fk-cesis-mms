@@ -1,0 +1,38 @@
+{% extends "admin/change_form.html" %}
+
+{# P16 — Agreement admin read-only change page.
+
+   Renders the inherited Django admin form (all fields are already in the
+   ``readonly_fields`` list on the model admin) plus an inline preview iframe
+   and a forced-download anchor for any agreement row that has a DocuSeal
+   ``external_id``. The document route is admin-only and streams the PDF
+   through the shared proxy; the DocuSeal URL itself is never rendered. #}
+
+{% block content %}
+  {{ block.super }}
+
+  {% if document_links %}
+    <div class="module mms-agreement-document-module">
+      <h2>Līguma dokuments</h2>
+      {% for link in document_links %}
+        {% if link.agreement.external_id %}
+          <p>
+            <strong>{{ link.state_label }}</strong>
+            —
+            <em>{{ link.signing_path_label }}</em>
+          </p>
+          <iframe
+            class="mms-agreement-document-iframe"
+            src="{{ link.download_url }}?disposition=inline"
+            title="{{ link.agreement }}"></iframe>
+          <p>
+            <a class="button mms-agreement-document-download"
+               href="{{ link.download_url }}?disposition=attachment">
+              Lejupielādēt ģenerēto līgumu
+            </a>
+          </p>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

@@ -84,6 +84,20 @@ def test_approve_confirm_then_commit():
     assert app.status == RegistrationApplication.Status.APPROVED
 
 
+def test_approve_post_redirects_to_change_page():
+    app = _submitted()
+    c = _staff_client()
+    url = reverse("admin:registrations_registrationapplication_approve", args=[app.pk])
+    resp = c.post(url, {})  # no training group
+    assert resp.status_code == 302
+    app.refresh_from_db()
+    assert app.status == RegistrationApplication.Status.APPROVED
+    assert app.approved_member_id is not None
+    assert resp["Location"] == reverse(
+        "admin:registrations_registrationapplication_change", args=[app.pk]
+    )
+
+
 def test_reject_on_approved_application_is_blocked_by_guard():
     # Invalid-state transition: reject_application raises (only SUBMITTED rejectable);
     # the admin catches it and the status does not change.
