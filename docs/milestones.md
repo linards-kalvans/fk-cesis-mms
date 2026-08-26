@@ -53,65 +53,85 @@ Do **not** use archived implementation plans for current planning unless user ex
 - live validation evidence committed at `docs/p3_tiny_idp_validation.md`
 
 ### Admin review and member creation
-- admin review queue/detail baseline exists
-- review actions exist: request fix, reject, approve
-- approval creates `Guardian` and `Member`
-- `TrainingGroup` model exists, but approval currently leaves assignment empty
+- admin review lives in Django admin (P7 Slice C-i, 2026-06-14): custom `change_form_template` renders document/OCR panels, agreement module, and training-group module above the native edit form, with flow actions in a top action bar
+- review actions exist: request fix, reject, approve — all audited
+- approval reuses canonical Guardian and creates Member idempotently (P6 Slice A, 2026-06-10)
+- optional active `TrainingGroup` assignment at approval plus post-approval reassign/clear exists (P5 Slice B, 2026-05-28)
 
 ---
 
-## 3. Confirmed target direction not yet implemented
+## 3. Open gaps and debt
 
-### Agreement handling
-- after approval, generate agreement
-- first slice uses manual signing outside Django app
-- agreement platform is source of truth for agreement artifact and signed state
-- signed state sync comes back to Django through API
-- preferred future richer agreement-processing direction: **DocuSeal self-hosted**
+- **Parent self-service email change with OTP** remains deferred — requires OTP re-verification of the new address.
+- **Legal review/versioning of personal-data consent text** remains an operational prerequisite before any material text change.
+- Roadmap / current validation status lives in §4.
 
 ---
 
-## 4. Open gaps and debt
+## 4. Priority order for future development
 
-### Security and architecture gaps
-- audit/event baseline **delivered (P7 Slice A, 2026-06-13)** — `apps.core.AuditEvent` append-only model + fail-safe `record_audit_event` helper + read-only admin viewer + configurable retention prune (`AUDIT_RETENTION_DAYS`=730, daily `audit-retention-prune` Schedule). Wired: review actions, training-group assign/clear, document preview/download/delete, agreement sent/signed/voided/sync-failed, billing push/sync-triggered + push/send/payment-sync failures. Routine automated sync successes deliberately not audited. Spec/plan under `docs/superpowers/`. (P7 Slices B export + C admin-polish still pending.)
+### Current validation / operational list
 
-### Registration UX gaps
-- step-gated wizard validation with background draft auto-save — delivered in P4 Slice C
-- camera-capture option for document/photo upload — delivered in P4 Slice D
-- personal-data consent gate on the ID-documents step — delivered in P4 Slice C
-- OCR processing UX (spinner, success confirmation, name title-casing) — delivered in P4 Slices A + B
-- Latvian copy normalization across parent-facing surfaces still incomplete (deferred to P4 Slice E)
-- mobile-first responsiveness on the parent registration workspace — workspace delivered in P4 Slice D; entry/chooser/portal mobile polish deferred to P4 Slice E
-- unnecessary re-upload can replace earlier file and create confusing admin rows (P7 target)
+Open items requiring attention:
 
-### Admin UX gaps
-- admin review should show inline identity-document previews beside applicant data (P5 target)
-- admin document UX should better distinguish active vs replaced documents **delivered (P7 C-ii b2 Plan 2, 2026-06-15)** — `DocumentAdmin` Aktīvs/Vēsturisks badge + `state` filter
-- training-group assignment flow still incomplete (P5 target)
-- review-action audit entries **delivered (P7 Slice A, 2026-06-13)** — approve/reject/request-fix now recorded as `AuditEvent`s with actor + target
-
-#### P7 — COMPLETE (LAN sign-off 2026-06-19)
-All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + batch 2 Plans 1–3), the Guardian/ParentAccount consolidation, the admin menu re-order, and the audit close-out.
-- **Audit gaps — CLOSED (2026-06-16).** The billing one-click **confirm** and the training-group **merge** now emit `AuditEvent`s (`BILLING_RECORD_CONFIRMED` / `TRAINING_GROUPS_MERGED`; merge metadata carries merged ids/names + reparented count) — migration `core/0004`. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-16-p7-audit-confirm-merge*`.
-- **LAN acceptance signed off 2026-06-19** — verified on dev: the unified **Vecāki** admin (merged guardians correct, email/phone/is_active edit routes via `change_parent_email`), the fixed menu order with "Parent accounts" gone, and all three billing-confirm paths (per-row list button, change-page button, status dropdown + Save) each emit a `billing_record_confirmed` audit; the group merge emits its audit. **Two live-found bugs fixed during the pass:** (1) the one-click confirm/quick-action buttons were `<form>`s nested inside the admin's changelist/change form (invalid HTML → browser drops them) — rebuilt as bare `<button formaction=… formmethod="post">` riding the surrounding admin form's CSRF (commit `b1d27aa`); (2) a list-triggered agreement quick-action now returns to the list via a validated `next` (commit `7b3311c`).
-- **Explicitly out of P7 (not done by design):** account-without-guardian admin visibility (a `ParentAccount` with no `Guardian` is reachable by direct URL only, not the menu); parent self-service email change with OTP re-verification (deferred from P6).
-
-### Business workflow gaps
-- agreement generation / manual-signing flow not implemented yet (P5 target)
-- billing / Invoice Ninja sync not implemented yet (P6 target)
-- admin **CSV export delivered (P7 Slice B, 2026-06-13)** — staff-only audited member + registration CSV export (safe default + superuser-gated sensitive; UTF-8 BOM + `;` for Latvian Excel; formula-injection guard).
-- admin **review consolidation delivered (P7 Slice C-i, 2026-06-14)** — the registration review+edit flow now lives on the Django admin change page (panels + agreement/training-group modules + a top action bar), with status-aware one-click quick actions on the changelist; the bespoke custom review queue/detail views, URLs, and templates were removed. **Remaining = P7 Slice C-ii** (admin flow polish). **Batch 1 delivered (2026-06-14)** — the three user-prioritised items: (a) Registrations app now at the **top** of the admin left-side menu (`FkAdminSite` via `AdminConfig.default_site`); (b) **agreement-status column** ("Līguma statuss") on the applications changelist; (c) **one-click confirm** of a billing record — top button on the BillingRecord change page + per-row POST button on the billing-records list (replacing the open→dropdown→save dance). Gate: 1252 passed, ruff + mypy clean, no migrations. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-14-p7-cii-admin-quick-wins*`. **Broader C-ii (batch 2)** specced as three plans (`docs/superpowers/{specs,plans}/2026-06-15-p7-cii-batch2*`). **Plan 1 (cross-links) delivered (2026-06-15)** — shared `apps/core/admin_links.py` helper; related-records rows on Member/Guardian/Agreement/BillingRecord change pages + the registrations review block; clickable member column on applications + guardian/agreement columns on billing. Gate: 1267 passed, no migrations. **Plan 2 (visibility) delivered (2026-06-15)** — shared `status_badge` helper + `fk_badges.css`; sync-health badges + filters on billing/agreements (Latvian error tooltips); search/filter/date-drill polish across Document/TrainingGroup/MembershipPlan/Application/Agreement/Billing admins; document active-vs-replaced badge + filter. Gate: 1292 passed, no migrations. **Plan 3 (training-group de-duplication) delivered (2026-06-15)** — case-insensitive unique `TrainingGroup.name` (migration `members/0005`) + `clean()` Latvian form error; `merge_training_groups` admin action (confirmation page → reparent members → bulk-delete spares; gated on delete permission, target validated in-selection) + name search. Gate: 1301 passed. **P7 Slice C-ii is COMPLETE** (batch 1 + batch 2 Plans 1–3); with C-i, **all of P7 Slice C is delivered.**
-
-### Billing gaps (P6 follow-ups, deferred during Slice C live validation 2026-06-09)
-- **Invoice issue/send policy** — **delivered (2026-06-12).** Decision: *scheduled per-installment send*. Push still creates invoices as Draft; a nightly `send_due_invoices` job issues + emails each installment on/after the 1st of its due month (IN bulk `email` action flips Draft→Sent). Gated by `BILLING_AUTOSEND_ENABLED` (**default off** — set true in prod to activate). `BillingInvoice.sent_at` added; daily `billing-send-due-invoices` Schedule registered; per-row error isolation; no-email guardians skipped+logged. **LAN acceptance signed off 2026-06-12** (real IN `in.mplytics.eu`: push→Draft, flag-off no-op, due installment→Sent + parent emailed, idempotent, no-email skip — all pass; test data cleaned up). Before prod activation, disable IN's admin "Invoice Sent" notification, then set `BILLING_AUTOSEND_ENABLED=true`. Spec/plan under `docs/superpowers/`.
-
-### Data integrity gaps
-- **Guardian dedup by email** — **fully landed (Slices A + B1 + B2 + C, 2026-06-10/11).** `Guardian` is 1:1 with `ParentAccount` (Slice A); read-through accessors read `Guardian`/`ParentAccount` only (Slice B1 + B2); the five `guardian_*` columns are dropped (Slice B2, migration `registrations/0010`); locked-profile UX (returning parents see guardian fields read-only + "Rediģēt vecāka datus" unlock toggle) and admin-initiated email change (`change_parent_email` service with uniqueness + `Guardian.email` mirror; `ParentAccount` registered in admin) landed in Slice C (**LAN acceptance signed off 2026-06-11** — lock/unlock, propagation, first-registration-unlocked, admin email change + uniqueness all pass). Parent self-service email change (with OTP re-verification of the new address) remains **deferred**. **Consolidation Plan 1 delivered (2026-06-15)** — the `Guardian.email`/`phone` columns (and the email mirror) are **removed**; they are now read-only `@property` proxies of the linked `ParentAccount` (single source of truth), and `Guardian.parent_account` is **NOT NULL** (migrations `members/0006` data link+merge of orphan/duplicate guardians, `members/0007` schema). Spec/plans: `docs/superpowers/{specs,plans}/2026-06-15-guardian-*`. Gate: 1316 passed. **Plan 2 (unified admin) delivered (2026-06-15)** — single "Vecāki" admin entry (`GuardianAdminForm` edits account email/phone/is_active; email via `change_parent_email`; add disabled; relabel, migration `members/0008`); `ParentAccount` filtered out of the admin menu (still registered); `ParentAccountAdmin` slimmed; redundant "Vecāka konts" cross-link dropped. Gate: 1321 passed. **Guardian/ParentAccount double-bookkeeping fully resolved** (single contact source-of-truth + enforced 1:1 + one admin entry).
+1. **P5 DocuSeal generated-document proxy:** live DocuSeal validation pending.
+2. **P10 analytics:** provider setup and dashboard smoke pending before production enablement.
+3. **P11 family hub:** live DocuSeal validation pending; do not claim production sign-off.
+4. **P15 calendar-year partial billing:** dev complete, LAN sign-off pending.
+5. **P22 digest:** local PostgreSQL verification passed; GitHub CI rerun and LAN/email acceptance pending.
+6. **M6:** production env / second-host, scheduled off-host backups, integration config docs, final security checklist.
 
 ---
 
-## 5. Priority order for future development
+### P16 — Signed-agreement upload + verification
+**Status:** Blocked — eParaksts test credentials required.
+
+**Why first**
+- staff need a way to attach a signed agreement obtained through an alternative channel (e.g. in-person eParaksts signing) to the agreement record
+- the DocuSeal-generated PDF is a separate artifact; staff-uploaded signed documents must be private, verifiable, and visible to staff + guardian
+
+**Target outcome**
+- staff-only upload of a signed PDF or `.edoc` file, attached to an Agreement
+- private Agreement artifact; accessible through authorization-checked proxy views from admin detail, family hub, agreement detail, and verified guardian portal
+- separated from the DocuSeal-generated document
+- one current artifact per Agreement; replacement permanently deletes the prior file only after the new file succeeds
+- redacted `AuditEvent` on upload/replace (no signer data, no file bytes, no validation results in metadata)
+- best-effort background eParaksts validation via SignAPI (session-based OAuth); valid signer names, signing time, format, and status shown to admin + guardian; failure or unavailability does not block publication (guardian sees neutral "Status nav pieejams")
+- external prerequisite: test credentials before implementation; production credentials + suitable security/data-processing terms before production sign-off
+- provider links: https://developers.eparaksts.lv/v2.0/docs/before-you-start-1, https://developers.eparaksts.lv/docs/test-environment, https://developers.eparaksts.lv/v2.0/docs/validation-api
+- out of scope: interactive in-portal eParaksts signing, raw provider URLs, reusing the registration `Document`/OCR model
+
+### P17 — Configurable member export
+**Status:** Planned.
+
+**Why second**
+- P7 Slice B static CSV exports are insufficient for recurring reports; staff need reusable templates with custom columns and filters
+
+**Target outcome**
+- shared saved staff-created export templates; all staff may include sensitive columns
+- staff-only, audited; never export values/bytes in logs or audit metadata
+- one Member row per export; selected member/guardian/current-agreement/training-group columns via stable allowlisted keys only
+- agreement statuses: OR within each chosen set; selected training groups use OR within their group set; the two predicates use AND when both filters are configured; current agreement only; empty = unfiltered
+- CSV/XLSX per run; XLSX default when available; CSV keeps UTF-8 BOM + semicolon + formula guard; direct download only
+- P7 static CSV exports remain unchanged (additive)
+- out of scope: guardian-row templates, scheduled email exports, arbitrary formula columns, arbitrary queries
+
+### P18 — Unfinished-application lifecycle
+**Status:** Planned.
+
+**Why third**
+- draft and fix_requested applications sit indefinitely without reminders or archival
+
+**Target outcome**
+- automatic workflow for draft and fix_requested only: generic no-PII reminder emails at 7 and 21 inactive days, archive at 60 inactive days
+- daily schedule at 09:00 Europe/Riga (django-q2 Schedule, admin-editable)
+- follow-up anchor resets on parent save and request_fix
+- at/in excess of 60 days: archive; no reminder sent in the same sweep
+- reminder recipient: verified parent-account email when present, else `claimed_email`; blank both means skip reminder (no timestamp), leave eligible for later retry; archive timing unaffected; email goes to `/register/` with standard one-time-code gate
+- new `archived` status; retain: anchor, reminder timestamps, archive time, prior state, archive actor (null for automated)
+- auto-archived draft/fix_requested can resume (restores prior state, resets timer); manual staff archive for draft/submitted/fix/rejected; approved cannot be archived; manually archived submitted/rejected show read-only in portal, no resume
+- audit reminder, archive, resume — no PII in audit metadata
+- out of scope: deletion/purge, staff reminders, SMS/WhatsApp, automatic reminders for submitted/rejected, new auth links, automatic reopening
 
 ### P1 — Field-set finalization + guardian-email-first verified registration gate
 **Status:** completed
@@ -231,7 +251,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 
 ### P5 — Approval-to-agreement flow
 **Status:** complete — all slices delivered and LAN-verified; signed off 2026-06-07
-- Slice A delivered 2026-05-27 — admin review uses Django admin shell (`admin/base_site.html`), thumbnail grid per document kind opens a `<dialog>` lightbox on click, member portrait surfaced, active vs replaced docs distinguished via `<details>` history with per-doc `preview_kind`; OCR readout uses Latvian-labeled `<dl>` + translated confidence chips; approval-ready inspection grouped on one screen. Covers acceptance items 1 + 2 (item 4 was already implemented pre-Slice A via `approved_member_id` early-return). Includes Revision A (admin styling pivot away from fk-* branding + thumbnail/lightbox UX) and Slice A.1 (templated review-action emails with application/portal URL). Manual LAN re-verification still pending.
+- Slice A delivered 2026-05-27 — admin review uses Django admin shell (`admin/base_site.html`), thumbnail grid per document kind opens a `<dialog>` lightbox on click, member portrait surfaced, active vs replaced docs distinguished via `<details>` history with per-doc `preview_kind`; OCR readout uses Latvian-labeled `<dl>` + translated confidence chips; approval-ready inspection grouped on one screen. Covers acceptance items 1 + 2 (item 4 was already implemented pre-Slice A via `approved_member_id` early-return). Includes Revision A (admin styling pivot away from fk-* branding + thumbnail/lightbox UX) and Slice A.1 (templated review-action emails with application/portal URL).
 - Slice B delivered 2026-05-28 — training-group assignment inline on the review detail page (during approval via a bundled dropdown; post-approval via a Treniņu grupa module with reassign/clear). New `assign_training_group` service. Approve email enriched with the assigned group name when assignment happens at approval time. Currently-assigned-but-inactive groups surface with a `(neaktīva)` marker so existing state is never hidden. No model changes. Item 3 closed.
 - Slice C delivered 2026-05-29 — internal-only Agreement domain (new `apps/agreements/` app): `Agreement` model with `ForeignKey(Member)` + `is_current` flag and partial `UniqueConstraint` enforcing at most one current per member; state machine `generated → sent → signed` with `void` + regenerate-after-void; auto-created inside `approve_application` (now `@transaction.atomic`) honouring the application's `preferred_agreement_signing` (default `electronic`); admin Līgums module on the review-detail page with five POST transitions; parent portal + workspace render Latvian status copy via the `agreement_status_copy` helper; plain-text emails on `sent`, `signed`, and `void` (Slice D will suppress these for the electronic path); Django admin `VIEW ON SITE` link bridges from the read-only Agreement detail to the review-detail page; bidirectional sync invariant keeps `application.preferred_agreement_signing` and `agreement.signing_path` always-equal post-approval; backfill migration creates Agreements for approved Members from before Slice C. DocuSeal reservation fields (`external_*`) on the model stay empty until Slice D. Items 5, 7, 11 closed.
 - Slice D delivered 2026-06-06 — DocuSeal self-hosted adapter + signed-state sync + manual signing tracking (items 6, 8, 9, 10). New `apps/integrations/agreement_platform.py` boundary (stub/docuseal dispatch on `AGREEMENT_PROVIDER_MODE`, exception taxonomy, frozen `SubmissionResult`) + concrete `apps/integrations/docuseal.py` provider (HTTP via `requests`, `X-Auth-Token`, status→exception mapping, HMAC-SHA256 webhook verify). django-q2 jobs create/sync/archive submissions with transient-retry vs terminal-fail classification (`external_state="failed"` + `external_error_code` → Latvian copy via `apps/agreements/messages.py`). Electronic path: optimistic `sent`, sent/signed guardian emails suppressed (DocuSeal notifies), enqueue create; empty guardian email degrades to paper; void enqueues archive. HMAC-verified `submission.completed` webhook (`integrations/docuseal/webhook/`, mounted before the registrations catch-all) drives `sent`/`generated` → `signed`; bad signature 403, all other cases ack 200. Līgums module surfaces the failed-state error + retry and a live-submission DocuSeal link + manual sync button. Migration `0003_agreement_external_error_code`. Closes P5.
@@ -258,11 +278,11 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - automatic billing trigger after agreement platform `completed` state
 - Invoice Ninja sync and payment-status visibility
 
-**Status:** Slices A–C delivered (A 2026-06-07, B 2026-06-08, C 2026-06-08). Acceptance items 7, 8, 9 addressed and 1, 2 verified by Slice C. **Code complete + gates green (1113 passed); live-IN end-to-end validation (push + read-back) is the remaining P6 sign-off step.**
+**Status:** complete — live Invoice Ninja push/read-back validation complete (2026-06-09, `in.mplytics.eu`). Acceptance items 7, 8, 9 addressed and 1, 2 verified by Slice C. All code complete + gates green (1115 passed). Live-IN end-to-end validation (push + read-back) confirmed: product + client created (client carries `custom_value1=guardian.pk`), 10 invoices created, idempotent re-push, dedup lookups verified, product-note pollution fixed, payment read-back (full/partial/unpaid) verified via `payments[].date` field.
 - Slice A delivered 2026-06-07 — local-only billing domain (new `apps/billing/` app): `MembershipPlan` (staff-editable plan config, one active row by convention) + `BillingRecord` (one per `(member, season)`, money snapshotted at creation, draft/confirmed + upfront/installments choices, manual override). Pure sibling-discount engine (`compute_billing_amounts`) derives the discount from the guardian's children (earliest-created full price, rest discounted; opt-out reuses `support_club_instead_of_multi_child_discount`) plus an installment-schedule helper. `agreement_signed` signal emitted from `mark_agreement_signed`; billing connects a receiver in `BillingConfig.ready()` that auto-creates a DRAFT `BillingRecord` on signing (idempotent; no-ops without an active plan). `recompute_billing_record` + admin plan/record surfaces with a `Pārrēķināt no plāna` action. New `preferred_payment_mode` registration field (`Maksājuma veids`). `backfill_billing` management command for pre-existing signed agreements. No Invoice Ninja calls — that is Slice B. Gate after Slice A: 1053 passed, ruff + mypy clean. **Manual LAN smoke confirmed + signed off 2026-06-07** (7/7 acceptance items: plan activation, signing→draft trigger, billing admin surface, recompute action draft-update + confirmed-skip, idempotent `backfill_billing`, parent `Maksājuma veids` render+persist; sibling discount + opt-out via the green discount-engine unit suite). Plan: `docs/superpowers/plans/2026-06-07-p6-slice-a-billing-domain.md`.
 - Slice B delivered 2026-06-08 — admin-confirmed Invoice Ninja push (push-only; payment read-back is Slice C). New `apps/integrations/invoice_platform.py` boundary (stub/`invoiceninja` dispatch on `INVOICE_PROVIDER_MODE`, exception taxonomy, frozen result dataclasses) + `apps/integrations/invoice_ninja.py` provider (HTTP via `requests`, `X-Api-Token`, status→exception map incl. 429→transient, duplicate-invoice-number idempotency recovery). Mapping: Guardian→IN Client, MembershipPlan→IN Product (mirrored, referenced by derived `product_key`), each child's `BillingRecord`→its own invoice stream (no sibling consolidation), upfront=1 invoice / installments=one IN invoice per `derive_installment_schedule()` row, net per line with the sibling discount as a Latvian note. New `BillingInvoice` model (one row per installment) + `external_*` sync fields on `Guardian`/`MembershipPlan`/`BillingRecord`. `push_billing_record` django-q2 job (ensure product → ensure client → materialize → create invoices → roll up; deterministic `{PREFIX}-{record}-{seq}` numbers for idempotency; transient-retry vs terminal-fail with Latvian error copy). `BillingRecordAdmin` "Izrakstīt rēķinus (Invoice Ninja)" confirmed-only action. Gate after Slice B: 1080 passed, ruff + mypy clean. **Manual LAN smoke confirmed + signed off 2026-06-08** (stub provider mode + django-q worker): confirm→push→`synced` with 10 `BillingInvoice` rows, verified IN payload (number/product_key/Latvian label), idempotent re-push, draft skipped, and a testing refinement so already-`synced` records are reported separately rather than re-counted as pushed. Live-IN end-to-end deferred until an instance is provisioned. Plan: `docs/superpowers/plans/2026-06-07-p6-slice-b-invoice-ninja-push.md`.
 - Slice C delivered 2026-06-08 — payment read-back + nightly scheduled sync + sync health (acceptance items 7, 8, 9; verifies 1, 2). `invoice_platform.fetch_invoice_payment` + provider `GET /invoices/{id}` with IN `status_id`→`payment_status` mapping (+ amount-derived fallback) and latest-payment-date extraction; payment-projection fields on `BillingInvoice`/`BillingRecord` (migration `billing/0004`, new `PaymentStatus` choices). `sync_billing_payments` nightly batch sweep (per-row error isolation) + `sync_billing_record_payments` manual per-record sync (terminal-error surface / transient re-raise), rolled up by `roll_up_payment_status`. Nightly django-q2 `Schedule` via idempotent data migration `billing/0005` + configurable `BILLING_PAYMENT_SYNC_HOUR`. Read-back terminal errors land on a dedicated `BillingRecord.payment_error_code` (migration `billing/0006`), separate from the push-side `external_error_code`. Admin: confirmed-only "Pārbaudīt maksājumus (Invoice Ninja)" action, payment columns/filter, read-only `BillingInvoiceInline`. Folded in the deferred Slice-B dedup hardening (`ensure_product` by `product_key`, `ensure_client` by `custom_value1=guardian.pk`) and an honest `backfill_billing` count. Gate: 1114 passed, ruff + mypy clean (240 files). Fixed a pre-existing TZ gap (no `TIME_ZONE`/`USE_TZ` was set → Django default America/Chicago): now `TIME_ZONE="Europe/Riga"` + `USE_TZ=True`, so the nightly hour is interpreted in local time. **Live-validated against a real Invoice Ninja instance (2026-06-09):** push (product/client/invoice create + dedup + dup-number recovery) and read-back (paid/partial/date mapping) both confirmed end-to-end through the django-q worker. **Six stub-hidden bugs found + fixed live:** (1) missing `X-Requested-With`/`Accept` headers (IN returned 200+HTML on errors); (2) dup-number message text; (3) `?include=payments` for the payment date; (4) generic line note + invoice `public_notes` to stop product-note pollution; (5) client/product dedup trusting `rows[0]` from IN's ignored `?custom_value1=`/`?product_key=` filters → narrow with `?filter=` + exact-match client-side; (6) dedup reusing archived/soft-deleted rows → `?status=active` + skip `is_deleted`/`archived_at`. Test suite hardened to never hit live providers from `.env`. Gate: 1126 passed, ruff + mypy clean. **Follow-ups deferred:** invoices push as IN **Draft** (auto-issue vs. staff-send policy); guardian dedup-by-email (repeated registrations create separate guardians → separate clients + no sibling linkage). **Operational note:** wiping IN data requires clearing Django `external_*` ids; restart the `qcluster` worker after task-code changes (no hot-reload). Remaining P6 close-out: confirmation pass on the deployed cloud `:dev` artifact.
-- Installment calendar + per-plan due day delivered 2026-06-09 (completes acceptance item 6) — `derive_installment_schedule` now skips configured break months (per-plan `skip_months`, default July + December) placing N real installments (Jan–Jun + Aug–Nov for a Jan start), each due on a per-plan `payment_due_day` (default 20, clamped to month length); migration `billing/0007`; go-forward only. Gate: 1123 passed. Plan: `docs/superpowers/plans/2026-06-09-p6-installment-calendar-due-day.md`. **Live-IN end-to-end validation (push + read-back) is the remaining P6 sign-off step** — the instance now exists. Plan: `docs/superpowers/plans/2026-06-08-p6-slice-c-payment-readback-sync-health.md`. Design: `docs/superpowers/specs/2026-06-08-p6-slice-c-payment-readback-sync-health-design.md`.
+- Installment calendar + per-plan due day delivered 2026-06-09 (completes acceptance item 6) — `derive_installment_schedule` now skips configured break months (per-plan `skip_months`, default July + December) placing N real installments (Jan–Jun + Aug–Nov for a Jan start), each due on a per-plan `payment_due_day` (default 20, clamped to month length); migration `billing/0007`; go-forward only. Gate: 1123 passed. Plan: `docs/superpowers/plans/2026-06-09-p6-installment-calendar-due-day.md`. Design: `docs/superpowers/specs/2026-06-08-p6-slice-c-payment-readback-sync-health-design.md`.
 - Guardian-identity Slice A delivered 2026-06-10 — canonical `Guardian` 1:1 with `ParentAccount`, resolved at initiation and reused at approval; sibling-discount linkage now holds for all go-forward registrations. Gate: 1133 passed, ruff + mypy clean. Plan: `docs/superpowers/plans/2026-06-09-p6-guardian-identity-slice-a.md`. Spec: `docs/superpowers/specs/2026-06-09-p6-canonical-guardian-identity-design.md`. **LAN-acceptance verified 2026-06-10** (live Invoice Ninja); scenarios A–E + H pass — see the AGENTS.md Slice A entry.
 - Concurrent-push dedup fix delivered 2026-06-10 (found during the Slice A LAN acceptance, scenario F) — parallel `push_billing_record` workers for sibling records created **duplicate Invoice Ninja clients + products** via an unlocked check-then-create on the shared guardian/plan. Fixed with `select_for_update`-locked `_ensure_client_id` / `_ensure_product_id` helpers in `apps/integrations/tasks.py`; re-test confirmed one client + one product per parent. Gate: 1137 passed. (Latency follow-up: the outbound IN call runs while the row lock is held — fine at current scale, revisit under load.)
 - Guardian-identity Slice B1 delivered 2026-06-10 — read-through propagation. 5 guardian-read accessors on `RegistrationApplication` (`guardian_name`, `guardian_pid`, `guardian_contact_phone`, `guardian_address`, `guardian_contact_email`); Guardian profile now populated at draft-save; templates, workspace `initial` dict, prefill, phone-sync, and review-notification read via the accessors; `approve_application` no longer copies the snapshot. Editing a guardian's profile now propagates to every application and agreement (agreements read `member.guardian.*` for free). The `guardian_*` columns remain (dual-written); column drop is Slice B2. Gate: 1146 passed, ruff + mypy clean. Plan: `docs/superpowers/plans/2026-06-10-p6-guardian-identity-slice-b1-read-through.md`.
@@ -307,7 +327,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - confirmed/synced invoices are never silently mutated; changes use explicit renewal or adjustment flow
 
 ### P10 — Public-site analytics + registration funnel
-**Status:** complete (2026-07-08) — Plausible-first privacy-aware analytics boundary, parent-only browser hooks, server milestone events, and referral-code attribution delivered. Provider/dashboard live smoke remains required before production enablement.
+**Status:** Dev complete — provider/dashboard smoke pending before production enablement.
 
 **Why tenth**
 - public launch needs basic evidence about what visitors use before more admin-only workflow polish
@@ -360,7 +380,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - rows show sequence, due date, amount, sent status, payment status, sync freshness timestamp
 - safe stored Invoice Ninja URL opens through Django ownership-check proxy (not raw external link)
 - future draft / unissued installments hidden from parent view
-- custom invoices remain out of scope (P16)
+- custom invoices remain out of scope (P19)
 - verification evidence: targeted P12 tests 28 passed; full gate `uv run pytest -q` → 1703 passed, `uv run ruff check .` → passed, `uv run mypy .` → passed, `uv run python manage.py makemigrations --check` → no changes; code review approved
 
 ### P13 — Invoice Ninja client name mapping
@@ -422,8 +442,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 
 **Delivery state:** DEV COMPLETE. Implementation landed on `dev`. Deterministic test-only clock pin applied; full suite 1956 passed; `ruff`, `mypy`, and `makemigrations --check` green. Not yet LAN-signed-off. Design spec: `docs/superpowers/specs/2026-07-21-p15-calendar-year-partial-billing-design.md`.
 
-### P16 — Custom invoices
-**Why sixteenth**
+### P19 — Custom invoices
+**Why nineteenth**
 - extends billing beyond membership dues after parent invoice visibility, client name mapping, family discount tiers, and calendar-year partial billing exist
 - covers one-off commercial tournaments, camps, kit, and other special events without abusing membership plans
 
@@ -433,8 +453,8 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent portal shows custom invoices alongside membership invoices
 - creation, push, send, failure, and payment-sync actions stay audited
 
-### P17 — Coaches and training groups
-**Why seventeenth**
+### P20 — Coaches and training groups
+**Why twentieth**
 - extends the member/training-group admin model before adding attendance or coach-facing workflows
 - keeps coach data structured instead of burying it in free-text group names
 
@@ -445,7 +465,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - parent-visible coach info stays optional and explicitly scoped later
 - coach portal, attendance, and messaging remain out of this slice
 
-### P18 — Calendar + WhatsApp attendance integration
+### P21 — Calendar + WhatsApp attendance integration
 **Why later**
 - explicitly future scope
 - likely separate platform/integration boundary
@@ -454,10 +474,10 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 - calendar integration, likely external platform such as Google Calendar
 - automated WhatsApp attendance polling integration
 
-### P19 — Daily submitted-registration digest notification
+### P22 — Daily submitted-registration digest notification
 **Status:** full CI-equivalent PostgreSQL suite passed locally (2026-07-27: 1855 tests, ruff, mypy, migration check); GitHub CI rerun and LAN acceptance pending.
 
-**Why nineteenth**
+**Why twenty-second**
 - staff need a dependable daily reminder for submissions without repeatedly polling the admin changelist
 - reuses the existing Django mail and django-q2 Schedule foundations; no new service or dependency
 
@@ -470,7 +490,7 @@ All of P7 is delivered: Slices A (audit), B (export), C (C-i + C-ii batch 1 + ba
 
 ---
 
-## 6. Acceptance criteria by priority block
+## 5. Acceptance criteria by priority block
 
 ### P1 acceptance — Field-set finalization + guardian-email-first verified registration gate
 **Status:** complete
@@ -1008,8 +1028,51 @@ P15 is complete when all of the following are true:
 
 **Delivery state:** DEV COMPLETE. Deterministic test-only clock pin applied; full suite 1956 passed; `ruff`, `mypy`, `makemigrations --check` green. Not yet LAN-signed-off.
 
-### P16 acceptance — Custom invoices
+### P16 acceptance — Signed-agreement upload + verification
 P16 is complete when all of the following are true:
+
+1. Staff can upload a signed PDF or `.edoc` file attached to an Agreement.
+2. Uploaded artifacts are private, accessible only through authorization-checked proxy views from admin detail, family hub, agreement detail, and verified guardian portal.
+3. Registration admin is the sole upload path. Registration admin, family hub, and read-only agreement admin display/download routes enforce staff permission (agreement admin uses `has_view_permission`); guardian proxy enforces ownership of the linked member.
+4. One current artifact per Agreement; replacement permanently deletes the prior file only after the new upload succeeds and is audited.
+5. Redacted `AuditEvent` on upload/replace — no signer data, no file bytes, no validation results in metadata.
+6. Best-effort background eParaksts validation via SignAPI (session-based OAuth): valid signer names, signing time, format, and status shown to admin + guardian; failure or unavailability does not block publication (guardian sees neutral "Status nav pieejams").
+7. eParaksts credentials prerequisite: test credentials present before implementation; production credentials + suitable security/data-processing terms before production sign-off.
+8. Provider links documented: https://developers.eparaksts.lv/v2.0/docs/before-you-start-1, https://developers.eparaksts.lv/docs/test-environment, https://developers.eparaksts.lv/v2.0/docs/validation-api.
+9. Out of scope confirmed: no interactive in-portal eParaksts signing, no raw provider URLs, no reusing the registration `Document`/OCR model.
+10. Tests cover authorization checks on proxy views, upload/replace audit events, replacement-delete-after-success sequence, and eParaksts failure/availability handling, and stale validation job result/error rejection after a newer artifact upload.
+
+### P17 acceptance — Configurable member export
+P17 is complete when all of the following are true:
+
+1. Staff can create, edit, and delete shared saved export templates with custom column selections.
+2. All staff may include sensitive columns in templates; templates are staff-only and audited.
+3. Never export values/bytes in logs or audit metadata.
+4. One Member row per export; columns selected via stable allowlisted keys only (member/guardian/current-agreement/training-group).
+5. Agreement status filter: selected agreement statuses as OR within each chosen set; selected groups as OR within group set; those two predicates AND when both configured; empty = unfiltered.
+6. Current agreement only filter (not all historical agreements).
+7. CSV/XLSX per run; XLSX default when available; CSV keeps UTF-8 BOM + semicolon + formula guard.
+8. Direct download only; no stored output files.
+9. P7 static CSV exports remain unchanged (additive).
+10. Out of scope confirmed: no guardian-row templates, no scheduled email exports, no arbitrary formula columns, no arbitrary queries.
+11. Tests cover template CRUD, column allowlist enforcement, filter combination (OR within state set; OR within group set; AND between state and group predicates), CSV/XLSX output format, formula guard, and audit event emission.
+
+### P18 acceptance — Unfinished-application lifecycle
+P18 is complete when all of the following are true:
+
+1. Automatic workflow for draft and fix_requested only: generic no-PII reminder emails at 7 and 21 inactive days, archive at 60 inactive days.
+2. Daily schedule at 09:00 Europe/Riga (django-q2 Schedule, admin-editable).
+3. Follow-up anchor resets on parent save and request_fix.
+4. At/in excess of 60 days: archive; no reminder sent in the same sweep.
+5. Reminder recipient: verified parent-account email when present, else `claimed_email`; blank both means skip reminder (no timestamp), leave eligible for later retry; archive timing unaffected; email goes to `/register/` with standard one-time-code gate.
+6. New `archived` status; retain: anchor, reminder timestamps, archive time, prior state, archive actor (null for automated).
+7. Auto-archived draft/fix_requested can resume (restores prior state, resets timer); manual staff archive for draft/submitted/fix/rejected; approved cannot be archived; manually archived submitted/rejected show read-only in portal, no resume.
+8. Audit reminder, archive, resume — no PII in audit metadata.
+9. Out of scope confirmed: no deletion/purge, no staff reminders, no SMS/WhatsApp, no automatic reminders for submitted/rejected, no new auth links, no automatic reopening.
+10. Tests cover reminder emission at 7/21 days, archive at 60 days, anchor reset on save/request_fix, reminder recipient fallback, resume, manual archive guards, and audit event emission.
+
+### P19 acceptance — Custom invoices
+P19 is complete when all of the following are true:
 
 1. Staff can create a one-off invoice for a guardian/member with description, amount, due date, and optional event/category label.
 2. Custom invoices can be pushed to Invoice Ninja without creating or mutating membership-plan billing records.
@@ -1019,8 +1082,8 @@ P16 is complete when all of the following are true:
 6. Audit events cover create, update-before-send, push, send, failure, and payment sync where applicable.
 7. Tests cover staff creation, push payload, parent visibility, ownership, and no membership-plan pollution.
 
-### P17 acceptance — Coaches and training groups
-P17 is complete when all of the following are true:
+### P20 acceptance — Coaches and training groups
+P20 is complete when all of the following are true:
 
 1. Staff can create and edit coach records in admin.
 2. Training groups can have one or more linked coaches.
@@ -1030,8 +1093,8 @@ P17 is complete when all of the following are true:
 6. Coach portal, attendance, and messaging are not introduced in this milestone.
 7. Tests cover coach CRUD basics, group linkage, and admin display/search behaviour.
 
-### P18 acceptance — Calendar + WhatsApp attendance integration
-P18 is complete when all of the following are true:
+### P21 acceptance — Calendar + WhatsApp attendance integration
+P21 is complete when all of the following are true:
 
 1. Calendar integration direction is implemented, likely via external platform such as Google Calendar.
 2. Platform boundary is clean and loosely coupled to Django monolith.
@@ -1050,13 +1113,13 @@ P18 is complete when all of the following are true:
     - maybe
 10. Tests cover critical mapping/failure behavior where testable.
 
-### P19 — Daily submitted-registration digest notification
-P19 delivers a daily Bcc email to configured staff summarising every submitted application that has not yet been included in a digest. The email lists child name, guardian name, Riga submission datetime, current status, and admin link per application. It omits contact data, personal IDs, addresses, documents, and review messages. The digest job uses a django-q2 daily Schedule (default 08:00 Europe/Riga, admin-editable after migration), per-row delivery flags on `RegistrationApplication`, and a singleton `RegistrationSubmissionDigestSettings` model for recipient management (superuser-only admin). At-least-once delivery semantics: send failures leave flags untouched so the next day retries.
+### P22 — Daily submitted-registration digest notification
+P22 delivers a daily Bcc email to configured staff summarising every submitted application that has not yet been included in a digest. The email lists child name, guardian name, Riga submission datetime, current status, and admin link per application. It omits contact data, personal IDs, addresses, documents, and review messages. The digest job uses a django-q2 daily Schedule (default 08:00 Europe/Riga, admin-editable after migration), per-row delivery flags on `RegistrationApplication`, and a singleton `RegistrationSubmissionDigestSettings` model for recipient management (superuser-only admin). At-least-once delivery semantics: send failures leave flags untouched so the next day retries.
 
-**Delivery state:** CI exposed and P19 fixed a PostgreSQL nullable-outer-join lock regression. Full CI-equivalent local PostgreSQL verification passed 2026-07-27: `uv run pytest -q` → 1855 passed; `uv run ruff check .`, `uv run mypy .`, and `uv run python manage.py makemigrations --check` clean. GitHub CI rerun and LAN acceptance pending.
+**Delivery state:** CI exposed and P22 fixed a PostgreSQL nullable-outer-join lock regression. Full CI-equivalent local PostgreSQL verification passed 2026-07-27: `uv run pytest -q` → 1855 passed; `uv run ruff check .`, `uv run mypy .`, and `uv run python manage.py makemigrations --check` clean. GitHub CI rerun and LAN acceptance pending.
 
-### P19 acceptance — Daily submitted-registration digest notification
-P19 is complete when all of the following are true:
+### P22 acceptance — Daily submitted-registration digest notification
+P22 is complete when all of the following are true:
 
 1. `RegistrationSubmissionDigestSettings` singleton exists after migration (pk=1).
 2. A django-q2 Schedule named `registrations-submission-digest` exists, pointing to `apps.registrations.tasks.send_submitted_registration_digest`, schedule type DAILY.
@@ -1073,45 +1136,38 @@ P19 is complete when all of the following are true:
 
 ---
 
-## 7. Milestone map
+## 6. Milestone map
 
 ### M1 — Security and foundation completion
 Delivered:
 - background-job baseline (django-q2, delivered in P3.5)
 - OCR metadata security posture (delivered in P3)
-Remaining focus:
-- audit baseline
+- audit event baseline (P7 Slice A, delivered 2026-06-13)
 
 ### M2 — Parent intake completion
-Remaining focus:
-- dual-document registration flow
-- OCR-backed prefill
-- parent-flow UX polish (step-gated wizard, auto-save, consent gate, camera capture, mobile-first workspace, Latvian copy normalization)
+Delivered:
+- verified registration intake (P1: guardian email entry + OTP verification, chooser/dashboard)
+- dual-document registration flow with OCR-backed prefill (P3)
+- parent-flow UX polish: step-gated wizard, auto-save, consent gate, camera capture, mobile-first workspace, Latvian copy normalization (P4 Slices A–E)
 
 ### M3 — Approval-to-membership and agreement completion
-Remaining focus:
-- inline document preview in review flow
-- training-group assignment workflow
-- agreement generation + manual signing tracking
+Delivered:
+- admin review consolidation into Django admin (P7 Slice C-i, 2026-06-14)
+- membership creation with canonical Guardian reuse (P6 Slice A, 2026-06-10)
+- agreement lifecycle: generation, amendment, discontinuation, replacement (P8, 2026-06-30)
+- DocuSeal-backed e-signature (P5 Slice D, 2026-06-06)
+Planned / blocked extension:
+- P16 signed-artifact custody is Blocked pending eParaksts test credentials.
 
 ### M4 — Billing completion
-Remaining focus:
-- Invoice Ninja orchestration
-- sibling discount rules
-- payment visibility and retry paths
-- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
-- billing plan lifecycle and renewals (P9)
-- calendar-year partial billing (P15)
-- custom one-off invoices (P16)
-- coaches linked to training groups (P17)
+- P15 LAN signoff (calendar-year partial billing, dev complete, LAN pending)
+- P19 custom one-off invoices (planned)
 
 ### M5 — Admin operations completion
-Remaining focus:
-- family admin action hub (P11)
-- export
-- filters/search polish
-- document/admin operations polish
-- daily submitted-registration digest notification (P19)
+- P17 configurable member export (planned)
+- P18 unfinished-application lifecycle (planned)
+- P20 coaches linked to training groups (planned)
+- P22 daily submitted-registration digest (local Postgres green, CI rerun + LAN pending)
 
 ### M6 — Production readiness
 
@@ -1127,18 +1183,14 @@ Remaining focus:
 - final security checklist (CSP, rate-limit, fail2ban, audit-log review)
 
 ### Future / post-MVP
-- agreement lifecycle: amendment, discontinuation, replacement rules (P8)
-- billing plan lifecycle and renewals (P9)
-- family admin action hub (P11)
-- calendar-year partial billing (P15)
-- custom one-off invoices (P16)
-- coaches linked to training groups (P17)
-- calendar integration (P18)
-- WhatsApp attendance polling (P18)
+- custom one-off invoices (P19)
+- coaches linked to training groups (P20)
+- calendar integration (P21)
+- WhatsApp attendance polling (P21)
 
 ---
 
-## 8. Explicit non-priorities right now
+## 7. Explicit non-priorities right now
 - coach portal
 - adult members
 - attendance tracking inside this monolith
