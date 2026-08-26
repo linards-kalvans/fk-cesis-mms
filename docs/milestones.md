@@ -102,7 +102,7 @@ Open items requiring attention:
 - out of scope: interactive in-portal eParaksts signing, raw provider URLs, reusing the registration `Document`/OCR model
 
 ### P17 — Configurable member export
-**Status:** Planned.
+**Status:** complete (2026-08-26).
 
 **Why second**
 - P7 Slice B static CSV exports are insufficient for recurring reports; staff need reusable templates with custom columns and filters
@@ -115,6 +115,14 @@ Open items requiring attention:
 - CSV/XLSX per run; XLSX default when available; CSV keeps UTF-8 BOM + semicolon + formula guard; direct download only
 - P7 static CSV exports remain unchanged (additive)
 - out of scope: guardian-row templates, scheduled email exports, arbitrary formula columns, arbitrary queries
+
+**Delivered**
+- Shared `MemberExportTemplate` admin templates: any active staff user can create, edit, delete, and run templates, including sensitive columns.
+- One Member row per direct export; ordered member/guardian/current-agreement/training-group column keys come only from a server registry. Current-agreement state filters use OR, group filters use OR, and both predicates use AND.
+- XLSX is the default direct in-memory attachment (`openpyxl`); CSV retains UTF-8 BOM + semicolon. Both formats apply the formula guard. No output storage, jobs, or provider calls.
+- Template mutation/run audits use generic targets and redacted metadata; P7 static exports remain unchanged.
+- Migrations: `core/0008`, `members/0012`. Verification: `2033 passed`, ruff clean, mypy clean (436 files; existing unchecked-function notes only), migration check clean; code review approved.
+- Spec: `docs/superpowers/specs/2026-08-26-p17-configurable-member-export-design.md`. Plan: `docs/superpowers/plans/2026-08-26-p17-configurable-member-export.md`.
 
 ### P18 — Unfinished-application lifecycle
 **Status:** Planned.
@@ -1043,6 +1051,8 @@ P16 is complete when all of the following are true:
 10. Tests cover authorization checks on proxy views, upload/replace audit events, replacement-delete-after-success sequence, and eParaksts failure/availability handling, and stale validation job result/error rejection after a newer artifact upload.
 
 ### P17 acceptance — Configurable member export
+**Status:** complete (2026-08-26).
+
 P17 is complete when all of the following are true:
 
 1. Staff can create, edit, and delete shared saved export templates with custom column selections.
@@ -1164,7 +1174,7 @@ Planned / blocked extension:
 - P19 custom one-off invoices (planned)
 
 ### M5 — Admin operations completion
-- P17 configurable member export (planned)
+- P17 configurable member export (delivered 2026-08-26)
 - P18 unfinished-application lifecycle (planned)
 - P20 coaches linked to training groups (planned)
 - P22 daily submitted-registration digest (local Postgres green, CI rerun + LAN pending)

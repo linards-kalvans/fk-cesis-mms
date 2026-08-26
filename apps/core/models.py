@@ -62,6 +62,11 @@ class AuditEvent(models.Model):
             "billing_record_amount_overridden",
             "Billing record amount overridden",
         )
+        MEMBER_EXPORT_TEMPLATE_MUTATED = (
+            "member_export_template_mutated",
+            "Member export template mutated",
+        )
+        MEMBER_EXPORT_RUN = "member_export_run", "Member export run"
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

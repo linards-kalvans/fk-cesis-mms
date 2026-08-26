@@ -35,6 +35,7 @@ from apps.billing.services import (
     parse_first_billing_month,
     renew_member_billing,
 )
+from django.core.exceptions import ValidationError
 from apps.core.admin_links import admin_link, admin_links
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
@@ -47,12 +48,20 @@ from apps.integrations.tasks import (
     enqueue_sync_billing_record_payments,
 )
 from apps.members.exports import member_columns, member_row
+from apps.members.export_templates import render_member_export
 from apps.members.family_hub import (
     _row_for_guardian,
     build_family_hub_context,
     build_family_queue_rows,
 )
-from apps.members.models import Guardian, KitSizeOption, Member, TrainingGroup
+from apps.members.forms import MemberExportRunForm, MemberExportTemplateAdminForm
+from apps.members.models import (
+    Guardian,
+    KitSizeOption,
+    Member,
+    MemberExportTemplate,
+    TrainingGroup,
+)
 from apps.members.services import assign_training_group
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.services import (
@@ -964,3 +973,211 @@ class KitSizeOptionAdmin(admin.ModelAdmin):
     list_display = ("kind", "label", "is_active")
     list_filter = ("kind", "is_active")
     search_fields = ("label",)
+
+
+# ---------------------------------------------------------------------------
+# P17 — configurable member export templates
+# ---------------------------------------------------------------------------
+
+
+def _member_export_audit_payload(
+    *, template: MemberExportTemplate, operation: str
+) -> dict:
+    return {"template_id": template.pk, "operation": operation}
+
+
+def _member_export_audit_kwargs(
+    request, template: MemberExportTemplate, *, operation: str
+) -> dict:
+    return dict(
+        action=str(AuditEvent.Action.MEMBER_EXPORT_TEMPLATE_MUTATED),
+        actor=request.user,
+        request=request,
+        target_type="member_export_template",
+        target_id=str(template.pk),
+        target_repr="Member export template",
+        metadata=_member_export_audit_payload(
+            template=template, operation=operation
+        ),
+    )
+
+
+@admin.register(MemberExportTemplate)
+class MemberExportTemplateAdmin(admin.ModelAdmin):
+    form = MemberExportTemplateAdminForm
+    list_display = ("name", "column_summary", "created_by", "updated_at")
+    search_fields = ("name",)
+    readonly_fields = ("created_by", "created_at", "updated_at")
+    fields = (
+        "name",
+        "column_keys",
+        "agreement_status_filters",
+        "training_groups",
+        "created_by",
+        "created_at",
+        "updated_at",
+    )
+    change_form_template = (
+        "admin/members/memberexporttemplate/change_form.html"
+    )
+
+    class Media:
+        js = ("admin/js/member_export_columns.js",)
+
+    def has_module_permission(self, request):
+        return bool(request.user and request.user.is_active and request.user.is_staff)
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return self.has_module_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    @admin.display(description="Kolonnas")
+    def column_summary(self, obj):
+        from apps.members.exports import COLUMN_REGISTRY
+
+        if not obj.column_keys:
+            return "—"
+        labels = [
+            COLUMN_REGISTRY[k].label
+            for k in obj.column_keys
+            if k in COLUMN_REGISTRY
+        ]
+        return ", ".join(labels) if labels else "—"
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        if change:
+            # No-op edits (``form.changed_data`` empty) emit no audit event.
+            # M2M changes are included in ``changed_data`` so re-saving with
+            # the same scalar values still correctly suppresses the audit.
+            if not form.changed_data:
+                return
+        record_audit_event(
+            **_member_export_audit_kwargs(
+                request,
+                obj,
+                operation="create" if not change else "edit",
+            )
+        )
+
+    def get_urls(self):
+        from django.urls import path
+
+        custom = [
+            path(
+                "<int:object_id>/run/",
+                self.admin_site.admin_view(self.run_view),
+                name="members_memberexporttemplate_run",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def run_view(self, request, object_id):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        template = get_object_or_404(MemberExportTemplate, pk=object_id)
+        run_form = MemberExportRunForm(request.POST or None)
+        if request.method == "POST":
+            if not run_form.is_valid():
+                context = {
+                    **self.admin_site.each_context(request),
+                    "title": f"Eksportēt — {template.name}",
+                    "opts": self.model._meta,
+                    "template": template,
+                    "run_form": run_form,
+                }
+                return TemplateResponse(
+                    request,
+                    "admin/members/memberexporttemplate/run.html",
+                    context,
+                    status=200,
+                )
+            fmt = run_form.cleaned_data["fmt"]
+            try:
+                template.full_clean()
+            except ValidationError:
+                # Persisted invalid template (validation bypass). Surface a
+                # nonfield error and refuse to render / audit a run.
+                context = {
+                    **self.admin_site.each_context(request),
+                    "title": f"Eksportēt — {template.name}",
+                    "opts": self.model._meta,
+                    "template": template,
+                    "run_form": run_form,
+                    "non_field_error": "Šablons ir nederīgs — labojiet kolonnas un statusus.",
+                }
+                return TemplateResponse(
+                    request,
+                    "admin/members/memberexporttemplate/run.html",
+                    context,
+                    status=200,
+                )
+            rendered = render_member_export(template, fmt)
+            training_group_ids = sorted(
+                template.training_groups.values_list("pk", flat=True)
+            )
+            record_audit_event(
+                action=str(AuditEvent.Action.MEMBER_EXPORT_RUN),
+                actor=request.user,
+                request=request,
+                target_type="member_export_template",
+                target_id=str(template.pk),
+                target_repr="Member export template",
+                metadata={
+                    "template_id": template.pk,
+                    "column_keys": list(template.column_keys or []),
+                    "agreement_status_filters": list(
+                        template.agreement_status_filters or []
+                    ),
+                    "training_group_ids": training_group_ids,
+                    "row_count": rendered.row_count,
+                    "format": fmt,
+                    "sensitive": rendered.sensitive,
+                },
+            )
+            return rendered.response
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Eksportēt — {template.name}",
+            "opts": self.model._meta,
+            "template": template,
+            "run_form": run_form,
+        }
+        return TemplateResponse(
+            request,
+            "admin/members/memberexporttemplate/run.html",
+            context,
+        )
+
+    def delete_model(self, request, obj):
+        record_audit_event(
+            **_member_export_audit_kwargs(request, obj, operation="delete")
+        )
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            record_audit_event(
+                **_member_export_audit_kwargs(request, obj, operation="delete")
+            )
+        super().delete_queryset(request, queryset)
+
+    def changeform_view(self, request, object_id, form_url, extra_context):
+        extra_context = extra_context or {}
+        if object_id is not None:
+            extra_context["run_url"] = reverse(
+                "admin:members_memberexporttemplate_run", args=[object_id]
+            )
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+
