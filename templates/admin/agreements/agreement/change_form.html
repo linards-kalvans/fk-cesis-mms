@@ -35,4 +35,21 @@
       {% endfor %}
     </div>
   {% endif %}
+
+  {% if signed_artifact_url %}
+    <div class="module mms-agreement-signed-artifact-module">
+      <h2>Parakstītais dokuments</h2>
+      <p>Status nav pieejams</p>
+      <iframe
+        class="mms-agreement-document-iframe"
+        src="{{ signed_artifact_url }}?disposition=inline"
+        title="Parakstītais līgums"></iframe>
+      <p>
+        <a class="button mms-agreement-document-download"
+           href="{{ signed_artifact_url }}?disposition=attachment">
+          Lejupielādēt parakstīto līgumu
+        </a>
+      </p>
+    </div>
+  {% endif %}
 {% endblock %}

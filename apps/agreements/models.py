@@ -5,6 +5,9 @@ from __future__ import annotations
 from django.db import models
 
 from apps.core.models import TimeStampedModel
+from apps.documents.storage import PrivateDocumentStorage
+
+private_document_storage = PrivateDocumentStorage()
 
 
 class Agreement(TimeStampedModel):
@@ -77,6 +80,27 @@ class Agreement(TimeStampedModel):
         related_name="agreements",
     )
     first_billing_month = models.CharField(max_length=7, blank=True, default="")
+
+    # P16-A: exactly-one-current signed artifact directly on the Agreement.
+    # Replacement saves the new private file + this metadata in one atomic
+    # block and deletes the old storage object only on commit. P16-B adds
+    # verification fields later — none exist here.
+    signed_artifact = models.FileField(
+        upload_to="agreements/signed/%Y/%m/%d/",
+        storage=private_document_storage,
+        max_length=255,
+        blank=True,
+        default="",
+    )
+    signed_artifact_original_filename = models.CharField(
+        max_length=255, blank=True, default=""
+    )
+    signed_artifact_content_type = models.CharField(
+        max_length=255, blank=True, default=""
+    )
+    signed_artifact_file_size = models.PositiveIntegerField(default=0)
+    signed_artifact_uploaded_at = models.DateTimeField(null=True, blank=True)
+    signed_artifact_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [

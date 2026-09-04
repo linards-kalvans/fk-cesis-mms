@@ -5,6 +5,7 @@ Hosts the document-preview classification and per-kind panel builder
 which assembles the full panels + agreement + training-group context.
 """
 
+from django.db.models import F
 from django.urls import reverse
 
 from apps.agreements.messages import get_agreement_error_message
@@ -187,6 +188,21 @@ def build_review_context(
                 history_agreements, url_builder=_url_builder
             )
 
+    # P16-A: every Agreement of the source member — current + history
+    # (generated, sent, signed, void, superseded, discontinued) — newest
+    # first, including rows without an artifact so staff can upload or
+    # replace on any lifecycle state. Sensitive artifact coordinates are
+    # never rendered: the template builds same-origin proxy URLs only.
+    signed_artifact_agreements: list[Agreement] = []
+    if member is not None:
+        signed_artifact_agreements = list(
+            Agreement.objects.filter(member=member).order_by(
+                F("signed_artifact_updated_at").desc(nulls_last=True),
+                "-generated_at",
+                "-pk",
+            )
+        )
+
     discontinuation_invoice_candidates = []
     billing_adjustments = []
     discontinued_billing_invoices = []
@@ -227,6 +243,7 @@ def build_review_context(
         "agreement_error_message": agreement_error_message,
         "agreement_lifecycle_events": agreement_lifecycle_events,
         "document_links": document_links,
+        "signed_artifact_agreements": signed_artifact_agreements,
         "discontinuation_invoice_candidates": discontinuation_invoice_candidates,
         "discontinued_billing_invoices": discontinued_billing_invoices,
         "billing_adjustments": billing_adjustments,

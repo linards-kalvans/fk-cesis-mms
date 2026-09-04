@@ -18,6 +18,7 @@ from django.utils.html import format_html
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import change_parent_email
 from apps.agreements.models import Agreement
+from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.agreements.services import (
     get_current_agreement,
     mark_agreement_sent,
@@ -205,6 +206,11 @@ class GuardianAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.family_hub_docuseal_document_view),
                 name="members_guardian_docuseal_document",
             ),
+            path(
+                "<int:guardian_id>/family-hub/agreement/<int:agreement_id>/signed-artifact/",
+                self.admin_site.admin_view(self.family_hub_signed_artifact_view),
+                name="members_guardian_signed_artifact",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -358,6 +364,23 @@ class GuardianAdmin(admin.ModelAdmin):
                 level=messages.ERROR,
             )
             return self._family_hub_redirect(guardian.pk, return_anchor=return_anchor)
+
+    def family_hub_signed_artifact_view(self, request, guardian_id, agreement_id):
+        """Stream a signed PDF/.edoc artifact through the shared proxy (P16-A).
+
+        Guardian ownership is enforced via the guardian→member→Agreement chain
+        (``_get_guardian_agreement``); foreign/missing agreements and blank
+        artifacts are deterministic 404s. Always ``attachment``.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        guardian = get_object_or_404(
+            Guardian.objects.select_related("parent_account"), pk=guardian_id
+        )
+        agreement = self._get_guardian_agreement(guardian, agreement_id)
+        return build_signed_artifact_response(
+            agreement, disposition="attachment"
+        )
 
     def family_hub_action_view(self, request, guardian_id):
         if not self.has_change_permission(request):

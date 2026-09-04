@@ -17,18 +17,22 @@ INVOICE_NINJA = dict(
 )
 
 
-def _record(active_plan, guardian, full_price=True):
+def _record(active_plan, guardian, full_price=True, payment_mode=None, personal_id=None):
     from apps.members.models import Member
     from apps.billing.models import BillingRecord, BillingInvoice
 
-    member = Member.objects.create(full_name="Jānis", guardian=guardian)
+    member = Member.objects.create(full_name="Jānis", guardian=guardian, personal_id=personal_id or "")
     guardian.external_client_id = "client-1"
     guardian.save(update_fields=["external_client_id"])
+    kwargs = {}
+    if payment_mode is not None:
+        kwargs["payment_mode"] = payment_mode
     rec = BillingRecord.objects.create(
         member=member, plan=active_plan, season="2026/2027",
         base_amount=Decimal("300.00"), final_amount=Decimal("300.00"),
         is_full_price=full_price,
         sibling_discount_percent_applied=Decimal("0.00") if full_price else Decimal("50.00"),
+        **kwargs,
     )
     bi = BillingInvoice.objects.create(
         billing_record=rec, sequence=3, due_date=date(2026, 11, 1), amount=Decimal("30.00")
@@ -50,7 +54,12 @@ def test_build_invoice_body_shape(active_plan, guardian):
     assert line["cost"] == "30.00"
     assert line["notes"] == "Biedra maksa 2026/2027"
     assert "Jānis" not in line["notes"]
-    assert body["public_notes"] == "Biedra maksa — Jānis — 2026/2027"
+    assert "Futbola treniņu" not in line["notes"]
+    # public_notes carries the new heading + per-installment period line.
+    assert body["public_notes"] == (
+        "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
+        "Maksājums par 2026. gada novembri"
+    )
 
 
 @override_settings(**INVOICE_NINJA)
@@ -60,8 +69,70 @@ def test_sibling_note_appended_for_discounted(active_plan, guardian):
     rec, bi = _record(active_plan, guardian, full_price=False)
     body = invoice_ninja._build_invoice_body(rec, bi)
     line = body["line_items"][0]
-    assert "Ietverta 50% atlaide" in body["public_notes"]
+    assert body["public_notes"] == (
+        "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
+        "Maksājums par 2026. gada novembri\n"
+        "Ietverta 50% atlaide"
+    )
     assert "Ietverta" not in line["notes"]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_public_notes_installment_period_uses_due_date(active_plan, guardian):
+    """The installment period line derives from the invoice due_date
+    (2027-09-20 -> 'Maksājums par 2027. gada septembri')."""
+    from datetime import date
+    from apps.integrations import invoice_ninja
+
+    rec, bi = _record(active_plan, guardian)
+    bi.due_date = date(2027, 9, 20)
+    bi.save(update_fields=["due_date"])
+    body = invoice_ninja._build_invoice_body(rec, bi)
+    assert body["public_notes"] == (
+        "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
+        "Maksājums par 2027. gada septembri"
+    )
+
+
+@override_settings(**INVOICE_NINJA)
+def test_public_notes_upfront_period_normalized_season(active_plan, guardian):
+    """Upfront record: 'Maksājums par 2026./2027. gada sezonu'."""
+    from apps.billing.models import BillingRecord
+    from apps.integrations import invoice_ninja
+
+    rec, bi = _record(
+        active_plan, guardian,
+        payment_mode=BillingRecord.PaymentMode.UPFRONT,
+    )
+    body = invoice_ninja._build_invoice_body(rec, bi)
+    assert body["public_notes"] == (
+        "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
+        "Maksājums par 2026./2027. gada sezonu"
+    )
+    assert "2026./2027.." not in body["public_notes"]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_public_notes_never_contain_personal_id(active_plan, guardian):
+    """No personal IDs may appear in public_notes."""
+    from apps.integrations import invoice_ninja
+
+    rec, bi = _record(active_plan, guardian, personal_id="151210-22222")
+    body = invoice_ninja._build_invoice_body(rec, bi)
+    assert rec.member.personal_id
+    assert rec.member.personal_id not in body["public_notes"]
+
+
+@override_settings(**INVOICE_NINJA)
+def test_build_invoice_body_no_new_http_fields(active_plan, guardian):
+    """The create payload keeps exactly the existing Invoice Ninja fields."""
+    from apps.integrations import invoice_ninja
+
+    rec, bi = _record(active_plan, guardian)
+    body = invoice_ninja._build_invoice_body(rec, bi)
+    assert set(body.keys()) == {
+        "client_id", "number", "date", "due_date", "public_notes", "line_items",
+    }
 
 
 @override_settings(**INVOICE_NINJA)

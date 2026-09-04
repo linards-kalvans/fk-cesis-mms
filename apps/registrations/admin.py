@@ -15,6 +15,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.agreements.document_proxy import build_agreement_document_response
 from apps.agreements.models import Agreement
+from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.integrations import agreement_platform
 from apps.agreements.services import (
     discontinue_agreement,
@@ -27,6 +28,7 @@ from apps.agreements.services import (
     set_signing_path,
     start_material_amendment,
     sync_application_signing_path_to_agreement,
+    upload_signed_artifact,
     void_agreement,
 )
 from apps.billing.models import MembershipPlan
@@ -125,6 +127,16 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.docuseal_document_view),
                 name="registrations_registrationapplication_docuseal_document",
             ),
+            path(
+                "<int:object_id>/agreement/<int:agreement_id>/signed-artifact/upload/",
+                self.admin_site.admin_view(self.signed_artifact_upload_view),
+                name="registrations_registrationapplication_signed_artifact_upload",
+            ),
+            path(
+                "<int:object_id>/agreement/<int:agreement_id>/signed-artifact/",
+                self.admin_site.admin_view(self.signed_artifact_view),
+                name="registrations_registrationapplication_signed_artifact",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -199,6 +211,63 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 level=messages.ERROR,
             )
             return self._change_redirect(object_id)
+
+    def signed_artifact_upload_view(self, request, object_id, agreement_id):
+        """Sole upload surface for a signed PDF/.edoc artifact (P16-A).
+
+        Authorization chain: ``has_change_permission`` on the application,
+        then the agreement must belong to the application's approved member
+        (foreign -> deterministic 404). POST-only; non-POST redirects to the
+        change page. Service ``ValueError`` maps to a Latvian admin message;
+        success shows a Latvian confirmation and redirects to the change page.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        if request.method != "POST":
+            return self._change_redirect(object_id)
+        agreement = get_object_or_404(
+            Agreement,
+            pk=agreement_id,
+            member_id=application.approved_member_id,
+        )
+        file_upload = request.FILES.get("signed_artifact")
+        if file_upload is None:
+            self.message_user(
+                request,
+                "Lūdzu izvēlieties parakstītā līguma failu.",
+                level=messages.ERROR,
+            )
+            return self._change_redirect(object_id)
+        try:
+            upload_signed_artifact(agreement, file_upload, request.user)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._change_redirect(object_id)
+        self.message_user(request, "Parakstītais līgums augšupielādēts.")
+        return self._change_redirect(object_id)
+
+    def signed_artifact_view(self, request, object_id, agreement_id):
+        """Stream a source-member signed artifact through the shared proxy.
+
+        Same ownership chain as the upload view. Default disposition is
+        ``attachment``; ``inline`` is allowed for staff PDF previews; any
+        other value (or blank/missing artifact) is a 404.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        agreement = get_object_or_404(
+            Agreement,
+            pk=agreement_id,
+            member_id=application.approved_member_id,
+        )
+        disposition = request.GET.get("disposition", "attachment")
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
+        return build_signed_artifact_response(
+            agreement, disposition=disposition
+        )
 
     def review_action_view(self, request, object_id):
         """Port of admin_review_detail's POST dispatch (every action except approve)."""

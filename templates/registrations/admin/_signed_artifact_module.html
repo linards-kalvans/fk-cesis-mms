@@ -1,0 +1,31 @@
+{% comment %}P16-A signed-artifact module — the sole upload surface.
+
+Renders every Agreement of the source member (current + superseded, voided,
+discontinued) with an upload form per row so staff can attach or replace a
+signed PDF/.edoc on any lifecycle state. Rows with a file additionally carry
+the neutral "Status nav pieejams" status and same-origin download links built
+from the signed-artifact route — never a raw storage name, storage URL, or
+provider link.{% endcomment %}
+<div class="module mms-review-signed-artifact-module">
+  <h2>Parakstītais dokuments</h2>
+  {% for agreement in signed_artifact_agreements %}
+    <div class="mms-signed-artifact-row">
+      {% if agreement.signed_artifact %}
+        <p>Status nav pieejams</p>
+        <p>
+          <a class="button"
+             href="{% url 'admin:registrations_registrationapplication_signed_artifact' original.pk agreement.pk %}?disposition=attachment">Lejupielādēt parakstīto līgumu</a>
+        </p>
+      {% endif %}
+      <form method="post"
+            enctype="multipart/form-data"
+            action="{% url 'admin:registrations_registrationapplication_signed_artifact_upload' original.pk agreement.pk %}">
+        {% csrf_token %}
+        <input type="file" name="signed_artifact" accept="application/pdf,.pdf,.edoc" required>
+        <button type="submit" class="default">
+          {% if agreement.signed_artifact %}Aizvietot{% else %}Augšupielādēt{% endif %}
+        </button>
+      </form>
+    </div>
+  {% endfor %}
+</div>

@@ -247,6 +247,11 @@ DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
     "application/pdf",
 )
 
+# P16-A signed PDF/.edoc maximum upload size (20 MiB by default).
+SIGNED_ARTIFACT_MAX_BYTES = int(
+    os.environ.get("SIGNED_ARTIFACT_MAX_BYTES", str(20 * 1024 * 1024))
+)
+
 # Surface uncaught view exceptions to stderr so production deployments
 # (DEBUG=False) don't silently swallow tracebacks. Without this, Django's
 # default logging routes `django.request` errors to `mail_admins` only —

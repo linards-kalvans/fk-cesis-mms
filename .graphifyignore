@@ -74,5 +74,8 @@ Thumbs.db
 # Playwright MCP debug snapshots
 .playwright-mcp/
 
-# Graphify
+
+node_modules/
+
+# Graphify — don't watch own output (avoids inotify self-trigger loop)
 graphify-out/

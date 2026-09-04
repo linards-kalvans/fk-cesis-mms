@@ -67,6 +67,10 @@ class AuditEvent(models.Model):
             "Member export template mutated",
         )
         MEMBER_EXPORT_RUN = "member_export_run", "Member export run"
+        SIGNED_ARTIFACT_UPLOADED = (
+            "signed_artifact_uploaded",
+            "Parakstītā līguma augšupielāde",
+        )
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

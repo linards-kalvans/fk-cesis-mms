@@ -34,6 +34,8 @@ The following renumbering applies to the forward-looking roadmap only.
 
 ## 1. P16 — Signed-Agreement Upload + Verification
 
+> **Note:** P16 §1 delivery scope is superseded by two 2026-09-02 specs: `docs/superpowers/specs/2026-09-02-p16a-signed-artifact-upload-serve-design.md` (P16-A: upload + serve) and `docs/superpowers/specs/2026-09-02-p16b-eparaksts-verification-design.md` (P16-B: eParaksts verification). This section is preserved for historical context only.
+
 ### 1.1 Problem
 
 After admin approval and electronic signing via DocuSeal, staff may also obtain a signed agreement through an alternative channel (e.g. in-person signing with an eParaksts-qualified signature). Currently there is no way for staff to attach that signed artifact to the agreement record, and no verification that the uploaded document is a valid qualified electronic signature. Staff and parents have no visibility into whether a signed artifact exists or what it contains.

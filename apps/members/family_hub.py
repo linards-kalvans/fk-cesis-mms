@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict, cast
 
+from django.utils import timezone
 from django.utils.html import format_html
 
 from apps.agreements.services import get_current_agreement
@@ -98,6 +99,7 @@ class _Child(TypedDict):
     anchor_id: str
     billing_setup_error: str
     document_links: list[dict[str, object]]
+    signed_artifact_links: list[dict[str, object]]
 
 
 def _child_anchor_id(
@@ -582,6 +584,9 @@ def build_family_hub_context(
         kit_size_label = canonical_kit_size_label(member) if application is None else canonical_kit_size_label(application)
         prefetched = members_by_pk.get(member.pk)
         document_links = _build_member_document_links(prefetched, member)
+        signed_artifact_links = _build_member_signed_artifact_links(
+            prefetched, member
+        )
         children.append(
             {
                 "member": member,
@@ -600,6 +605,7 @@ def build_family_hub_context(
                 "anchor_id": _child_anchor_id(application, member),
                 "billing_setup_error": billing_setup_errors.get(agreement.pk, "") if agreement else "",
                 "document_links": document_links,
+                "signed_artifact_links": signed_artifact_links,
             }
         )
 
@@ -626,6 +632,7 @@ def build_family_hub_context(
                 "anchor_id": _child_anchor_id(application, None),
                 "billing_setup_error": "",
                 "document_links": [],
+                "signed_artifact_links": [],
             }
         )
 
@@ -706,6 +713,58 @@ def _build_member_document_links(
         )
 
     return build_agreement_document_links(agreements, url_builder=_url_builder)
+
+
+_ARTIFACT_SORT_FALLBACK = timezone.datetime(2000, 1, 1, tzinfo=timezone.UTC)
+
+
+def _build_member_signed_artifact_links(
+    prefetched_member: "Member | None", member: "Member | None"
+) -> list[dict[str, object]]:
+    """Build the per-child signed-artifact list (P16-A).
+
+    Returns only ``Agreement`` rows with a non-empty ``signed_artifact`` across
+    every lifecycle state (current, superseded, voided, discontinued), newest
+    first by ``signed_artifact_updated_at`` (pk tie-break). Reads from the
+    prefetched ``member.agreements`` cache so the hub stays N+1-free, and
+    points every row at the guardian-scoped signed-artifact proxy route —
+    never a raw storage URL. The DocuSeal ``document_links`` list is left
+    untouched.
+    """
+    if prefetched_member is None or member is None:
+        return []
+    from django.urls import reverse
+
+    agreements = [
+        a
+        for a in prefetched_member.agreements.all()  # type: ignore[attr-defined]
+        if a.signed_artifact
+    ]
+    if not agreements:
+        return []
+    agreements = sorted(
+        agreements,
+        key=lambda a: (
+            a.signed_artifact_updated_at or _ARTIFACT_SORT_FALLBACK,
+            a.pk,
+        ),
+        reverse=True,
+    )
+    guardian_id = member.guardian_id
+    return [
+        {
+            "agreement": agreement,
+            "state_label": str(agreement.get_state_display()),
+            "signing_path_label": str(agreement.get_signing_path_display()),
+            "download_url": str(
+                reverse(
+                    "admin:members_guardian_signed_artifact",
+                    args=[guardian_id, agreement.pk],
+                )
+            ),
+        }
+        for agreement in agreements
+    ]
 
 
 def _blank_application() -> RegistrationApplication:

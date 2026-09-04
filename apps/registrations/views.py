@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from apps.accounts.models import ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 from apps.accounts.services import issue_one_time_code, send_one_time_code_email
+from apps.agreements.models import Agreement
 from apps.agreements.presentation import (
     agreement_status_copy,
     lifecycle_history_items,
@@ -27,6 +28,7 @@ from apps.agreements.presentation import (
 from apps.agreements.services import (
     get_current_agreement,
 )
+from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.analytics import services as analytics_services
 from apps.analytics.sanitize import sanitize_referral_code
 from apps.billing.models import BillingInvoice
@@ -570,6 +572,11 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
     # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
     guardian = Guardian.objects.filter(parent_account=account).first()
     greeting_name = guardian.display_name if guardian is not None else ""
+
+    # P16-A: every owned artifact across all member agreements (current,
+    # superseded, voided, discontinued), newest first per member. Rows carry
+    # only same-origin proxy URLs — never storage/provider paths or filenames.
+    artifact_groups = _parent_artifact_groups(account)
     return render(
         request,
         "registrations/parent_portal.html",
@@ -580,8 +587,47 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "primary_application": _portal_primary_application(account),
             "greeting_name": greeting_name,
             "invoice_groups": parent_invoice_groups(account),
+            "artifact_groups": artifact_groups,
         },
     )
+
+
+def _parent_artifact_groups(account: ParentAccount) -> list[dict[str, object]]:
+    """Group the account's signed artifacts per member, newest first."""
+    from django.urls import reverse as url_reverse
+
+    agreements = (
+        Agreement.objects.filter(member__guardian__parent_account=account)
+        .exclude(signed_artifact="")
+        .select_related("member")
+        .order_by("member_id", "-signed_artifact_updated_at", "-pk")
+    )
+    groups: list[dict[str, object]] = []
+    last_member_id: int | None = None
+    for agreement in agreements:
+        if agreement.member_id != last_member_id:
+            last_member_id = agreement.member_id
+            groups.append(
+                {
+                    "member_name": agreement.member.full_name,
+                    "artifacts": [],
+                }
+            )
+        artifacts = groups[-1]["artifacts"]
+        assert isinstance(artifacts, list)
+        artifacts.append(
+            {
+                "agreement": agreement,
+                "state_label": str(agreement.get_state_display()),
+                "download_url": str(
+                    url_reverse(
+                        "registrations:parent-signed-artifact",
+                        args=[agreement.pk],
+                    )
+                ),
+            }
+        )
+    return groups
 
 
 def open_parent_invoice(request: HttpRequest, invoice_id: int) -> HttpResponse:
@@ -615,6 +661,35 @@ def open_parent_invoice(request: HttpRequest, invoice_id: int) -> HttpResponse:
     if urlparse(invoice.external_url).scheme not in ("http", "https"):
         raise Http404
     return redirect(invoice.external_url)
+
+
+def open_parent_signed_artifact(
+    request: HttpRequest, agreement_id: int
+) -> HttpResponse:
+    """GET /portal/agreements/<id>/signed-artifact/ — ownership-scoped proxy.
+
+    The parent must own the Agreement through ParentAccount → Guardian →
+    Member → Agreement, and the artifact must exist. No parent session
+    redirects to the registration start; foreign/missing/blank artifacts and
+    inline-disposition attempts are 404 (never 403) so artifact existence is
+    never leaked. The response is always ``attachment``.
+    """
+    account = _current_parent_account(request)
+    if account is None:
+        return redirect("registrations:start-registration")
+    if request.GET.get("disposition", "attachment") != "attachment":
+        raise Http404
+    agreement = (
+        Agreement.objects.filter(
+            pk=agreement_id,
+            member__guardian__parent_account=account,
+        )
+        .exclude(signed_artifact="")
+        .first()
+    )
+    if agreement is None:
+        raise Http404
+    return build_signed_artifact_response(agreement, disposition="attachment")
 
 
 def view_registration_summary(request: HttpRequest, application_id: int) -> HttpResponse:

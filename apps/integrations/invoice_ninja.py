@@ -66,7 +66,7 @@ def _build_invoice_body(record, billing_invoice) -> dict:
         "number": _number(record, billing_invoice.sequence),
         "date": timezone.now().date().isoformat(),
         "due_date": billing_invoice.due_date.isoformat(),
-        "public_notes": messages.invoice_public_note(record),
+        "public_notes": messages.invoice_public_note(record, billing_invoice),
         "line_items": [_build_line_item(record, billing_invoice)],
     }
 

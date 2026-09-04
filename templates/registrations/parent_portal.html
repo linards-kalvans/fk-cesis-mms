@@ -93,6 +93,30 @@
 {% include "parent_ui/includes/empty_state.html" with title="Nav pieteikumu" body="Jums vēl nav neviena pieteikuma." cta_url=new_application_url cta_label="Sākt jaunu reģistrāciju" analytics_impression="portal_empty_state_shown" analytics_cta_event="cta_new_application" analytics_page_area="portal" analytics_event_source="empty_state" analytics_error_kind="empty_state" %}
 {% endif %}
 
+{% if artifact_groups %}
+<div class="fk-section-head">
+  <h2>Parakstītie līgumi</h2>
+</div>
+<section class="fk-signed-artifacts">
+  {% for group in artifact_groups %}
+  <article class="fk-signed-artifact-group">
+    <h3 class="fk-signed-artifact-member">{{ group.member_name }}</h3>
+    {% for artifact in group.artifacts %}
+    <div class="fk-signed-artifact-card">
+      <div class="fk-signed-artifact-meta">
+        <span>Līgums: {{ artifact.state_label }}</span>
+        <span>Augšupielādēts: {{ artifact.agreement.signed_artifact_updated_at|date:"d.m.Y" }}</span>
+      </div>
+      <p class="fk-signed-artifact-status">Status nav pieejams</p>
+      <a class="fk-button fk-button--secondary fk-button--full"
+         href="{{ artifact.download_url }}">Lejupielādēt parakstīto līgumu</a>
+    </div>
+    {% endfor %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
 <div class="fk-section-head">
   <h2>Mani rēķini</h2>
 </div>

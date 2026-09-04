@@ -84,23 +84,29 @@ Open items requiring attention:
 
 ---
 
-### P16 — Signed-agreement upload + verification
-**Status:** Blocked — eParaksts test credentials required.
-
-**Why first**
-- staff need a way to attach a signed agreement obtained through an alternative channel (e.g. in-person eParaksts signing) to the agreement record
-- the DocuSeal-generated PDF is a separate artifact; staff-uploaded signed documents must be private, verifiable, and visible to staff + guardian
+### P16-A — Signed-agreement upload + secure serving
+**Status:** LAN acceptance COMPLETE — signed off 2026-09-04. Targeted verification passed (85 P16-A tests; code review approved; mypy and migration check clean).
 
 **Target outcome**
-- staff-only upload of a signed PDF or `.edoc` file, attached to an Agreement
-- private Agreement artifact; accessible through authorization-checked proxy views from admin detail, family hub, agreement detail, and verified guardian portal
+- staff-only upload of a signed PDF or `.edoc` file (up to config 20 MiB), attached to an Agreement
+- private artifact fields on `Agreement` (`signed_artifact` FileField); accessible through authorization-checked proxy views from admin detail, family hub, agreement detail, and verified guardian portal
 - separated from the DocuSeal-generated document
-- one current artifact per Agreement; replacement permanently deletes the prior file only after the new file succeeds
+- one current artifact per Agreement; replacement permanently deletes the prior file only after the new upload succeeds and is audited
 - redacted `AuditEvent` on upload/replace (no signer data, no file bytes, no validation results in metadata)
-- best-effort background eParaksts validation via SignAPI (session-based OAuth); valid signer names, signing time, format, and status shown to admin + guardian; failure or unavailability does not block publication (guardian sees neutral "Status nav pieejams")
-- external prerequisite: test credentials before implementation; production credentials + suitable security/data-processing terms before production sign-off
-- provider links: https://developers.eparaksts.lv/v2.0/docs/before-you-start-1, https://developers.eparaksts.lv/docs/test-environment, https://developers.eparaksts.lv/v2.0/docs/validation-api
-- out of scope: interactive in-portal eParaksts signing, raw provider URLs, reusing the registration `Document`/OCR model
+- authorized staff and guardian proxies only; guardian proxy enforces ownership of the linked member
+- immediate publication on upload — no verification, provider, state, or billing mutation
+- see `docs/superpowers/specs/2026-09-02-p16a-signed-artifact-upload-serve-design.md`
+
+### P16-B — eParaksts signature verification
+**Status:** Blocked — eParaksts test credentials required.
+
+**Target outcome**
+- later background SignAPI verification of P16-A artifacts
+- minimum persisted verification result (signer names, signing time, format, pass/fail)
+- valid results show signer details; guardians see safe invalid status or neutral `Status nav pieejams` when unavailable; staff can distinguish valid vs invalid vs unavailable in admin
+- no agreement state or billing mutation from verification
+- prerequisite: live eParaksts test-credential validation before implementation
+- see `docs/superpowers/specs/2026-09-02-p16b-eparaksts-verification-design.md`
 
 ### P17 — Configurable member export
 **Status:** complete (2026-08-26).
@@ -1037,19 +1043,28 @@ P15 is complete when all of the following are true:
 
 **Delivery state:** DEV COMPLETE. Deterministic test-only clock pin applied; full suite 1956 passed; `ruff`, `mypy`, `makemigrations --check` green. Not yet LAN-signed-off.
 
-### P16 acceptance — Signed-agreement upload + verification
-P16 is complete when all of the following are true:
+### P16-A acceptance — Signed-agreement upload + secure serving
+P16-A is complete when all of the following are true:
 
-1. Staff can upload a signed PDF or `.edoc` file attached to an Agreement.
-2. Uploaded artifacts are private, accessible only through authorization-checked proxy views from admin detail, family hub, agreement detail, and verified guardian portal.
-3. Registration admin is the sole upload path. Registration admin, family hub, and read-only agreement admin display/download routes enforce staff permission (agreement admin uses `has_view_permission`); guardian proxy enforces ownership of the linked member.
-4. One current artifact per Agreement; replacement permanently deletes the prior file only after the new upload succeeds and is audited.
-5. Redacted `AuditEvent` on upload/replace — no signer data, no file bytes, no validation results in metadata.
-6. Best-effort background eParaksts validation via SignAPI (session-based OAuth): valid signer names, signing time, format, and status shown to admin + guardian; failure or unavailability does not block publication (guardian sees neutral "Status nav pieejams").
-7. eParaksts credentials prerequisite: test credentials present before implementation; production credentials + suitable security/data-processing terms before production sign-off.
-8. Provider links documented: https://developers.eparaksts.lv/v2.0/docs/before-you-start-1, https://developers.eparaksts.lv/docs/test-environment, https://developers.eparaksts.lv/v2.0/docs/validation-api.
-9. Out of scope confirmed: no interactive in-portal eParaksts signing, no raw provider URLs, no reusing the registration `Document`/OCR model.
-10. Tests cover authorization checks on proxy views, upload/replace audit events, replacement-delete-after-success sequence, and eParaksts failure/availability handling, and stale validation job result/error rejection after a newer artifact upload.
+1. Staff can upload a signed PDF or `.edoc` file (up to config 20 MiB) attached to an Agreement.
+2. Uploaded artifact fields are stored directly on `Agreement` in private storage only; no separate artifact model exists.
+3. Proxy views serve artifacts from admin detail, family hub, agreement detail, and verified guardian portal — all authorization-checked.
+4. Registration admin is the sole upload path; display/download routes enforce staff permission (`has_view_permission` on agreement admin) or guardian ownership.
+5. One current artifact per Agreement; replacement permanently deletes the prior file only after the new upload succeeds and is audited.
+6. Redacted `AuditEvent` on upload/replace — no signer data, no file bytes, no validation results in metadata.
+7. Immediate publication — no verification, provider, state, or billing mutation.
+8. Tests cover authorization checks on proxy views, upload/replace audit events, replacement-delete-after-success sequence.
+
+### P16-B acceptance — eParaksts signature verification
+P16-B is complete when all of the following are true:
+
+1. Background SignAPI verification runs on artifact upload (P16-A) and on explicit staff/admin bulk action for existing artifacts.
+2. Minimum persisted verification result: signer names, signing time, signature format, pass/fail.
+3. Valid/invalid/unavailable status appears on staff and guardian surfaces; valid results include signer details, invalid status is user-safe, and unavailable is neutral `Status nav pieejams` with no raw error.
+4. Verification does not mutate agreement state or billing.
+5. Stale-validation race safety: version-token comparison discards results from artifacts older than the persisted version.
+6. eParaksts test-credential validation passes before implementation; production credentials + security/data-processing terms required before production sign-off.
+7. Tests cover stub/provider dispatch, error classification, version-token race safety, and guardian-safe status text.
 
 ### P17 acceptance — Configurable member export
 **Status:** complete (2026-08-26).
@@ -1145,8 +1160,6 @@ P22 is complete when all of the following are true:
 11. Full repository verification passes: `uv run pytest -q` (all tests), `uv run ruff check .`, `uv run mypy .`.
 12. Manual LAN acceptance confirms end-to-end: configure recipients, submit application, verify staff inbox receives digest, verify flag stamping, verify re-submit re-arms flag, verify failure handling.
 
----
-
 ## 6. Milestone map
 
 ### M1 — Security and foundation completion
@@ -1168,7 +1181,8 @@ Delivered:
 - agreement lifecycle: generation, amendment, discontinuation, replacement (P8, 2026-06-30)
 - DocuSeal-backed e-signature (P5 Slice D, 2026-06-06)
 Planned / blocked extension:
-- P16 signed-artifact custody is Blocked pending eParaksts test credentials.
+- P16-A signed-artifact upload + serve is LAN acceptance complete (signed off 2026-09-04).
+- P16-B eParaksts verification is Blocked pending test credentials.
 
 ### M4 — Billing completion
 - P15 LAN signoff (calendar-year partial billing, dev complete, LAN pending)

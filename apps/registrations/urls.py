@@ -34,4 +34,10 @@ urlpatterns = [
         views.open_parent_invoice,
         name="parent-invoice-open",
     ),
+    # P16-A: ownership-scoped signed-artifact proxy (always attachment).
+    path(
+        "portal/agreements/<int:agreement_id>/signed-artifact/",
+        views.open_parent_signed_artifact,
+        name="parent-signed-artifact",
+    ),
 ]

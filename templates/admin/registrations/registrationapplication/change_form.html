@@ -79,6 +79,9 @@
       {% include "registrations/admin/_doc_panel.html" with panel=guardian_panel %}
       {% include "registrations/admin/_doc_panel.html" with panel=member_panel %}
       {% include "registrations/admin/_doc_panel.html" with panel=portrait_panel %}
+      {% if signed_artifact_agreements %}
+        {% include "registrations/admin/_signed_artifact_module.html" %}
+      {% endif %}
       {% if agreement %}
         {% include "registrations/admin/_agreement_module.html" with review_action_url=review_action_url %}
       {% endif %}
