@@ -79,6 +79,30 @@ class AuditEvent(models.Model):
             "signed_artifact_uploaded",
             "Parakstītā līguma augšupielāde",
         )
+        MEDICAL_PERMIT_UPLOADED = (
+            "medical_permit_uploaded",
+            "Veselības apliecība augšupielādēta",
+        )
+        MEDICAL_PERMIT_REPLACED = (
+            "medical_permit_replaced",
+            "Veselības apliecība aizvietota",
+        )
+        MEDICAL_PERMIT_CONFIRMED = (
+            "medical_permit_confirmed",
+            "Veselības apliecība apstiprināta",
+        )
+        MEDICAL_PERMIT_CONFIRMATION_CLEARED = (
+            "medical_permit_confirmation_cleared",
+            "Veselības apliecības apstiprinājums noņemts",
+        )
+        MEDICAL_PERMIT_PREVIEWED = (
+            "medical_permit_previewed",
+            "Veselības apliecība priekšskatīta",
+        )
+        MEDICAL_PERMIT_DOWNLOADED = (
+            "medical_permit_downloaded",
+            "Veselības apliecība lejupielādēta",
+        )
 
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

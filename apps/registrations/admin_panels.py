@@ -22,6 +22,10 @@ from apps.billing.models import (
 )
 from apps.members.models import Member
 from apps.documents.models import Document
+from apps.documents.medical_permits import (
+    medical_permit_status,
+    medical_permit_status_label,
+)
 from apps.documents.ocr import decrypt_json
 from apps.members.models import TrainingGroup
 from apps.registrations.models import RegistrationApplication
@@ -144,6 +148,10 @@ def build_review_context(
         agreement_error_message = get_agreement_error_message(
             agreement.external_error_code
         )
+
+    # P23 — medical-permit status for the change-page module.
+    medical_permit = getattr(application, "medical_permit", None)
+    medical_permit_status_value = medical_permit_status(medical_permit)
 
     member = application.approved_member if application.approved_member_id else None
     billing_records = (
@@ -273,6 +281,13 @@ def build_review_context(
         "current_inactive_group": current_inactive_group,
         "agreement": agreement,
         "agreement_error_message": agreement_error_message,
+        "medical_permit_status": medical_permit_status_value,
+        "medical_permit_status_label": medical_permit_status_label(
+            medical_permit_status_value
+        ),
+        "medical_permit_has_file": bool(
+            medical_permit is not None and medical_permit.file
+        ),
         "agreement_lifecycle_events": agreement_lifecycle_events,
         "document_links": document_links,
         "signed_artifact_agreements": signed_artifact_agreements,

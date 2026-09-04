@@ -809,6 +809,12 @@ def approve_application(
         training_group=training_group,
     )
 
+    # P23 — carry the application's medical permit onto the member inside the
+    # same atomic approval. No permit → no-op (the permit stays optional).
+    from apps.documents.medical_permits import attach_application_medical_permit
+
+    attach_application_medical_permit(application, member)
+
     create_agreement_for_member(
         member,
         signing_path=(

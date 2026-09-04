@@ -1,11 +1,27 @@
 """Document model — private child identity document uploads."""
 
+import uuid
+from pathlib import Path
+
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import TimeStampedModel
 from apps.documents.storage import PrivateDocumentStorage
 
 private_document_storage = PrivateDocumentStorage()
+
+
+def medical_permit_upload_to(instance, filename) -> str:
+    """Opaque, non-PII storage path for a stored medical permit.
+
+    The stored name carries no personal data — only a random hex token plus
+    the (validated) file extension so content sniffing stays deterministic.
+    """
+    ext = Path(filename or "").suffix.lower()
+    if ext not in {".pdf", ".jpg", ".jpeg", ".png", ".heic"}:
+        ext = ""
+    return f"private/medical-permits/{uuid.uuid4().hex}{ext}"
 
 
 class Document(TimeStampedModel):
@@ -76,3 +92,53 @@ class DocumentExtraction(TimeStampedModel):
 
     def __str__(self):
         return f"Extraction — {self.subject_role} — {self.document}"
+
+
+class MedicalPermit(TimeStampedModel):
+    """A child's health-certificate permit (P23).
+
+    One permit begins on a registration application (one-to-one) and gains a
+    nullable one-to-one Member link when the application is approved. The
+    stored file — when present — lives in private storage under an opaque
+    non-PII path. ``staff_confirmation`` records club-held evidence and never
+    stores a file.
+    """
+
+    class Source(models.TextChoices):
+        PARENT_UPLOAD = "parent_upload", "Parent upload"
+        STAFF_UPLOAD = "staff_upload", "Staff upload"
+        STAFF_CONFIRMATION = "staff_confirmation", "Staff confirmation"
+
+    application = models.OneToOneField(
+        "registrations.RegistrationApplication",
+        on_delete=models.CASCADE,
+        related_name="medical_permit",
+    )
+    member = models.OneToOneField(
+        "members.Member",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="medical_permit",
+    )
+    file = models.FileField(
+        upload_to=medical_permit_upload_to,
+        storage=private_document_storage,
+        blank=True,
+    )
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    content_type = models.CharField(max_length=255, blank=True, default="")
+    file_size = models.PositiveIntegerField(default=0)
+    source = models.CharField(max_length=32, choices=Source.choices)
+    valid_until = models.DateField()
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="confirmed_medical_permits",
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Veselības apliecība #{self.pk}"

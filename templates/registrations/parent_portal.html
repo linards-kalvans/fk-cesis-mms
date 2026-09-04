@@ -55,6 +55,24 @@
         </ul>
       </div>
       {% endif %}
+      {% if app.approved_member_id %}
+      <div class="fk-app-block fk-medical-permit">
+        <span class="fk-block-label">Veselības apliecība</span>
+        <p data-medical-permit-status="{{ app.medical_permit_status }}"{% if app.medical_permit_warning %} data-medical-permit-warning{% endif %}>{{ app.medical_permit_status_label }}</p>
+        {% if app.medical_permit_has_file and app.medical_permit %}
+        <p>
+          <a class="fk-button fk-button--secondary fk-button--small" href="{% url 'registrations:medical-permit-preview' app.medical_permit.pk %}">Skatīt</a>
+          <a class="fk-button fk-button--secondary fk-button--small" href="{% url 'registrations:medical-permit-download' app.medical_permit.pk %}">Lejupielādēt</a>
+        </p>
+        {% endif %}
+        <form method="post" action="{% url 'registrations:member-medical-permit-upload' app.approved_member.pk %}" enctype="multipart/form-data" class="fk-medical-permit-upload">
+          {% csrf_token %}
+          <label for="medical_permit_file_{{ app.pk }}">PDF, JPG, PNG vai HEIC — līdz 25 MB:</label>
+          <input type="file" id="medical_permit_file_{{ app.pk }}" name="file" accept=".pdf,.jpg,.jpeg,.png,.heic">
+          <button type="submit" class="fk-button fk-button--secondary fk-button--small">Augšupielādēt</button>
+        </form>
+      </div>
+      {% endif %}
     </div>
 
     <div class="fk-app-block fk-progress-wrap">

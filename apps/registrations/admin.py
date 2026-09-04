@@ -42,6 +42,12 @@ from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
 from apps.core.models import AuditEvent
+from apps.documents.admin_filters import RegistrationMedicalPermitStatusFilter
+from apps.documents.medical_permits import (
+    clear_medical_permit_confirmation,
+    confirm_medical_permit,
+    upload_application_medical_permit,
+)
 from apps.integrations.tasks import (
     enqueue_create_agreement_submission,
     enqueue_sync_agreement_submission,
@@ -73,7 +79,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         "agreement_status",
         "quick_actions",
     )
-    list_filter = ("status", "preferred_agreement_signing")
+    list_filter = (
+        "status",
+        "preferred_agreement_signing",
+        RegistrationMedicalPermitStatusFilter,
+    )
     date_hierarchy = "submitted_at"
     ordering = ("-submitted_at",)
     search_fields = (
@@ -688,7 +698,53 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(request, latvian, level=messages.ERROR)
                 return self._after_review_redirect(request, object_id)
             self.message_user(request, "Atjaunots trūkstošais norēķinu ieraksts.")
-            return self._after_review_redirect(request, object_id)
+            return self._change_redirect(object_id)
+
+        elif action == "medical_permit_upload":
+            upload = request.FILES.get("medical_permit_file")
+            if upload is None:
+                self.message_user(
+                    request, "Lūdzu izvēlieties failu.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            try:
+                upload_application_medical_permit(
+                    application,
+                    upload,
+                    actor_label=f"staff: {request.user}",
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                return self._change_redirect(object_id)
+            self.message_user(request, "Veselības apliecība augšupielādēta.")
+            return self._change_redirect(object_id)
+
+        elif action == "confirm_medical_permit":
+            permit = getattr(application, "medical_permit", None)
+            if permit is None:
+                self.message_user(
+                    request,
+                    "Veselības apliecība vēl nav izveidota.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            confirm_medical_permit(permit, actor=request.user)
+            self.message_user(request, "Apstiprinājums reģistrēts.")
+            return self._change_redirect(object_id)
+
+        elif action == "clear_medical_permit_confirmation":
+            permit = getattr(application, "medical_permit", None)
+            if permit is None:
+                self.message_user(
+                    request,
+                    "Veselības apliecība vēl nav izveidota.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            clear_medical_permit_confirmation(permit, actor=request.user)
+            self.message_user(request, "Apstiprinājums noņemts.")
+            return self._change_redirect(object_id)
 
         return self._change_redirect(object_id)
 
