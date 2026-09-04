@@ -80,6 +80,7 @@ Open items requiring attention:
 4. **P15 calendar-year partial billing:** dev complete, LAN sign-off pending.
 5. **P22 digest:** local PostgreSQL verification passed; GitHub CI rerun and LAN/email acceptance pending.
 6. **M6:** production env / second-host, scheduled off-host backups, integration config docs, final security checklist.
+7. **P23 medical permits:** P23 medical-permit implementation lives on feature/p23-medical-permits. Dev excludes it pending merge and LAN acceptance.
 
 ---
 
