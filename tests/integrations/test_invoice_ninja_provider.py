@@ -49,6 +49,9 @@ def test_build_invoice_body_shape(active_plan, guardian):
     assert body["client_id"] == "client-1"
     assert body["number"] == "MMS-{}-3".format(rec.pk)
     assert body["due_date"] == "2026-11-01"
+    # Payload date must be the first calendar day of the due_date month,
+    # not the current date. Fixture due_date is 2026-11-01 (already day 1).
+    assert body["date"] == "2026-11-01"
     line = body["line_items"][0]
     assert line["product_key"] == "biedra-maksa-2026-2027"
     assert line["cost"] == "30.00"
@@ -88,6 +91,8 @@ def test_public_notes_installment_period_uses_due_date(active_plan, guardian):
     bi.due_date = date(2027, 9, 20)
     bi.save(update_fields=["due_date"])
     body = invoice_ninja._build_invoice_body(rec, bi)
+    # Non-first due day (20th) maps to the month first day in payload date.
+    assert body["date"] == "2027-09-01"
     assert body["public_notes"] == (
         "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
         "Maksājums par 2027. gada septembri"
@@ -104,7 +109,11 @@ def test_public_notes_upfront_period_normalized_season(active_plan, guardian):
         active_plan, guardian,
         payment_mode=BillingRecord.PaymentMode.UPFRONT,
     )
+    bi.due_date = date(2027, 8, 20)
+    bi.save(update_fields=["due_date"])
     body = invoice_ninja._build_invoice_body(rec, bi)
+    # Upfront follows the same rule: payload date = first day of due month.
+    assert body["date"] == "2027-08-01"
     assert body["public_notes"] == (
         "Futbola treniņu un spēļu nodrošināšana — Jānis — 2026/2027\n"
         "Maksājums par 2026./2027. gada sezonu"
