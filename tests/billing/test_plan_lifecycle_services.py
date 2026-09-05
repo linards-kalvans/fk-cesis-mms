@@ -67,25 +67,29 @@ class TestDefaultPlanMustBeActive:
 
 
 class TestOnlyOneDefaultPlan:
-    def test_second_default_rejected_at_db_level(self):
-        """Creating a second default plan must violate a DB constraint."""
-        from django.db import IntegrityError
+    def test_second_default_replaces_first_atomically(self):
+        """Saving a second active default plan atomically clears the first
+        (MembershipPlan.save hands the marker over inside one transaction), so
+        exactly one default remains and no unique-constraint error fires."""
         from apps.billing.models import MembershipPlan
 
-        # First default plan — should succeed.
-        _make_plan(is_default=True, name="Default-1")
+        first = _make_plan(is_default=True, name="Default-1")
 
-        # Second default plan — must raise IntegrityError.
-        with pytest.raises(IntegrityError):
-            plan2 = MembershipPlan(
-                name="Default-2",
-                season="2026/2027",
-                annual_amount=Decimal("300.00"),
-                is_active=True,
-            )
-            plan2.is_default = True
-            plan2.billing_start_cutoff_day = 20
-            plan2.save()
+        plan2 = MembershipPlan(
+            name="Default-2",
+            season="2026/2027",
+            annual_amount=Decimal("300.00"),
+            is_active=True,
+        )
+        plan2.is_default = True
+        plan2.billing_start_cutoff_day = 20
+        plan2.save()
+
+        first.refresh_from_db()
+        plan2.refresh_from_db()
+        assert first.is_default is False
+        assert plan2.is_default is True
+        assert MembershipPlan.objects.filter(is_default=True).count() == 1
 
 
 # ── A3: get_default_billing_plan ─────────────────────────────────────────
@@ -106,6 +110,65 @@ class TestGetDefaultBillingPlan:
 
         _make_plan(is_default=False, is_active=True)
         assert get_default_billing_plan() is None
+
+
+# ── A5: renewal reuses the current signed agreement, no mutation ─────────
+
+
+class TestRenewalUsesSignedAgreement:
+    def test_renewal_links_new_draft_to_signed_agreement_without_mutating_it(
+        self, db
+    ):
+        """renew_member_billing creates the next-season draft under the
+        member's current signed agreement and does not touch the agreement's
+        plan or state (the agreement is immutable billing history)."""
+        from apps.agreements.models import Agreement
+        from apps.billing.models import BillingRecord, MembershipPlan
+        from apps.billing.services import renew_member_billing
+        from apps.members.models import Member
+        from tests.support import make_guardian
+
+        guardian = make_guardian(
+            email="renewal@example.test", full_name="Renewal Guardian"
+        )
+        member = Member.objects.create(full_name="Renewal Child", guardian=guardian)
+
+        current_plan = MembershipPlan.objects.create(
+            name="Sezona 2026/2027",
+            season="2026/2027",
+            annual_amount=Decimal("300.00"),
+            is_active=True,
+        )
+        agreement = Agreement.objects.create(
+            member=member,
+            state=Agreement.State.SIGNED,
+            generated_at="2026-05-01T00:00:00Z",
+            signed_at="2026-05-02T00:00:00Z",
+            billing_plan=current_plan,
+            first_billing_month="2026-09",
+        )
+        next_plan = MembershipPlan.objects.create(
+            name="Sezona 2027/2028",
+            season="2027/2028",
+            annual_amount=Decimal("320.00"),
+            is_active=True,
+        )
+
+        original_plan_id = agreement.billing_plan_id
+        record = renew_member_billing(
+            member, next_plan, first_billing_month="2027-09", actor=None
+        )
+
+        assert record is not None
+        assert record.status == BillingRecord.Status.DRAFT
+        assert record.agreement_id == agreement.pk
+        assert record.plan_id == next_plan.pk
+        assert record.season == next_plan.season
+        assert record.first_billing_month == "2027-09"
+
+        agreement.refresh_from_db()
+        assert agreement.state == Agreement.State.SIGNED
+        assert agreement.billing_plan_id == original_plan_id
 
 
 # ── A4: derive_first_billing_month — on cutoff day → current month ──────

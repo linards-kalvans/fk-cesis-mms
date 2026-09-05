@@ -58,6 +58,10 @@ class AuditEvent(models.Model):
             "billing_record_reassigned",
             "Billing record reassigned",
         )
+        BILLING_RECORD_RECREATED = (
+            "billing_record_recreated",
+            "Billing record recreated",
+        )
         BILLING_RECORD_AMOUNT_OVERRIDDEN = (
             "billing_record_amount_overridden",
             "Billing record amount overridden",

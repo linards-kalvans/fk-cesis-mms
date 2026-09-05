@@ -428,6 +428,21 @@ def create_draft_billing_for_member(member, agreement):
     """Idempotently create a draft BillingRecord for the season of the plan
     the member is on.
 
+    Public wrapper around ``_create_draft_billing_for_member``; returns the
+    record (existing or new), or None when no plan can be resolved. Never
+    raises on missing config — signing must not break.
+    """
+    record, _created = _create_draft_billing_for_member(member, agreement)
+    return record
+
+
+def _create_draft_billing_for_member(member, agreement):
+    """Shared creation path: returns ``(record, created)`` where ``created``
+    is True only when this call actually created the row (False when an
+    existing record for the season was returned). All callers that need to
+    distinguish creation (e.g. the recreate service's audit) use this tuple;
+    the public ``create_draft_billing_for_member`` contract is preserved.
+
     P14 — fixed tier engine + guardian-row lock:
       - tier rank is computed under ``Guardian.select_for_update()`` so
         concurrent sibling signings cannot claim the same rank;
@@ -454,9 +469,6 @@ def create_draft_billing_for_member(member, agreement):
     Legacy fallback: ``agreement=None`` is intentionally full-price (rank 0)
     even when the member happens to have signed agreements, preserving the
     pre-P14 backfill/signal behaviour for that calling pattern.
-
-    Returns the record (existing or new), or None when no plan can be resolved.
-    Never raises on missing config — signing must not break.
     """
     from apps.billing.models import BillingRecord, MembershipPlan
     from apps.members.models import Guardian
@@ -472,7 +484,7 @@ def create_draft_billing_for_member(member, agreement):
         logger.warning(
             "No active MembershipPlan; skipping billing draft for member %s", member.pk
         )
-        return None
+        return None, False
 
     with transaction.atomic():
         if member.guardian_id is not None:
@@ -480,7 +492,7 @@ def create_draft_billing_for_member(member, agreement):
 
         existing = BillingRecord.objects.filter(member=member, season=plan.season).first()
         if existing is not None:
-            return existing
+            return existing, False
 
         scheduled_count: int | None = None
         if agreement is None:
@@ -534,7 +546,7 @@ def create_draft_billing_for_member(member, agreement):
         if application is not None and application.preferred_payment_mode:
             payment_mode = application.preferred_payment_mode
 
-        return BillingRecord.objects.create(
+        record = BillingRecord.objects.create(
             member=member,
             plan=plan,
             agreement=agreement,
@@ -549,6 +561,7 @@ def create_draft_billing_for_member(member, agreement):
             first_billing_month=first_billing_month,
             scheduled_installment_count=scheduled_count,
         )
+        return record, True
 
 
 def recompute_billing_record(record) -> None:
@@ -727,6 +740,71 @@ def renew_member_billing(
             "plan_id": plan.pk,
             "season": plan.season,
             "first_billing_month": first_billing_month,
+        },
+    )
+    return record
+
+
+def recreate_missing_billing_record(
+    member,
+    agreement,
+    *,
+    external_invoice_confirmed_absent: bool,
+    actor=None,
+):
+    """Recreate a missing current-season BillingRecord from its signed
+    agreement, after staff explicitly confirms no matching Invoice Ninja
+    invoice exists.
+
+    Guards (all raise ``ValueError`` before any write):
+      - ``external_invoice_confirmed_absent`` must be True (the checkbox is
+        the staff confirmation; there is NO Invoice Ninja lookup here);
+      - the agreement must be signed and belong to the member;
+      - the agreement must carry a billing plan;
+      - no record for the agreement plan's season may already exist.
+
+    On success the record is created through the exact existing draft
+    calculation + guardian-row lock (``_create_draft_billing_for_member``)
+    and linked to the same agreement, with the agreement's plan + first
+    billing month snapshotted. Exactly one redacted AuditEvent
+    ``billing_record_recreated`` (metadata: plan_id + season) is emitted on
+    real creation only — a concurrent caller that finds the row already
+    created never audits a record this request did not create.
+    """
+    from apps.agreements.models import Agreement
+    from apps.billing.models import BillingRecord
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+
+    if not external_invoice_confirmed_absent:
+        raise ValueError("external invoice confirmation required")
+    if (
+        agreement is None
+        or agreement.state != Agreement.State.SIGNED
+        or agreement.member_id != member.pk
+    ):
+        raise ValueError("signed agreement required")
+    if agreement.billing_plan_id is None:
+        raise ValueError("billing plan required")
+    if BillingRecord.objects.filter(
+        member=member, season=agreement.billing_plan.season
+    ).exists():
+        raise ValueError("billing record already exists for season")
+
+    with transaction.atomic():
+        record, created = _create_draft_billing_for_member(member, agreement)
+        if record is None:
+            raise ValueError("no billing plan could be resolved")
+        if not created:
+            raise ValueError("billing record already exists for season")
+
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_RECORD_RECREATED),
+        actor=actor,
+        target=record,
+        metadata={
+            "plan_id": agreement.billing_plan_id,
+            "season": agreement.billing_plan.season,
         },
     )
     return record

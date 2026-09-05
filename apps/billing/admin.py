@@ -26,6 +26,9 @@ from apps.core.models import AuditEvent
 
 @admin.register(MembershipPlan)
 class MembershipPlanAdmin(admin.ModelAdmin):
+    # external_product_id is an integration cache consumed by the Invoice
+    # Ninja push job — never staff-editable in the admin form.
+    exclude = ("external_product_id",)
     list_display = (
         "name", "season", "annual_amount",
         "installment_count", "first_installment_month", "payment_due_day",
@@ -168,6 +171,12 @@ class BillingRecordAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Billing records are created by the billing service, never hand-added in
         # admin (all fields are readonly; the add form would crash on obj.member).
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Billing records are immutable billing history: direct deletion is
+        # unavailable (object delete URL 403s, changelist bulk-delete action
+        # disappears) for every user, superuser included.
         return False
 
     def get_queryset(self, request):

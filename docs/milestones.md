@@ -327,7 +327,9 @@ Open items requiring attention:
 - DocuSeal / manual-signing states remain understandable after lifecycle changes
 
 ### P9 — Billing plan lifecycle
-**Status:** complete (2026-07-03) — `Agreement` owns explicit `billing_plan` + `first_billing_month`; `MembershipPlan.is_default` + `billing_start_cutoff_day` with single-default DB constraint and `default-is-active` validation; preselected default plan + derived first-billing-month at `create_agreement_for_member`; `mark_agreement_signed` refuses to mutate state without a billing plan; `set_billing_setup` admin action; selected-member `renew_member_billing` action; draft-only `reassign_draft_billing_record` action (blocks confirmed/sent invoices). Three new `AuditEvent` choices: `BILLING_PLAN_ASSIGNED`, `BILLING_RECORD_RENEWED`, `BILLING_RECORD_REASSIGNED`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-02-p9-billing-plan-lifecycle*`. Gate: 1565 passed, ruff + mypy clean, no migrations.
+**Status:** complete (2026-07-03) — `Agreement` owns explicit `billing_plan` + `first_billing_month`; `MembershipPlan.is_default` + `billing_start_cutoff_day` with single-default DB constraint and `default-is-active` validation; preselected default plan + derived first-billing-month at `create_agreement_for_member`; `mark_agreement_signed` refuses to mutate state without a billing plan; `set_billing_setup` admin action; selected-member `renew_member_billing` action; draft-only `reassign_draft_billing_record` action (blocks confirmed/sent invoices). Four new `AuditEvent` choices: `BILLING_PLAN_ASSIGNED`, `BILLING_RECORD_RENEWED`, `BILLING_RECORD_RECREATED`, `BILLING_RECORD_REASSIGNED`, `BILLING_RECORD_AMOUNT_OVERRIDDEN`. Spec/plan: `docs/superpowers/{specs,plans}/2026-07-02-p9-billing-plan-lifecycle*`. Gate: 1565 passed, ruff + mypy clean, no migrations.
+
+**P9 extensions (2026-09-05):** `MembershipPlan.is_default` now supports atomic default-plan replacement (old default becomes non-default, new default activates in one transaction). `MembershipPlan.external_product_id` remains integration-owned and hidden from `MembershipPlan` staff add/change forms. Signed applications create a next-season individual draft `BillingRecord` under the same agreement. Direct `BillingRecord` deletion blocked at admin level; staff-confirmed current-season recreation uses no Invoice Ninja lookup and emits redacted audit events. Bulk renewal remains out of scope.
 
 **Why ninth**
 - extends delivered billing instead of changing the signed-agreement trigger ad hoc
@@ -1185,6 +1187,7 @@ Planned / blocked extension:
 - P16-B eParaksts verification is Blocked pending test credentials.
 
 ### M4 — Billing completion
+- Membership-plan lifecycle fixes (delivered 2026-09-05): default-plan atomic handover (`MembershipPlan.save` clears the prior default in one transaction; `clean()` still refuses inactive defaults), Invoice Ninja product IDs hidden from plan admin forms, individual signed-application next-season records (one DRAFT BillingRecord under the same signed agreement, distinct season + staff-chosen first billing month), staff-confirmed current-season recreate (explicit `external_invoice_confirmed_absent`; no Invoice Ninja lookup; redacted `billing_record_recreated` audit), and BillingRecord admin deletion disabled. Bulk renewal, Invoice Ninja lookup, invoice cancellation/credit, and signed-history mutation remain out of scope.
 - P15 LAN signoff (calendar-year partial billing, dev complete, LAN pending)
 - P19 custom one-off invoices (planned)
 

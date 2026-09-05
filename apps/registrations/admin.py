@@ -32,7 +32,12 @@ from apps.agreements.services import (
     void_agreement,
 )
 from apps.billing.models import MembershipPlan
-from apps.billing.services import DiscontinuationInvoiceError, PaidInvoiceSelected
+from apps.billing.services import (
+    DiscontinuationInvoiceError,
+    PaidInvoiceSelected,
+    recreate_missing_billing_record,
+    renew_member_billing,
+)
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
@@ -42,6 +47,7 @@ from apps.integrations.tasks import (
     enqueue_sync_agreement_submission,
 )
 from apps.members.models import TrainingGroup
+from apps.members.models import Member
 from apps.members.services import assign_training_group
 from apps.registrations.exports import application_columns, application_row
 from apps.registrations.models import (
@@ -572,7 +578,116 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 return self._change_redirect(object_id)
             return self._change_redirect(object_id)
 
+        elif action == "create_next_season_billing":
+            if not self._signed_active_agreement(request, application, agreement):
+                return self._change_redirect(object_id)
+            if agreement.billing_plan_id is None:
+                self.message_user(
+                    request, "Līgumam nav norēķinu plāna.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            raw_plan = request.POST.get("billing_plan", "").strip()
+            if not raw_plan:
+                self.message_user(
+                    request, "Lūdzu izvēlieties norēķinu plānu.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            try:
+                plan = MembershipPlan.objects.filter(
+                    pk=int(raw_plan), is_active=True
+                ).first()
+            except (ValueError, TypeError):
+                plan = None
+            if plan is None:
+                self.message_user(
+                    request, "Nezināms norēķinu plāns.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            if plan.season == agreement.billing_plan.season:
+                self.message_user(
+                    request,
+                    "Nākamās sezonas plānam jāatšķiras no līguma sezonas.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
+            first_billing_month = request.POST.get("first_billing_month", "").strip()
+            if not first_billing_month:
+                self.message_user(
+                    request, "Pirmais rēķina mēnesis ir obligāts.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            try:
+                record = renew_member_billing(
+                    application.approved_member,
+                    plan,
+                    first_billing_month=first_billing_month,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                raw = str(exc)
+                if "first billing month must use YYYY-MM" in raw:
+                    latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._change_redirect(object_id)
+            if record is None:
+                self.message_user(
+                    request,
+                    "Norēķinu ieraksts šai sezonai jau eksistē.",
+                    level=messages.INFO,
+                )
+                return self._change_redirect(object_id)
+            self.message_user(request, "Izveidots nākamās sezonas norēķinu ieraksts.")
+            return self._change_redirect(object_id)
+
+        elif action == "recreate_current_billing":
+            if not self._signed_active_agreement(request, application, agreement):
+                return self._change_redirect(object_id)
+            confirmed = bool(request.POST.get("external_invoice_confirmed_absent"))
+            try:
+                recreate_missing_billing_record(
+                    application.approved_member,
+                    agreement,
+                    external_invoice_confirmed_absent=confirmed,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                raw = str(exc)
+                if "confirmation" in raw:
+                    latvian = (
+                        "Jāapstiprina, ka Invoice Ninja nav atbilstoša rēķina."
+                    )
+                elif raw == "billing record already exists for season":
+                    latvian = "Norēķinu ieraksts šai sezonai jau eksistē."
+                elif raw == "billing plan required":
+                    latvian = "Līgumam nav norēķinu plāna."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._change_redirect(object_id)
+            self.message_user(request, "Atjaunots trūkstošais norēķinu ieraksts.")
+            return self._change_redirect(object_id)
+
         return self._change_redirect(object_id)
+
+    def _signed_active_agreement(self, request, application, agreement) -> bool:
+        """Shared guard for the signed-only billing actions: an approved
+        member with a current SIGNED agreement and an active (not
+        discontinued) status. Messages + redirects on failure."""
+        if (
+            application.approved_member_id is None
+            or agreement is None
+            or agreement.state != Agreement.State.SIGNED
+            or application.approved_member.status != Member.Status.ACTIVE
+        ):
+            self.message_user(
+                request,
+                "Darbība pieejama tikai parakstītam līgumam ar aktīvu dalību.",
+                level=messages.ERROR,
+            )
+            return False
+        return True
 
     def approve_view(self, request, object_id):
         """Confirm-then-commit approval (port of the views.py approve branch)."""

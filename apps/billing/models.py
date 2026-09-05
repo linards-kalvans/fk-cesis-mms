@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 
 from apps.core.models import TimeStampedModel
@@ -87,14 +87,30 @@ class MembershipPlan(TimeStampedModel):
             raise ValidationError(
                 {"is_default": "Noklusējuma plānam jābūt aktīvam."}
             )
-        if self.is_default:
-            qs = MembershipPlan.objects.filter(is_default=True)
-            if self.pk:
-                qs = qs.exclude(pk=self.pk)
-            if qs.exists():
-                raise ValidationError(
-                    {"is_default": "Noklusējuma plāns jau ir izvēlēts."}
-                )
+
+    def save(self, *args, **kwargs):
+        """Persist the plan, atomically handing the default marker over.
+
+        Saving an active plan with ``is_default=True`` clears any other
+        default AND writes the new row inside one transaction, so a failed
+        save rolls the clearing back with it (the partial unique constraint
+        never fires on a legitimate replacement, and a failed handover never
+        leaves the system without a default). ``update_fields`` saves that
+        omit ``is_default`` never touch other defaults (the in-memory flag is
+        stale after a handover). An inactive ``is_default=True`` save skips
+        the handover so the DB CHECK constraint stays the only guard."""
+        update_fields = kwargs.get("update_fields")
+        if (
+            self.is_default
+            and self.is_active
+            and (update_fields is None or "is_default" in update_fields)
+        ):
+            with transaction.atomic():
+                type(self).objects.filter(is_default=True).exclude(
+                    pk=self.pk
+                ).update(is_default=False)
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return str(self.name)
