@@ -34,14 +34,14 @@
         </div>
         <div>
           <span class="cell-label">Statuss</span>
-          <span class="badge badge--submitted">{{ row.application.get_status_display }}</span>
+          <span class="badge {{ row.status_badge_class }}">{{ row.application.get_status_display }}</span>
           <div class="pipe__next">{{ row.application.submitted_at|date:"d.m.Y H:i"|default:"—" }}</div>
         </div>
         <div class="qdocs">
           <span class="cell-label">Dokumenti</span>
           <div class="docdots">
-            {% for kind, doc in row.documents.items %}
-              <span class="docdot{% if not doc %} docdot--missing{% endif %}">{{ kind|slice:":1"|upper }}</span>
+            {% for doc in row.documents %}
+              <span class="docdot{% if not doc.present %} docdot--missing{% endif %}" title="{{ doc.title }}">{{ doc.letter }}</span>
             {% endfor %}
           </div>
         </div>
@@ -71,4 +71,26 @@
       </div></div>
     {% endfor %}
   </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pager">
+      {% if page_obj.has_previous %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.previous_page_number }}">‹</a>
+      {% else %}
+        <span>‹</span>
+      {% endif %}
+      {% for page_num in page_obj.paginator.page_range %}
+        {% if page_num == page_obj.number %}
+          <span class="is-active">{{ page_num }}</span>
+        {% else %}
+          <a href="?tab={{ tab }}&amp;page={{ page_num }}">{{ page_num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.next_page_number }}">›</a>
+      {% else %}
+        <span>›</span>
+      {% endif %}
+    </div>
+  {% endif %}
 {% endblock %}
