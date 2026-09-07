@@ -1119,6 +1119,76 @@ git commit -m "feat(admin-hub): add hub shell and application queue page"
 ```
 
 ---
+### Task 3 amendments after review (2026-09-07)
+
+Task 3's review found four Important defects **in this plan's own Step 3 and
+Step 8 code**, plus three Minors. All were ruled on and fixed in commits
+`59ea833` and the round-2 follow-up. The code blocks above are superseded on
+these five points — the shipped implementation in `apps/admin_hub/queries.py`,
+`apps/admin_hub/views.py` and `templates/admin_hub/queue.html` is authoritative.
+
+1. **Status badge was hardcoded.** `queue.html` rendered
+   `class="badge badge--submitted"` on every row, so a rejected application
+   showed in "submitted" green. Fixed with a `STATUS_BADGE_CLASSES` map in
+   `queries.py` (business logic stays out of templates), surfaced as
+   `QueueRow.status_badge_class` with a `badge--neutral` fallback.
+
+2. **Document dots collided.** The dot letter came from the internal
+   `Document.Kind` value, giving `G`/`M`/`M` — two indistinguishable dots — and
+   the mock-up's `title` tooltip was dropped. Fixed with an explicit
+   `DOC_KIND_BADGES` map to `V` (Vecāka ID) / `B` (Bērna ID) / `P` (Portrets);
+   `QueueRow.documents` is now a `list[dict]` of `{letter, title, present}` in a
+   fixed guardian/member/portrait order.
+
+3. **Two tabs were not disjoint, and one was misnamed.** "Procesā" and
+   "Pabeigti" were both `status=APPROVED`; the extra `approved_member__isnull=False`
+   is satisfied by every approved row, so they overlapped almost entirely. The
+   split is now on current-agreement-signed state, and the second tab is
+   **renamed `pabeigti`/"Pabeigti" → `parakstiti`/"Parakstīti"** — a signed
+   agreement still has invoice and next-season steps outstanding, so calling that
+   bucket "completed" would be false. This deliberately overrides the label in
+   `style-guide/admin/01-pieteikumu-rinda.html`.
+
+   Both tabs are built from **one shared subquery** of signed-member ids, so they
+   are exact complements by construction:
+
+   ```python
+   signed_members = Agreement.objects.filter(
+       is_current=True, state=Agreement.State.SIGNED
+   ).values("member_id")
+   ```
+
+   A two-field `exclude()` must NOT be used here. Django compiles a multi-valued
+   `exclude()` into `NOT (EXISTS(cond1) AND EXISTS(cond2))` as two *independent*
+   subqueries, so `is_current` and `state=SIGNED` would not have to hold on the
+   same `Agreement` row — a member with a current unsigned agreement plus a
+   historical `is_current=False, state=SIGNED` row would vanish from both tabs.
+   Round 1 shipped that bug; round 2 fixed it and added a regression test.
+
+4. **Real N+1 with no pagination.** `queue_rows` cost one
+   `active_documents_by_kind` plus up to ~3 `load_pipeline_objects` queries per
+   row, and this plan's `queue.html` dropped the `.pager` block the mock-up
+   actually has — so the archival tabs would query every historical row forever.
+   Fixed with `Paginator` at `PAGE_SIZE = 25`: `queue_rows(tab)` is replaced by
+   `queue_page(tab, page_number) -> (rows, page_obj)`, which paginates the
+   **queryset before building rows** so only the current page's rows are built.
+   An invalid or out-of-range `?page=` falls back to page 1 rather than raising.
+   `tab_counts()`'s six `.count()` queries are left as they are — cheap, and
+   they do not scale with row count.
+
+5. **`hub_section` was missing** from `queue_view`'s context, leaving
+   `base_hub.html`'s own documented nav contract unfulfilled. Now set to
+   `"queue"`.
+
+**Test-quality note for later tasks.** Three separate reviewers found tests in
+this plan that asserted nothing meaningful — a `"" not in body` comparison that
+can never pass, a name/assertion mismatch, and an unused import that failed the
+ruff gate. When implementing Tasks 4-8, treat the test code in the brief with the
+same skepticism as the implementation code: if a test would pass against a broken
+implementation, say so rather than shipping it.
+
+---
+
 ### Task 4: Field readout for the review cockpit
 
 The right-hand pane of the cockpit. Pure data assembly, no rendering — so every provenance and default-checked rule is unit-testable.
