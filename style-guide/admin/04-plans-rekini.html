@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FK Cēsis Admin — Maksas plāns un rēķini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="../../static/img/fk-cesis-logo.png" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija</div>
+      </div>
+    </div>
+    <nav class="hub-nav">
+      <a href="01-pieteikumu-rinda.html" class="is-active">Pieteikumi <span class="nav-count">7</span></a>
+      <a href="05-rekini-neapmaksatie.html">Rēķini <span class="nav-count">12</span></a>
+      <a href="#">Biedri</a>
+      <a href="#">Līgumi</a>
+      <a href="#">Plāni</a>
+      <a href="#">Atskaites</a>
+    </nav>
+    <div class="hub-header__right">
+      <div class="hub-search"><span>🔍</span><input type="text" placeholder="Meklēt biedru, vecāku, personas kodu…"></div>
+      <div class="user-pill"><span class="user-avatar">LK</span><span>Linards K.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="steprail">
+  <div class="steprail__inner">
+    <a class="step step--done"><span class="step__num">✓</span><span class="step__txt"><span class="step__name">Datu pārbaude</span><span class="step__meta">11/11</span></span></a>
+    <a class="step step--done"><span class="step__num">✓</span><span class="step__txt"><span class="step__name">Apstiprināšana</span><span class="step__meta">30.08.</span></span></a>
+    <a class="step step--done"><span class="step__num">✓</span><span class="step__txt"><span class="step__name">Līgums</span><span class="step__meta">nosūtīts</span></span></a>
+    <a class="step step--done"><span class="step__num">✓</span><span class="step__txt"><span class="step__name">Izsniegts</span><span class="step__meta">30.08.</span></span></a>
+    <a class="step step--done" href="03-ligums.html"><span class="step__num">✓</span><span class="step__txt"><span class="step__name">Parakstītais</span><span class="step__meta">03.09.</span></span></a>
+    <a class="step step--current"><span class="step__num">6</span><span class="step__txt"><span class="step__name">Maksas plāns</span><span class="step__meta">notiek</span></span></a>
+    <a class="step"><span class="step__num">7</span><span class="step__txt"><span class="step__name">Rēķini</span><span class="step__meta">jāizraksta</span></span></a>
+    <a class="step step--locked"><span class="step__num">8</span><span class="step__txt"><span class="step__name">Nākamā sezona</span><span class="step__meta">no 05/2027</span></span></a>
+  </div>
+</div>
+
+<main class="hub-page hub-page--flush">
+
+  <div class="crumbs">
+    <a href="01-pieteikumu-rinda.html">← Pieteikumu rinda</a><span>/</span>
+    <a href="03-ligums.html">Gustavs Siliņš</a><span>/</span><span>Maksas plāns un rēķini</span>
+  </div>
+
+  <div class="page-head" style="margin-bottom:16px">
+    <div>
+      <h1 class="page-title">Gustavs Siliņš · Maksājumi</h1>
+      <p class="page-sub">Līgums <strong>FKC-2026-0104</strong> · parakstīts 03.09.2026 · sezona <strong>2026/2027</strong></p>
+    </div>
+    <div class="row">
+      <span class="badge badge--submitted"><span class="badge__dot"></span> Parakstīts</span>
+      <button class="kebab">⋯</button>
+    </div>
+  </div>
+
+  <div class="split-side">
+    <div class="stack">
+
+      <!-- STEP 6 -->
+      <section class="card">
+        <div class="card__head">
+          <span class="card__step">6</span>
+          <h2 class="anton">Maksas plāns</h2>
+          <span class="badge badge--sm badge--fix" style="margin-left:auto">Nav apstiprināts</span>
+        </div>
+        <div class="card__body stack">
+          <div class="form-grid form-grid--3">
+            <div class="f f--full">
+              <label for="plan">Plāns</label>
+              <select id="plan">
+                <option>Sezona 2026/2027 — 300,00 € gadā, 10 daļas (noklusējums)</option>
+                <option>Sezona 2026/2027 — atbalstītāju plāns, 420,00 €</option>
+                <option>Sezona 2026/2027 — pusaudžu grupa, 260,00 €</option>
+              </select>
+              <span class="f-hint">Summas tiek fiksētas ierakstā — vēlākas plāna izmaiņas neietekmē jau izveidotos rēķinus.</span>
+            </div>
+            <div class="f">
+              <label for="fm">Pirmais rēķina mēnesis</label>
+              <input id="fm" type="month" value="2026-09">
+            </div>
+            <div class="f">
+              <label>Maksājuma veids</label>
+              <div class="seg">
+                <button class="is-active">Pa daļām</button>
+                <button>Vienā maksājumā</button>
+              </div>
+            </div>
+            <div class="f">
+              <label for="due">Maksājuma termiņa diena</label>
+              <input id="due" type="number" value="20" min="1" max="31">
+            </div>
+          </div>
+
+          <div>
+            <div class="switchrow">
+              <div class="switchrow__txt">
+                <strong>Vairāku bērnu atlaide</strong>
+                <span>Ģimenē 1 aktīvs biedrs — atlaide nav piemērojama</span>
+              </div>
+              <button class="switch" aria-label="Atlaide"></button>
+            </div>
+            <div class="switchrow">
+              <div class="switchrow__txt">
+                <strong>Pilna cena (atteikšanās no atlaides)</strong>
+                <span>Vecāks pieteikumā izvēlējās atbalstīt klubu</span>
+              </div>
+              <button class="switch is-on" aria-label="Pilna cena"></button>
+            </div>
+            <div class="switchrow">
+              <div class="switchrow__txt">
+                <strong>Manuāla summas korekcija</strong>
+                <span>Aizstāj aprēķināto gada summu · nepieciešams pamatojums</span>
+              </div>
+              <button class="switch" aria-label="Korekcija"></button>
+            </div>
+          </div>
+
+          <div>
+            <div class="row" style="justify-content:space-between;margin-bottom:10px">
+              <strong style="color:var(--fk-blue)">Aprēķinātais grafiks</strong>
+              <span class="muted" style="font-weight:600">10 daļas · izlaistie mēneši 7, 12</span>
+            </div>
+            <div class="sched">
+              <div class="schedrow"><span class="schedrow__seq">1</span><span>Septembris 2026</span><span class="muted">termiņš 20.09.2026</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">2</span><span>Oktobris 2026</span><span class="muted">termiņš 20.10.2026</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">3</span><span>Novembris 2026</span><span class="muted">termiņš 20.11.2026</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow schedrow--skip"><span class="schedrow__seq">—</span><span>Decembris 2026</span><span>izlaists mēnesis</span><span class="schedrow__amt">—</span></div>
+              <div class="schedrow"><span class="schedrow__seq">4</span><span>Janvāris 2027</span><span class="muted">termiņš 20.01.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">5</span><span>Februāris 2027</span><span class="muted">termiņš 20.02.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">6</span><span>Marts 2027</span><span class="muted">termiņš 20.03.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">7</span><span>Aprīlis 2027</span><span class="muted">termiņš 20.04.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">8</span><span>Maijs 2027</span><span class="muted">termiņš 20.05.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">9</span><span>Jūnijs 2027</span><span class="muted">termiņš 20.06.2027</span><span class="schedrow__amt">30,00 €</span></div>
+              <div class="schedrow schedrow--skip"><span class="schedrow__seq">—</span><span>Jūlijs 2027</span><span>izlaists mēnesis</span><span class="schedrow__amt">—</span></div>
+              <div class="schedrow"><span class="schedrow__seq">10</span><span>Augusts 2027</span><span class="muted">termiņš 20.08.2027</span><span class="schedrow__amt">30,00 €</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Kopā <strong style="color:var(--fk-blue);font-size:1.05rem">300,00 €</strong> · bāze 300,00 € · atlaide 0,00 €</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-secondary">↻ Pārrēķināt no plāna</button>
+          <button class="btn btn-primary">Saglabāt un apstiprināt plānu →</button>
+        </div>
+      </section>
+
+      <!-- STEP 7 -->
+      <section class="card">
+        <div class="card__head">
+          <span class="card__step">7</span>
+          <h2 class="anton">Rēķini</h2>
+          <span class="badge badge--sm badge--neutral" style="margin-left:auto">Invoice Ninja</span>
+        </div>
+        <div class="card__body">
+          <div class="callout callout--warn" style="margin-bottom:16px">
+            <span class="callout__icon">⚠</span>
+            <span>Rēķini vēl nav izrakstīti. Vienā reizē apstrādā ne vairāk par 50 ierakstiem — pārējie paliek rindā nākamajai izpildei.</span>
+          </div>
+          <div class="tablewrap">
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th style="width:44px">#</th><th>Periods</th><th>Termiņš</th>
+                  <th class="num">Summa</th><th class="num">Apmaksāts</th><th class="num">Atlikums</th>
+                  <th>IN statuss</th><th>Maksājums</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="strong">1</td><td>09/2026</td><td>20.09.2026</td><td class="num">30,00 €</td><td class="num muted">—</td><td class="num">30,00 €</td><td><span class="badge badge--sm badge--neutral">Nav izrakstīts</span></td><td><span class="badge badge--sm badge--unpaid">Nav apmaksāts</span></td></tr>
+                <tr><td class="strong">2</td><td>10/2026</td><td>20.10.2026</td><td class="num">30,00 €</td><td class="num muted">—</td><td class="num">30,00 €</td><td><span class="badge badge--sm badge--neutral">Nav izrakstīts</span></td><td><span class="badge badge--sm badge--unpaid">Nav apmaksāts</span></td></tr>
+                <tr><td class="strong">3</td><td>11/2026</td><td>20.11.2026</td><td class="num">30,00 €</td><td class="num muted">—</td><td class="num">30,00 €</td><td><span class="badge badge--sm badge--neutral">Nav izrakstīts</span></td><td><span class="badge badge--sm badge--unpaid">Nav apmaksāts</span></td></tr>
+                <tr><td colspan="8" class="muted" style="text-align:center;font-weight:600">… vēl 7 daļas …</td></tr>
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Kopā 10 daļas</td><td class="num">300,00 €</td><td class="num">0,00 €</td><td class="num">300,00 €</td><td colspan="2"></td></tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Iepriekšējā sinhronizācija: nav</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-secondary">Pārbaudīt maksājumus</button>
+          <button class="btn btn-red">Izrakstīt rēķinus (10) →</button>
+        </div>
+      </section>
+
+      <!-- STEP 8 -->
+      <section class="card card--locked">
+        <div class="card__head card__head--locked">
+          <span class="card__step">8</span>
+          <h2 class="anton">Nākamā sezona</h2>
+          <span class="badge badge--sm badge--neutral" style="margin-left:auto">Pieejams no 01.05.2027</span>
+        </div>
+        <div class="card__body">
+          <div class="form-grid">
+            <div class="f">
+              <label for="ns">Sezonas plāns 2027/2028</label>
+              <select id="ns" disabled><option>Vēl nav izveidots plāns</option></select>
+            </div>
+            <div class="f">
+              <label for="nsm">Pirmais rēķina mēnesis</label>
+              <input id="nsm" type="month" value="2027-09" disabled>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:12px">Nākamās sezonas ieraksts pārmanto pašreizējā līguma atlaides un maksājuma veidu. Rēķini netiek izrakstīti automātiski.</p>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Solis 8 no 8</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-primary is-disabled">Izveidot nākamās sezonas ierakstu</button>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="sidecar">
+      <div class="minicard">
+        <h3 class="anton">Maksājumu kopsavilkums</h3>
+        <dl class="kv">
+          <dt>Sezona</dt><dd>2026/2027</dd>
+          <dt>Bāzes summa</dt><dd>300,00 €</dd>
+          <dt>Atlaide</dt><dd>0,00 €</dd>
+          <dt>Gala summa</dt><dd style="color:var(--fk-blue);font-size:1.05rem">300,00 €</dd>
+          <dt>Veids</dt><dd>Pa daļām (10)</dd>
+          <dt>Stāvoklis</dt><dd>Sagatavots</dd>
+        </dl>
+      </div>
+
+      <div class="minicard">
+        <h3 class="anton">Ģimene</h3>
+        <div class="row" style="gap:12px;margin-bottom:10px">
+          <span class="qavatar" style="width:46px;height:46px;font-size:0.95rem">GS</span>
+          <div>
+            <strong style="display:block;color:var(--fk-blue)">Gustavs Siliņš</strong>
+            <span class="muted" style="font-size:0.86rem">U-13 zēni · 13 g.</span>
+          </div>
+        </div>
+        <dl class="kv">
+          <dt>Vecāks</dt><dd>Māris Siliņš</dd>
+          <dt>Klienta ID</dt><dd>IN-1042</dd>
+          <dt>Aktīvie biedri</dt><dd>1</dd>
+        </dl>
+      </div>
+
+      <div class="minicard">
+        <h3 class="anton">Vēsture</h3>
+        <ul class="timeline">
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Apstiprināts</div><div class="tl__when">30.08.2026</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Līgums nosūtīts</div><div class="tl__when">30.08.2026</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Parakstīts · ieraksts izveidots</div><div class="tl__when">03.09.2026</div></div></li>
+          <li><span class="tl__dot tl__dot--now">6</span><div><div class="tl__txt">Jāapstiprina maksas plāns</div><div class="tl__when">kopš 03.09.2026</div></div></li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div class="actionbar">
+  <div class="actionbar__inner">
+    <span class="actionbar__note">Solis <strong>6 / 8</strong> · Maksas plāns</span>
+    <span class="actionbar__spacer"></span>
+    <button class="btn btn-secondary">← 5. Parakstītais</button>
+    <button class="btn btn-primary">Saglabāt plānu</button>
+    <button class="btn btn-red">Saglabāt un izrakstīt rēķinus →</button>
+  </div>
+</div>
+
+</body>
+</html>

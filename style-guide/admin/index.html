@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FK Cēsis Admin — Maketi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="../../static/img/fk-cesis-logo.png" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija · maketi</div>
+      </div>
+    </div>
+    <nav class="hub-nav"></nav>
+    <div class="hub-header__right">
+      <div class="user-pill"><span class="user-avatar">LK</span><span>Linards K.</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="hub-page">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Administrācijas maketi</h1>
+      <p class="page-sub">Statiski HTML maketi. Dati ir izdomāti — nav reālu personas datu. Darbojas dokumenta pagriešana, tālummaiņa un lauku atzīmēšana.</p>
+    </div>
+  </div>
+
+  <div class="queue">
+    <a class="qrow qrow--new" href="01-pieteikumu-rinda.html" style="grid-template-columns:64px minmax(0,1fr) auto">
+      <span class="qavatar">1</span>
+      <div>
+        <h2 class="qname anton">Pieteikumu rinda</h2>
+        <div class="qmeta"><span>Jaunākie iesniegtie augšā · procesa josla katrā rindā · ātrās darbības</span></div>
+      </div>
+      <span class="btn btn-secondary">Atvērt →</span>
+    </a>
+
+    <a class="qrow qrow--aging" href="02-kabine-parbaude.html" style="grid-template-columns:64px minmax(0,1fr) auto">
+      <span class="qavatar">2</span>
+      <div>
+        <h2 class="qname anton">Izskatīšanas kabīne · 1.–2. solis</h2>
+        <div class="qmeta"><span>Dokuments pa kreisi (pagriešana, tālummaiņa) · lauki pa labi ar atzīmēšanu · apstiprināšana</span></div>
+      </div>
+      <span class="btn btn-secondary">Atvērt →</span>
+    </a>
+
+    <a class="qrow qrow--done" href="03-ligums.html" style="grid-template-columns:64px minmax(0,1fr) auto">
+      <span class="qavatar">3</span>
+      <div>
+        <h2 class="qname anton">Līgums · 3.–5. solis</h2>
+        <div class="qmeta"><span>Ģenerēšana un nosūtīšana · lejupielāde · parakstītā eksemplāra augšupielāde</span></div>
+      </div>
+      <span class="btn btn-secondary">Atvērt →</span>
+    </a>
+
+    <a class="qrow qrow--done" href="04-plans-rekini.html" style="grid-template-columns:64px minmax(0,1fr) auto">
+      <span class="qavatar">4</span>
+      <div>
+        <h2 class="qname anton">Maksas plāns un rēķini · 6.–8. solis</h2>
+        <div class="qmeta"><span>Plāns ar grafika priekšskatījumu · rēķinu izrakstīšana · nākamā sezona</span></div>
+      </div>
+      <span class="btn btn-secondary">Atvērt →</span>
+    </a>
+
+    <a class="qrow qrow--fix" href="05-rekini-neapmaksatie.html" style="grid-template-columns:64px minmax(0,1fr) auto">
+      <span class="qavatar">5</span>
+      <div>
+        <h2 class="qname anton">Neapmaksātie rēķini</h2>
+        <div class="qmeta"><span>Kavējumu skats · masveida darbības · sinhronizācijas kļūdas · kredītrēķini</span></div>
+      </div>
+      <span class="btn btn-secondary">Atvērt →</span>
+    </a>
+  </div>
+
+  <div class="callout" style="margin-top:22px">
+    <span class="callout__icon">🔒</span>
+    <span>Maketos redzamie vārdi, personas kodi un summas ir izdomāti. Reālus datus skati tikai sistēmā atbilstoši datu klasifikācijas politikai un VDAR prasībām.</span>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FK Cēsis Admin — Līgums</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="../../static/img/fk-cesis-logo.png" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija</div>
+      </div>
+    </div>
+    <nav class="hub-nav">
+      <a href="01-pieteikumu-rinda.html" class="is-active">Pieteikumi <span class="nav-count">7</span></a>
+      <a href="05-rekini-neapmaksatie.html">Rēķini <span class="nav-count">12</span></a>
+      <a href="#">Biedri</a>
+      <a href="#">Līgumi</a>
+      <a href="#">Plāni</a>
+      <a href="#">Atskaites</a>
+    </nav>
+    <div class="hub-header__right">
+      <div class="hub-search"><span>🔍</span><input type="text" placeholder="Meklēt biedru, vecāku, personas kodu…"></div>
+      <div class="user-pill"><span class="user-avatar">LK</span><span>Linards K.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="steprail">
+  <div class="steprail__inner">
+    <a class="step step--done" href="02-kabine-parbaude.html">
+      <span class="step__num">✓</span>
+      <span class="step__txt"><span class="step__name">Datu pārbaude</span><span class="step__meta">11/11 · 06.09.</span></span>
+    </a>
+    <a class="step step--done">
+      <span class="step__num">✓</span>
+      <span class="step__txt"><span class="step__name">Apstiprināšana</span><span class="step__meta">06.09. 14:02</span></span>
+    </a>
+    <a class="step step--done">
+      <span class="step__num">✓</span>
+      <span class="step__txt"><span class="step__name">Līgums</span><span class="step__meta">nosūtīts 06.09.</span></span>
+    </a>
+    <a class="step step--done">
+      <span class="step__num">✓</span>
+      <span class="step__txt"><span class="step__name">Izsniegts</span><span class="step__meta">06.09.</span></span>
+    </a>
+    <a class="step step--current">
+      <span class="step__num">5</span>
+      <span class="step__txt"><span class="step__name">Parakstītais</span><span class="step__meta">notiek</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">6</span>
+      <span class="step__txt"><span class="step__name">Maksas plāns</span><span class="step__meta">priekšatlasīts</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">7</span>
+      <span class="step__txt"><span class="step__name">Rēķini</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">8</span>
+      <span class="step__txt"><span class="step__name">Nākamā sezona</span><span class="step__meta">—</span></span>
+    </a>
+  </div>
+</div>
+
+<main class="hub-page hub-page--flush">
+
+  <div class="crumbs">
+    <a href="01-pieteikumu-rinda.html">← Pieteikumu rinda</a><span>/</span>
+    <a href="02-kabine-parbaude.html">Pieteikums #1281</a><span>/</span><span>Līgums</span>
+  </div>
+
+  <div class="page-head" style="margin-bottom:16px">
+    <div>
+      <h1 class="page-title">Marta Zariņa · Līgums</h1>
+      <p class="page-sub">Līgums <strong>FKC-2026-0117</strong> · U-11 meitenes · vecāks <strong>Elīna Zariņa</strong></p>
+    </div>
+    <div class="row">
+      <span class="badge badge--approved"><span class="badge__dot"></span> Nosūtīts parakstīšanai</span>
+      <button class="kebab">⋯</button>
+    </div>
+  </div>
+
+  <div class="split-side">
+
+    <div class="stack">
+
+      <!-- STEP 3 -->
+      <section class="card">
+        <div class="card__head card__head--done">
+          <span class="card__step">✓</span>
+          <h2 class="anton">Līguma sagatavošana</h2>
+          <span class="badge badge--sm badge--submitted" style="margin-left:auto">Nosūtīts 06.09.2026 14:07</span>
+        </div>
+        <div class="card__body">
+          <div class="form-grid form-grid--3">
+            <div class="f">
+              <label>Parakstīšanas veids</label>
+              <div class="seg">
+                <button class="is-active">Ar roku</button>
+                <button>Elektroniski</button>
+              </div>
+              <span class="f-hint">Vecāka izvēle pieteikumā: ar roku</span>
+            </div>
+            <div class="f">
+              <label for="p3plan">Maksas plāns līgumā</label>
+              <select id="p3plan"><option>Sezona 2026/2027 — 300,00 € (noklusējums)</option></select>
+              <span class="f-hint">Precizē 6. solī</span>
+            </div>
+            <div class="f">
+              <label for="p3month">Pirmais rēķina mēnesis</label>
+              <input id="p3month" type="month" value="2026-09">
+              <span class="f-hint">Atvasināts no apstiprināšanas datuma</span>
+            </div>
+          </div>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Ģenerēts 06.09.2026 14:05 · versija 1</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-secondary">↻ Ģenerēt atkārtoti</button>
+          <button class="btn btn-secondary is-disabled">Atzīmēt kā nosūtītu ✓</button>
+        </div>
+      </section>
+
+      <!-- STEP 4 -->
+      <section class="card">
+        <div class="card__head card__head--done">
+          <span class="card__step">✓</span>
+          <h2 class="anton">Lejupielāde un izsniegšana</h2>
+        </div>
+        <div class="card__body">
+          <div class="dltile">
+            <div class="dltile__icon">PDF</div>
+            <div class="dltile__txt">
+              <strong>FKC-2026-0117_Marta_Zarina.pdf</strong>
+              <span>214 KB · ģenerēts 06.09.2026 14:05 · izsniegts vecākam 06.09.2026</span>
+            </div>
+            <button class="btn btn-secondary">👁 Priekšskatīt</button>
+            <button class="btn btn-primary">⬇ Lejupielādēt</button>
+          </div>
+          <p class="hint" style="margin-top:14px">Sistēma šobrīd neveic elektronisko parakstīšanu. Izdrukā, izsniedz vecākam un augšupielādē parakstīto eksemplāru zemāk.</p>
+        </div>
+      </section>
+
+      <!-- STEP 5 -->
+      <section class="card">
+        <div class="card__head">
+          <span class="card__step">5</span>
+          <h2 class="anton">Parakstītais līgums</h2>
+          <span class="badge badge--sm badge--fix" style="margin-left:auto">Gaida augšupielādi</span>
+        </div>
+        <div class="card__body stack">
+          <div class="dropzone">
+            <div class="dropzone__icon">⬆</div>
+            <strong>Ievelc parakstīto līgumu šeit</strong>
+            <p class="hint" style="margin:6px 0 14px">PDF, JPG vai PNG · līdz 20 MB · glabājas privātajā krātuvē</p>
+            <button class="btn btn-primary">Izvēlēties failu</button>
+          </div>
+
+          <div>
+            <p class="hint" style="margin-bottom:8px"><strong>Augšupielādēts:</strong></p>
+            <div class="filecard">
+              <div class="filecard__icon">PDF</div>
+              <div class="filecard__txt">
+                <strong>marta-zarina-ligums-parakstits.pdf</strong>
+                <span>1,1 MB · augšupielādēts 07.09.2026 09:15 · Linards K.</span>
+              </div>
+              <button class="btn btn-secondary btn-sm">👁 Skatīt</button>
+              <button class="btn btn-secondary btn-sm">↻ Aizvietot</button>
+            </div>
+          </div>
+
+          <div class="callout">
+            <span class="callout__icon">ℹ</span>
+            <span>Atzīmējot kā parakstītu, tiek izveidots šīs sezonas maksājumu ieraksts pēc 6. solī norādītā plāna. Darbība ir atgriežama tikai ar līguma atcelšanu.</span>
+          </div>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Solis 5 no 8</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-red">Atzīmēt kā parakstītu →</button>
+        </div>
+      </section>
+
+      <details class="tray">
+        <summary>⚠ Riskantās darbības — atcelt, aizvietot, pārtraukt dalību</summary>
+        <div class="tray__body stack">
+          <div class="callout callout--warn">
+            <span class="callout__icon">⚠</span>
+            <span>Līguma atcelšana saglabā vēsturi, bet atsauc rēķinus ar kredītrēķinu. Būtiskie grozījumi izveido jaunu līguma versiju.</span>
+          </div>
+          <div class="f f--full">
+            <label for="void">Iemesls</label>
+            <textarea id="void" placeholder="Iemesls tiek saglabāts līguma vēsturē…"></textarea>
+          </div>
+          <div class="row">
+            <button class="btn btn-danger-outline">Atcelt līgumu</button>
+            <button class="btn btn-secondary">Nebūtisks grozījums</button>
+            <button class="btn btn-secondary">Būtisks grozījums (jauna versija)</button>
+            <button class="btn btn-danger-outline">Pārtraukt dalību</button>
+          </div>
+        </div>
+      </details>
+
+    </div>
+
+    <!-- sidecar -->
+    <aside class="sidecar">
+      <div class="minicard">
+        <h3 class="anton">Biedrs</h3>
+        <div class="row" style="gap:12px;margin-bottom:12px">
+          <span class="qavatar" style="width:46px;height:46px;font-size:0.95rem">MZ</span>
+          <div>
+            <strong style="display:block;color:var(--fk-blue)">Marta Zariņa</strong>
+            <span class="muted" style="font-size:0.86rem">Dz. 09.05.2015 · 10 g.</span>
+          </div>
+        </div>
+        <dl class="kv">
+          <dt>Grupa</dt><dd>U-11 meitenes</dd>
+          <dt>Statuss</dt><dd>Aktīvs</dd>
+          <dt>Vecāks</dt><dd>Elīna Zariņa</dd>
+          <dt>Bērni ģimenē</dt><dd>1</dd>
+        </dl>
+      </div>
+
+      <div class="minicard">
+        <h3 class="anton">Līguma dati</h3>
+        <dl class="kv">
+          <dt>Numurs</dt><dd>FKC-2026-0117</dd>
+          <dt>Stāvoklis</dt><dd>Nosūtīts</dd>
+          <dt>Veids</dt><dd>Papīra</dd>
+          <dt>Ģenerēts</dt><dd>06.09.2026</dd>
+          <dt>Nosūtīts</dt><dd>06.09.2026</dd>
+          <dt>Parakstīts</dt><dd class="muted">—</dd>
+        </dl>
+      </div>
+
+      <div class="minicard">
+        <h3 class="anton">Vēsture</h3>
+        <ul class="timeline">
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Pieteikums iesniegts</div><div class="tl__when">05.09.2026 19:22</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Dati pārbaudīti (11/11)</div><div class="tl__when">06.09.2026 13:58 · Linards K.</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Apstiprināts · biedrs izveidots</div><div class="tl__when">06.09.2026 14:02</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Līgums ģenerēts</div><div class="tl__when">06.09.2026 14:05</div></div></li>
+          <li><span class="tl__dot tl__dot--done">✓</span><div><div class="tl__txt">Atzīmēts kā nosūtīts</div><div class="tl__when">06.09.2026 14:07</div></div></li>
+          <li><span class="tl__dot tl__dot--now">5</span><div><div class="tl__txt">Gaida parakstīto eksemplāru</div><div class="tl__when">kopš 06.09.2026</div></div></li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<div class="actionbar">
+  <div class="actionbar__inner">
+    <span class="actionbar__note">Solis <strong>5 / 8</strong> · Parakstītais līgums</span>
+    <span class="actionbar__spacer"></span>
+    <button class="btn btn-secondary">← 4. Lejupielāde</button>
+    <button class="btn btn-red">Atzīmēt kā parakstītu →</button>
+  </div>
+</div>
+
+</body>
+</html>
