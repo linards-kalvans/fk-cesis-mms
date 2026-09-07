@@ -62,7 +62,6 @@ from __future__ import annotations
 import pytest
 
 from apps.members import family_hub, lanes
-from apps.registrations.models import RegistrationApplication
 
 pytestmark = pytest.mark.django_db
 
