@@ -97,9 +97,21 @@ def test_review_hint_gets_the_attention_tone(submitted_application):
     assert fields["guardian_phone"].source_tone == "flag"
 
 
-def test_no_label_ever_claims_the_parent_edited_a_value():
-    """field_sources cannot express an edit - see the module docstring."""
-    for label in STAFF_SOURCE_LABELS.values():
+def test_no_label_ever_claims_the_parent_edited_a_value(submitted_application):
+    """field_sources cannot express an edit - see the module docstring.
+
+    Covers every staff-facing string the module can emit: the
+    STAFF_SOURCE_LABELS mapping itself, plus every source_label and note
+    actually produced for a real application (this also catches strings
+    like guardian_email's "Sistēma apstiprinājusi", which are set inline
+    and never appear in STAFF_SOURCE_LABELS).
+    """
+    emitted = list(STAFF_SOURCE_LABELS.values())
+    for group in build_field_groups(submitted_application):
+        for hub_field in group.fields:
+            emitted.append(hub_field.source_label)
+            emitted.append(hub_field.note)
+    for label in emitted:
         assert "labo" not in label.lower(), f"{label!r} implies an edit"
 
 
@@ -111,7 +123,7 @@ def test_unknown_source_value_degrades_quietly(submitted_application):
     assert fields["member_full_name"].source_tone == ""
 
 
-def test_empty_value_renders_as_a_dash_not_none(submitted_application):
+def test_empty_referral_code_is_blank_and_not_checkable(submitted_application):
     submitted_application.referral_code = ""
     submitted_application.save(update_fields=["referral_code"])
     fields = _flat(build_field_groups(submitted_application))

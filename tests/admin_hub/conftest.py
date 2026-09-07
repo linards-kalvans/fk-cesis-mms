@@ -6,6 +6,7 @@ automatically visible outside that directory.
 
 from __future__ import annotations
 
+import datetime
 from decimal import Decimal
 
 import pytest
@@ -67,7 +68,11 @@ def submit_payload(kit_sizes, parent_account):
         "guardian_declared_address": "Riga, Brivibas 1",
         "member_full_name": "Hub Test Child",
         "member_personal_id": "010125-67890",
-        "member_birth_date": "2025-01-01",
+        # A real date, not an ISO string: create_or_update_draft assigns this
+        # straight to the model's DateField with no form-cleaning step (that
+        # only happens when the real view calls it with form.cleaned_data),
+        # so a str here would leave `member_birth_date` a str in-memory too.
+        "member_birth_date": datetime.date(2025, 1, 1),
         "member_same_address_as_guardian": True,
         "member_kit_size_shirt": shirt_pk,
         "preferred_agreement_signing": "paper",

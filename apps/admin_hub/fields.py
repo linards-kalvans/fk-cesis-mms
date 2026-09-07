@@ -15,7 +15,6 @@ stored value can mean "the parent edited this".
 
 from __future__ import annotations
 
-import datetime
 from dataclasses import dataclass
 
 from apps.members.lanes import canonical_kit_size_label
@@ -56,22 +55,8 @@ class HubFieldGroup:
     fields: list[HubField]
 
 
-def _fmt_date(value: datetime.date | str | None) -> str:
-    # `member_birth_date` may still be a raw ISO string here: the write path
-    # (create_or_update_draft) assigns whatever it is given without coercing
-    # through a form's DateField, so callers that bypass the form (as some
-    # fixtures and services do) can leave a str in place of a date.
-    if not value:
-        return ""
-    parsed: datetime.date
-    if isinstance(value, str):
-        try:
-            parsed = datetime.date.fromisoformat(value)
-        except ValueError:
-            return value
-    else:
-        parsed = value
-    return parsed.strftime("%d.%m.%Y")
+def _fmt_date(value) -> str:
+    return value.strftime("%d.%m.%Y") if value else ""
 
 
 def _fmt_datetime(value) -> str:
@@ -88,14 +73,13 @@ def build_field_groups(
         label: str,
         value: object,
         *,
-        source_key: str | None = None,
         note: str = "",
         checkable: bool = True,
         default_checked: bool = False,
         source_label: str | None = None,
         source_tone: str | None = None,
     ) -> HubField:
-        raw_source = sources.get(source_key if source_key else key, "")
+        raw_source = sources.get(key, "")
         return HubField(
             key=key,
             label=label,
