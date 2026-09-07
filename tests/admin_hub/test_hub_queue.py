@@ -170,3 +170,42 @@ def test_queue_procesa_and_parakstiti_tabs_are_disjoint(
 
     assert queries._tab_queryset("parakstiti").filter(pk=approved_application.pk).count() == 1
     assert queries._tab_queryset("procesa").filter(pk=approved_application.pk).count() == 0
+
+
+def test_queue_procesa_keeps_a_member_with_signed_agreement_history(
+    client, reviewer, approved_application
+):
+    """A member can carry a historical signed agreement (is_current=False)
+    alongside a current, still-unsigned one — e.g. a prior season. Only the
+    *current* agreement's signed state may move the application to
+    Parakstiti; the historical row must not leak across tabs.
+
+    Built directly via Agreement.objects.create(), not the service layer:
+    apps/agreements/services.py never actually produces this combination
+    today (every is_current transition moves state off SIGNED in the same
+    write), so a fixture or service call could not reach this state. The
+    query must be correct regardless of what the service layer currently
+    guarantees.
+    """
+    from django.utils import timezone
+
+    from apps.agreements.models import Agreement
+
+    Agreement.objects.create(
+        member=approved_application.approved_member,
+        is_current=False,
+        state=Agreement.State.SIGNED,
+        generated_at=timezone.now(),
+        signed_at=timezone.now(),
+    )
+
+    client.force_login(reviewer)
+    name = approved_application.member_full_name
+
+    procesa_body = client.get(reverse("admin_hub:queue"), {"tab": "procesa"}).content.decode()
+    parakstiti_body = client.get(
+        reverse("admin_hub:queue"), {"tab": "parakstiti"}
+    ).content.decode()
+
+    assert name in procesa_body, "current agreement is unsigned; must stay in Procesa"
+    assert name not in parakstiti_body

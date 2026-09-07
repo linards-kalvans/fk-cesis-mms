@@ -89,17 +89,18 @@ def _tab_queryset(tab: str):
         return base.filter(status=status.SUBMITTED).order_by("-submitted_at")
     if tab == "jalabo":
         return base.filter(status=status.FIX_REQUESTED).order_by("-updated_at")
-    if tab == "procesa":
-        return base.filter(status=status.APPROVED).exclude(
-            approved_member__agreements__is_current=True,
-            approved_member__agreements__state=Agreement.State.SIGNED,
-        ).order_by("-reviewed_at")
-    if tab == "parakstiti":
-        return base.filter(
-            status=status.APPROVED,
-            approved_member__agreements__is_current=True,
-            approved_member__agreements__state=Agreement.State.SIGNED,
-        ).order_by("-reviewed_at")
+    if tab in ("procesa", "parakstiti"):
+        # One subquery, used both ways, so the two tabs are exact complements
+        # by construction. A two-field exclude() would NOT do this: Django
+        # compiles multi-valued exclude() into independent EXISTS subqueries,
+        # so "is_current" and "signed" would not have to hold on the same row.
+        signed_members = Agreement.objects.filter(
+            is_current=True, state=Agreement.State.SIGNED
+        ).values("member_id")
+        approved = base.filter(status=status.APPROVED)
+        if tab == "parakstiti":
+            return approved.filter(approved_member__in=signed_members).order_by("-reviewed_at")
+        return approved.exclude(approved_member__in=signed_members).order_by("-reviewed_at")
     if tab == "noraiditi":
         return base.filter(status=status.REJECTED).order_by("-reviewed_at")
     return base.order_by("-created_at")
