@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "apps.integrations",
     "apps.addresses",
     "apps.analytics",
+    "apps.admin_hub",
     # Background-job runner (P3.5)
     "django_q",
 ]
