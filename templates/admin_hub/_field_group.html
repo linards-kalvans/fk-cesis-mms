@@ -1,0 +1,37 @@
+{% comment %}Expects `group` (HubFieldGroup).{% endcomment %}
+<div class="fgroup">
+  <div class="fgroup__head">
+    <h3 class="anton">{{ group.title }}</h3>
+    {% if group.hint %}<span class="badge badge--sm badge--neutral">{{ group.hint }}</span>{% endif %}
+  </div>
+  <div class="fgroup__list">
+    {% for field in group.fields %}
+      <div class="frow"
+           {% if field.checkable %}data-field="{{ field.key }}"{% endif %}
+           {% if field.default_checked %}data-default-checked="true"{% endif %}>
+        <div class="frow__label">{{ field.label }}</div>
+        <div class="frow__value">
+          {% if field.value %}
+            <div class="v">{{ field.value }}</div>
+          {% else %}
+            <div class="v v--empty">Nav norādīts</div>
+          {% endif %}
+          {% if field.source_label or field.note %}
+            <div class="sub">
+              {% if field.source_label %}
+                <span class="src-badge src-badge--{{ field.source_tone|default:'typed' }}">{{ field.source_label }}</span>
+              {% endif %}
+              {% if field.note %}<span>{{ field.note }}</span>{% endif %}
+            </div>
+          {% endif %}
+        </div>
+        {% if field.checkable %}
+          <button type="button" class="frow__check"
+                  title="Atzīmēt kā pārbaudītu">&#10003;</button>
+        {% else %}
+          <span></span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>

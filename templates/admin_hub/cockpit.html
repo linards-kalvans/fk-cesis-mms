@@ -1,0 +1,119 @@
+{% extends "admin_hub/base_hub.html" %}
+{% load static %}
+
+{% block hub_title %}FK Cēsis Admin — {{ application.member_full_name }}{% endblock %}
+{% block hub_page_class %}hub-page--flush{% endblock %}
+
+{% block hub_steprail %}{% include "admin_hub/_step_rail.html" %}{% endblock %}
+
+{% block hub_content %}
+  <div class="crumbs">
+    <a href="{% url 'admin_hub:queue' %}">← Pieteikumu rinda</a>
+    <span>/</span>
+    <span>Pieteikums #{{ application.pk }}</span>
+  </div>
+
+  <div class="page-head" style="margin-bottom:16px">
+    <div>
+      <h1 class="page-title">{{ application.member_full_name|default:"Bez vārda" }}</h1>
+      <p class="page-sub">
+        Pieteikums <strong>#{{ application.pk }}</strong>
+        · iesniegts <strong>{{ application.submitted_at|date:"d.m.Y H:i"|default:"—" }}</strong>
+        · vecāks <strong>{{ application.guardian_name|default:"—" }}</strong>
+      </p>
+    </div>
+    <div class="row">
+      <span class="badge badge--submitted">{{ application.get_status_display }}</span>
+      <a class="btn btn-secondary btn-sm"
+         href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">Atvērt Django admin</a>
+    </div>
+  </div>
+
+  <div class="cockpit">
+    {% include "admin_hub/_viewer.html" %}
+
+    <section data-checklist="{{ application.pk }}">
+      <div class="checkbar">
+        <div>
+          <div class="checkbar__count" data-checklist-count>{{ default_checked_count }} / {{ checkable_total }}</div>
+          <div class="checkbar__label">pārbaudīti lauki · palīglīdzeklis</div>
+        </div>
+        <div class="checkbar__track"><span data-checklist-track></span></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-checklist-all>&#10003; Apstiprināt visus</button>
+      </div>
+
+      {% for group in groups %}{% include "admin_hub/_field_group.html" %}{% endfor %}
+
+      <div class="card" style="margin-top:18px">
+        <div class="card__head">
+          <span class="card__step">2</span>
+          <h2 class="anton">Apstiprināšana</h2>
+        </div>
+        <form method="post"
+              action="{% url 'admin:registrations_registrationapplication_approve' application.pk %}?next={{ request.path|urlencode }}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <div class="card__body">
+            <p class="hint" style="margin-bottom:14px">
+              Apstiprinot tiek izveidots biedra ieraksts un vecāks saņem e-pastu.
+              Treniņu grupu var piešķirt arī vēlāk. Lauku atzīmes ir tikai pārbaudes
+              palīglīdzeklis — tās neietekmē apstiprināšanu.
+            </p>
+            <div class="form-grid">
+              <div class="f">
+                <label for="approve_training_group">Treniņu grupa</label>
+                <select name="training_group" id="approve_training_group">
+                  <option value="">— Piešķirsim vēlāk —</option>
+                  {% for group in active_training_groups %}
+                    <option value="{{ group.id }}">{{ group.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="card__foot">
+            <span class="hint">Solis 2 no 8</span>
+            <span class="card__spacer"></span>
+            <button type="submit" class="btn btn-red">Apstiprināt pieteikumu →</button>
+          </div>
+        </form>
+      </div>
+
+      <details class="tray" style="margin-top:14px">
+        <summary>&#9888; Riskantās darbības — labojuma pieprasījums, noraidīšana</summary>
+        <div class="tray__body">
+          <form method="post"
+                action="{% url 'admin:registrations_registrationapplication_review-action' application.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <div class="f f--full">
+              <label for="review_message">Ziņojums vecākam</label>
+              <textarea name="review_message" id="review_message" rows="3"></textarea>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button type="submit" name="action" value="request_fix" class="btn btn-secondary">Pieprasīt labojumu</button>
+              <button type="submit" name="action" value="reject" class="btn btn-danger-outline">Noraidīt pieteikumu</button>
+            </div>
+          </form>
+        </div>
+      </details>
+    </section>
+  </div>
+{% endblock %}
+
+{% block hub_actionbar %}
+  <div class="actionbar">
+    <div class="actionbar__inner">
+      <span class="actionbar__note"><strong data-checklist-count>{{ default_checked_count }} / {{ checkable_total }}</strong> lauku atzīmēti</span>
+      <span class="actionbar__note">·</span>
+      <span class="actionbar__note">Solis {{ steps_done }} / {{ steps_total }}</span>
+      <span class="actionbar__spacer"></span>
+      <a class="btn btn-secondary" href="{% url 'admin_hub:queue' %}">← Atpakaļ uz rindu</a>
+    </div>
+  </div>
+{% endblock %}
+
+{% block hub_scripts %}
+  <script src="{% static 'admin_hub/viewer.js' %}"></script>
+  <script src="{% static 'admin_hub/checklist.js' %}"></script>
+{% endblock %}

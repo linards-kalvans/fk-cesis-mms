@@ -721,7 +721,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Nezināma treniņu grupa.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
         try:
             approve_application(
                 application, request.user, training_group=selected_group
@@ -735,9 +735,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             else:
                 latvian = "Pieteikumu nevarēja apstiprināt."
             self.message_user(request, latvian, level=messages.ERROR)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         self.message_user(request, "Pieteikums apstiprināts.")
-        return self._change_redirect(object_id)
+        return self._after_review_redirect(request, object_id)
 
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and

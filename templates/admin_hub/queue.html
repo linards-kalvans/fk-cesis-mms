@@ -62,7 +62,7 @@
           {% endif %}
         </div>
         <div class="qactions">
-          <a class="btn btn-red" href="{% url 'admin:registrations_registrationapplication_change' row.application.pk %}">Izskatīt →</a>
+          <a class="btn btn-red" href="{% url 'admin_hub:cockpit' row.application.pk %}">Izskatīt →</a>
         </div>
       </article>
     {% empty %}
