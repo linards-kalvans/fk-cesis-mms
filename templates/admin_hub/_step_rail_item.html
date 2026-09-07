@@ -1,0 +1,10 @@
+{% comment %}Expects `step` and `cls`. The rail is a status display, not a
+navigation control - the page's own buttons move the reviewer between steps.
+{% endcomment %}
+<span class="{{ cls }}">
+  <span class="step__num">{% if step.state == "done" %}&#10003;{% else %}{{ step.number }}{% endif %}</span>
+  <span class="step__txt">
+    <span class="step__name">{{ step.name }}</span>
+    <span class="step__meta">{{ step.meta|default:"—" }}</span>
+  </span>
+</span>

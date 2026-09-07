@@ -79,7 +79,10 @@ def draft_application(parent_account):
     from apps.registrations.services import create_or_update_draft
 
     return create_or_update_draft(
-        data={"guardian_email": parent_account.email},
+        data={
+            "guardian_email": parent_account.email,
+            "member_full_name": "Melnraksta Bērns",
+        },
         files={},
         verified_account=parent_account,
     )

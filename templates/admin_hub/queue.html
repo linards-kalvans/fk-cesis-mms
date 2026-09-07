@@ -1,0 +1,74 @@
+{% extends "admin_hub/base_hub.html" %}
+{% load hub_tags %}
+
+{% block hub_title %}FK Cēsis Admin — Pieteikumu rinda{% endblock %}
+
+{% block hub_content %}
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Pieteikumu rinda</h1>
+      <p class="page-sub">Jaunākie iesniegtie pieteikumi augšā. Sarkanā svītra — iesniegts pirms vairāk nekā 3 dienām.</p>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    {% for slug, label in tabs.items %}
+      <a href="?tab={{ slug }}" class="{% if slug == tab %}is-active{% endif %}">
+        {{ label }} <span class="tab-count">{{ tab_counts|get_item:slug }}</span>
+      </a>
+    {% endfor %}
+  </nav>
+
+  <div class="queue">
+    {% for row in rows %}
+      <article class="qrow{% if row.is_aging %} qrow--aging{% endif %}">
+        <div class="qperson">
+          <div class="qavatar">{{ row.application.member_full_name|slice:":1"|upper }}</div>
+          <div>
+            <h2 class="qname anton">{{ row.application.member_full_name|default:"Bez vārda" }}</h2>
+            <div class="qmeta">
+              <span>Dz. <strong>{{ row.application.member_birth_date|date:"d.m.Y"|default:"—" }}</strong></span>
+              <span>Vecāks: <strong>{{ row.application.guardian_name|default:"—" }}</strong></span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="cell-label">Statuss</span>
+          <span class="badge badge--submitted">{{ row.application.get_status_display }}</span>
+          <div class="pipe__next">{{ row.application.submitted_at|date:"d.m.Y H:i"|default:"—" }}</div>
+        </div>
+        <div class="qdocs">
+          <span class="cell-label">Dokumenti</span>
+          <div class="docdots">
+            {% for kind, doc in row.documents.items %}
+              <span class="docdot{% if not doc %} docdot--missing{% endif %}">{{ kind|slice:":1"|upper }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <span class="cell-label">Process</span>
+          <div class="pipe">
+            <div class="pipe__segs">
+              {% for step in row.steps %}
+                <span class="pipe__seg{% if step.state == 'done' %} pipe__seg--done{% elif step.state == 'current' %} pipe__seg--current{% endif %}"></span>
+              {% endfor %}
+            </div>
+            <span class="pipe__count">{{ row.done }}/{{ row.total }}</span>
+          </div>
+          {% if row.next_name %}
+            <div class="pipe__next">Nākamais: <strong>{{ row.next_name }}</strong></div>
+          {% else %}
+            <div class="pipe__next">Nav darbību</div>
+          {% endif %}
+        </div>
+        <div class="qactions">
+          <a class="btn btn-red" href="{% url 'admin:registrations_registrationapplication_change' row.application.pk %}">Izskatīt →</a>
+        </div>
+      </article>
+    {% empty %}
+      <div class="card"><div class="card__body">
+        <p class="hint">Šajā skatā nav pieteikumu.</p>
+      </div></div>
+    {% endfor %}
+  </div>
+{% endblock %}
