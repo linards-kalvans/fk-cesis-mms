@@ -1,6 +1,13 @@
 {% comment %}Expects `viewer_tabs`: a list of (label, panel) pairs, where
 each panel is a build_doc_panel dict. Rotation and zoom are presentation-only
 CSS transforms - no stored file is ever modified.
+
+The "Jaunā cilnē" / "Lejupielādēt" toolbar links always follow whichever tab
+is active: each tab button carries the two authorized proxy URLs (or empty,
+when that kind has no active document) as data attributes, and viewer.js
+copies them onto the two toolbar links on load and on every tab switch. The
+links are never rendered once per-panel here - that is what let them go stale
+on the wrong tab before this fix.
 {% endcomment %}
 <div class="viewer">
   <div class="viewer__tabs">
@@ -8,6 +15,8 @@ CSS transforms - no stored file is ever modified.
       <button type="button"
               class="viewer__tab {% if forloop.first %}is-active{% endif %}{% if not panel.active %} is-missing{% endif %}"
               data-viewer-tab="{{ forloop.counter0 }}"
+              data-viewer-preview="{% if panel.active %}{% url 'documents:admin-document-preview' panel.active.id %}{% endif %}"
+              data-viewer-download="{% if panel.active %}{% url 'documents:admin-document-download' panel.active.id %}{% endif %}"
               {% if not panel.active %}disabled{% endif %}>{{ label }}</button>
     {% endfor %}
   </div>
@@ -40,12 +49,8 @@ CSS transforms - no stored file is ever modified.
       <button type="button" class="vbtn" data-viewer-zoom="0.15" title="Tuvāk">+</button>
       <button type="button" class="vbtn" data-viewer-reset title="Ietilpināt logā">&#10530; Ietilpināt</button>
       <span class="vbar__spacer"></span>
-      {% for label, panel in viewer_tabs %}{% if forloop.first and panel.active %}
-        <a class="vbtn" target="_blank" rel="noopener"
-           href="{% url 'documents:admin-document-preview' panel.active.id %}">&#8599; Jaunā cilnē</a>
-        <a class="vbtn vbtn--accent"
-           href="{% url 'documents:admin-document-download' panel.active.id %}">&#8681; Lejupielādēt</a>
-      {% endif %}{% endfor %}
+      <a class="vbtn" target="_blank" rel="noopener" data-viewer-open hidden>&#8599; Jaunā cilnē</a>
+      <a class="vbtn vbtn--accent" data-viewer-get hidden>&#8681; Lejupielādēt</a>
     </div>
   </div>
 </div>

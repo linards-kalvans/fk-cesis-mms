@@ -154,13 +154,20 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     def _changelist_redirect(self):
         return redirect("admin:registrations_registrationapplication_changelist")
 
-    def _after_review_redirect(self, request, object_id):
-        """Honor a validated `next` (set by the changelist quick-action buttons so
-        a list-triggered action returns to the list), else the change page."""
-        nxt = request.GET.get("next") or request.POST.get("next", "")
+    def _validated_next(self, request) -> str:
+        """Return a `next` that is safe to redirect to, else ""."""
+        nxt: str = request.GET.get("next") or request.POST.get("next", "")
         if nxt and url_has_allowed_host_and_scheme(
             nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
         ):
+            return nxt
+        return ""
+
+    def _after_review_redirect(self, request, object_id):
+        """Honor a validated `next` (set by the changelist quick-action buttons so
+        a list-triggered action returns to the list), else the change page."""
+        nxt = self._validated_next(request)
+        if nxt:
             return redirect(nxt)
         return self._change_redirect(object_id)
 
@@ -300,8 +307,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Labojuma ziņojums ir obligāts.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "reject":
             message = request.POST.get("review_message", "").strip()
@@ -311,7 +318,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Noraidīšanas ziņojums ir obligāts.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            nxt = self._validated_next(request)
+            if nxt:
+                return redirect(nxt)
             return self._changelist_redirect()
 
         elif action == "assign_training_group":
@@ -430,32 +440,32 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             new_path = request.POST.get("signing_path", "").strip()
             if new_path not in {value for value, _label in Agreement.SigningPath.choices}:
                 self.message_user(
                     request, "Nezināms parakstīšanas veids.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             set_signing_path(agreement, new_path, request.user)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "void_agreement":
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             reason = request.POST.get("void_reason", "").strip()
             void_agreement(agreement, request.user, reason)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "regenerate_agreement":
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 regenerate_agreement(
                     application.approved_member,
@@ -469,8 +479,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 else:
                     latvian = msg
                 self.message_user(request, latvian, level=messages.ERROR)
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "retry_docuseal":
             if agreement is None:
@@ -580,18 +590,18 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
         elif action == "create_next_season_billing":
             if not self._signed_active_agreement(request, application, agreement):
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             if agreement.billing_plan_id is None:
                 self.message_user(
                     request, "Līgumam nav norēķinu plāna.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             raw_plan = request.POST.get("billing_plan", "").strip()
             if not raw_plan:
                 self.message_user(
                     request, "Lūdzu izvēlieties norēķinu plānu.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 plan = MembershipPlan.objects.filter(
                     pk=int(raw_plan), is_active=True
@@ -602,20 +612,20 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Nezināms norēķinu plāns.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             if plan.season == agreement.billing_plan.season:
                 self.message_user(
                     request,
                     "Nākamās sezonas plānam jāatšķiras no līguma sezonas.",
                     level=messages.ERROR,
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             first_billing_month = request.POST.get("first_billing_month", "").strip()
             if not first_billing_month:
                 self.message_user(
                     request, "Pirmais rēķina mēnesis ir obligāts.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 record = renew_member_billing(
                     application.approved_member,
@@ -630,16 +640,16 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 else:
                     latvian = raw
                 self.message_user(request, latvian, level=messages.ERROR)
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             if record is None:
                 self.message_user(
                     request,
                     "Norēķinu ieraksts šai sezonai jau eksistē.",
                     level=messages.INFO,
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             self.message_user(request, "Izveidots nākamās sezonas norēķinu ieraksts.")
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "recreate_current_billing":
             if not self._signed_active_agreement(request, application, agreement):
