@@ -664,7 +664,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
 
         elif action == "recreate_current_billing":
             if not self._signed_active_agreement(request, application, agreement):
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             confirmed = bool(request.POST.get("external_invoice_confirmed_absent"))
             try:
                 recreate_missing_billing_record(
@@ -686,9 +686,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 else:
                     latvian = raw
                 self.message_user(request, latvian, level=messages.ERROR)
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             self.message_user(request, "Atjaunots trūkstošais norēķinu ieraksts.")
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         return self._change_redirect(object_id)
 

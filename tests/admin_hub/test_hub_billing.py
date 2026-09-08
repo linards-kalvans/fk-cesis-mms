@@ -71,21 +71,59 @@ def test_billing_page_renders_the_three_step_cards(client, reviewer, signed_appl
     assert "Nākamā sezona" in body
 
 
-def test_plan_form_posts_set_billing_setup(client, reviewer, signed_application):
+def test_signed_with_no_record_does_not_post_to_set_billing_setup(
+    client, reviewer, signed_application
+):
+    """DEFECT 1 (mutation-tested — see the report for both observations).
+
+    ``signed_application`` is signed with no matched BillingRecord: its
+    fixture forces ``agreement.state`` to SIGNED directly, bypassing
+    ``mark_agreement_signed``'s signal that would otherwise create the
+    record — exactly the season-matching desync the bug report hit. The
+    old routing returned the ``set_billing_setup`` URL unconditionally
+    whenever ``record`` was ``None``, regardless of the agreement's state —
+    and that service refuses a signed agreement outright ("cannot change
+    billing setup after signing"). The plan form must not point there; the
+    Hub must instead offer the domain's own remedy
+    (``recreate_current_billing``), with its required Invoice Ninja
+    confirmation control rendered on the page.
+    """
     client.force_login(reviewer)
     body = client.get(
         reverse("admin_hub:billing", args=[signed_application.pk])
     ).content.decode()
-    # Scope to the step-6 form: both field names also appear in step 8's
-    # next-season form, so a whole-body check would survive deleting either
-    # input from this one.
-    step6 = body.split('value="set_billing_setup"')[0]
-    form_start = step6.rfind("<form")
-    assert form_start != -1, "no form precedes the set_billing_setup button"
-    step6_form = step6[form_start:]
-    assert 'value="set_billing_setup"' in body
-    assert 'name="billing_plan"' in step6_form
-    assert 'name="first_billing_month"' in step6_form
+    assert _plan_form_action(body) == ""
+    assert "disabled" in _plan_form_submit_button_tag(body)
+    review_action_url = reverse(
+        "admin:registrations_registrationapplication_review-action",
+        args=[signed_application.pk],
+    )
+    assert f'action="{review_action_url}"' in body
+    assert 'value="recreate_current_billing"' in body
+    assert 'name="external_invoice_confirmed_absent"' in body
+
+
+def test_signed_with_no_record_and_inactive_member_blocks_without_recreate_offer(
+    client, reviewer, signed_application
+):
+    """Complements the test above: recreate_missing_billing_record (via
+    _signed_active_agreement at the POST) refuses an inactive member. The
+    Hub must not dangle a recreate control the POST would refuse — a
+    blocked reason with no offer, mirroring the guard exactly."""
+    from apps.members.models import Member
+
+    member = signed_application.approved_member
+    member.status = Member.Status.DISCONTINUED
+    member.save(update_fields=["status"])
+
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+    assert _plan_form_action(body) == ""
+    assert 'value="recreate_current_billing"' not in body
+    assert 'name="external_invoice_confirmed_absent"' not in body
+    assert "Šai sezonai nav norēķinu ieraksta" in body
 
 
 def test_schedule_preview_lists_the_installments(client, reviewer, signed_application):
@@ -525,3 +563,48 @@ def test_plan_change_is_blocked_with_a_reason_once_invoices_are_issued(
     assert _plan_form_action(body) == ""
     assert "disabled" in _plan_form_submit_button_tag(body)
     assert "Rēķini jau ir izrakstīti" in body
+
+
+def _plan_form_html(body: str) -> str:
+    """The step-6 form's full markup (open tag through ``</form>``), scoped
+    so assertions about its inner controls cannot match step 8's form —
+    both share the ``billing_plan`` / ``first_billing_month`` field names."""
+    match = re.search(r'<form id="plan-form".*?</form>', body, re.DOTALL)
+    assert match is not None, "step-6 plan form not found"
+    return match.group(0)
+
+
+def test_confirmed_record_renders_plan_read_only_with_informational_note(
+    client, reviewer, signed_application, default_plan
+):
+    """DEFECT 2: a confirmed record is the *normal* state once invoices are
+    about to be issued — not an anomaly. The card must not show an amber
+    warning next to what looks like an editable plan form: the plan +
+    first-billing-month become read-only values, and the reason renders as
+    a quiet informational note (neutral ``callout``, not ``callout--warn``).
+    """
+    from apps.billing.models import BillingRecord
+
+    BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        status=BillingRecord.Status.CONFIRMED,
+    )
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+    plan_form = _plan_form_html(body)
+    assert _plan_form_action(body) == ""
+    # No editable plan controls left in the step-6 form.
+    assert 'name="billing_plan"' not in plan_form
+    assert 'name="first_billing_month"' not in plan_form
+    # The current plan is still visible, just as a read-only value.
+    assert default_plan.name in plan_form
+    # Informational, not a warning: the neutral `callout` class renders,
+    # `callout--warn` does not.
+    assert "callout--warn" not in plan_form
+    assert "callout" in plan_form

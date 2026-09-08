@@ -10,27 +10,48 @@ from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
-def _billing_change_route(application, record, invoices) -> tuple[str, str]:
-    """Where the step-6 plan form should POST, and why it cannot.
+def _billing_change_route(
+    application, agreement, member, record, invoices
+) -> tuple[str, str, bool]:
+    """Where the step-6 plan form should POST, why it cannot, and whether the
+    Hub should instead offer the record-recreation remedy.
 
-    Two endpoints own the plan, at different points in the pipeline, and the
-    Hub previously only ever used the first:
+    Two endpoints own the plan, at different points in the pipeline:
 
     * Before signing there is no BillingRecord yet, so the plan is an
       *intent* on the agreement — ``set_billing_setup``, which deliberately
-      refuses a signed agreement ("billing is already realised against the
-      locked record").
+      refuses a signed/superseded/discontinued agreement ("billing is
+      already realised against the locked record").
     * After signing the record exists and IS the billing, so changing it
       means reassigning that record — ``billing_billingrecord_reassign``,
       which takes the same ``billing_plan`` + ``first_billing_month`` fields.
 
-    Posting ``set_billing_setup`` after signing therefore surfaced the raw
-    English "cannot change billing setup after signing" in a Latvian UI, for
-    a change the domain in fact supports. Returns ``(url, blocked_reason)``
-    with exactly one populated: reassignment has hard guards (draft only, no
-    invoice pushed to Invoice Ninja, none e-mailed to a parent), and where
-    they bite the reviewer is told which one rather than being allowed to
-    submit into an error.
+    Which one applies depends on the *agreement's* state, never merely on
+    whether a ``BillingRecord`` was matched — a signed agreement can have no
+    matched record (season-matching desync in ``load_pipeline_objects``, now
+    fixed going forward but not retroactively, or a record that is
+    genuinely missing), and routing that case to ``set_billing_setup``
+    surfaced the raw English "cannot change billing setup after signing" in
+    a Latvian UI, for a change the domain in fact supports via a third
+    route. Returns ``(url, blocked_reason, offer_recreate)``. Four cases:
+
+    1. Agreement not signed/superseded/discontinued → (``set_billing_setup``
+       URL, "", False) — the plan is still an intent, unconditionally,
+       regardless of whether a record happens to exist.
+    2. Agreement signed/superseded/discontinued, record found, reassignable
+       (draft, no invoice pushed to Invoice Ninja, none e-mailed to a
+       parent) → (``reassign`` URL, "", False).
+    3. Same, record found, NOT reassignable → ("", <reason>, False) — the
+       reviewer is told which guard bit rather than being allowed to submit
+       into it.
+    4. Agreement signed/superseded/discontinued, NO record found → neither
+       plan endpoint can work. When the agreement is strictly SIGNED (not
+       superseded/discontinued), carries a billing plan, and the member is
+       ACTIVE — the exact guard ``recreate_missing_billing_record`` (via
+       ``_signed_active_agreement`` at the POST) enforces — offering
+       ``recreate_current_billing`` will actually succeed:
+       ("", <explanatory reason>, True). Otherwise: ("", <blocked reason>,
+       False) — the Hub must not dangle a control the POST would refuse.
 
     ``invoices`` is the already-materialised list for ``record`` (from
     ``load_pipeline_objects``, which prefetches it) — checked in Python
@@ -39,35 +60,66 @@ def _billing_change_route(application, record, invoices) -> tuple[str, str]:
     """
     from django.urls import reverse
 
+    from apps.agreements.models import Agreement
     from apps.billing.models import BillingRecord
+    from apps.members.models import Member
 
-    if record is None:
-        return (
-            reverse(
-                "admin:registrations_registrationapplication_review-action",
-                args=[application.pk],
-            ),
-            "",
-        )
-    if str(record.status) != str(BillingRecord.Status.DRAFT):
-        return "", (
-            "Maksājumu ieraksts jau ir apstiprināts. Lai mainītu plānu, "
-            "vispirms atsauciet ierakstu pilnajā administrācijā."
-        )
-    if any(invoice.external_invoice_id for invoice in invoices):
-        return "", (
-            "Rēķini jau ir izrakstīti Invoice Ninja — plānu vairs nevar "
-            "mainīt, neatsaucot tos."
-        )
-    if any(invoice.sent_at is not None for invoice in invoices):
-        return "", (
-            "Rēķini jau ir nosūtīti vecākam — plānu vairs nevar mainīt, "
-            "neatsaucot tos."
-        )
-    return (
-        reverse("admin:billing_billingrecord_reassign", args=[record.pk]),
-        "",
+    review_action_url = reverse(
+        "admin:registrations_registrationapplication_review-action",
+        args=[application.pk],
     )
+
+    locked_states = (
+        Agreement.State.SIGNED,
+        Agreement.State.SUPERSEDED,
+        Agreement.State.DISCONTINUED,
+    )
+    if agreement is None or agreement.state not in locked_states:
+        return (review_action_url, "", False)
+
+    if record is not None:
+        if str(record.status) != str(BillingRecord.Status.DRAFT):
+            return "", (
+                "Maksājumu ieraksts ir apstiprināts, tāpēc plāns tagad ir "
+                "fiksēts ierakstā. Lai to mainītu, vispirms atsauciet "
+                "ierakstu pilnajā administrācijā."
+            ), False
+        if any(invoice.external_invoice_id for invoice in invoices):
+            return "", (
+                "Rēķini jau ir izrakstīti Invoice Ninja — plānu vairs nevar "
+                "mainīt, neatsaucot tos."
+            ), False
+        if any(invoice.sent_at is not None for invoice in invoices):
+            return "", (
+                "Rēķini jau ir nosūtīti vecākam — plānu vairs nevar mainīt, "
+                "neatsaucot tos."
+            ), False
+        return (
+            reverse("admin:billing_billingrecord_reassign", args=[record.pk]),
+            "",
+            False,
+        )
+
+    # No record. set_billing_setup refuses (locked state); there is nothing
+    # to reassign. recreate_missing_billing_record can rebuild one, but only
+    # under the same guard the POST enforces (_signed_active_agreement) —
+    # mirror it exactly rather than offering a control guaranteed to fail.
+    if (
+        agreement.state == Agreement.State.SIGNED
+        and agreement.billing_plan_id is not None
+        and member is not None
+        and member.status == Member.Status.ACTIVE
+    ):
+        return "", (
+            "Šai sezonai nav norēķinu ieraksta, lai gan līgums ir "
+            "parakstīts. To var atjaunot no līguma — apstipriniet zemāk, "
+            "ka Invoice Ninja nav atbilstoša rēķina."
+        ), True
+    return "", (
+        "Šai sezonai nav norēķinu ieraksta, un to pašlaik nevar atjaunot no "
+        "Admin Hub — pārbaudiet līguma un dalībnieka stāvokli pilnajā "
+        "administrācijā."
+    ), False
 
 
 def _step_urls(application, objects) -> dict[str, str]:
@@ -282,8 +334,12 @@ def billing_view(request, pk: int):
     # Uses objects.invoices — already prefetched/materialised by
     # load_pipeline_objects for this same record — instead of two fresh
     # .exists() queries against rows already in memory.
-    billing_change_url, billing_change_blocked_reason = _billing_change_route(
-        application, record, objects.invoices
+    (
+        billing_change_url,
+        billing_change_blocked_reason,
+        billing_recreate_offer,
+    ) = _billing_change_route(
+        application, agreement, objects.member, record, objects.invoices
     )
 
     # Preview the schedule from whatever is selected now, so the reviewer sees
@@ -321,6 +377,10 @@ def billing_view(request, pk: int):
             # Which endpoint owns the plan right now - see _billing_change_route.
             "billing_change_url": billing_change_url,
             "billing_change_blocked_reason": billing_change_blocked_reason,
+            # Signed agreement, no matched record, member active: neither
+            # plan endpoint applies, but recreate_current_billing would
+            # succeed - offer it instead of just refusing.
+            "billing_recreate_offer": billing_recreate_offer,
             # The template must not compare against a domain enum literal.
             "record_confirmed": (
                 record is not None
@@ -330,6 +390,12 @@ def billing_view(request, pk: int):
             "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
             "next_season_record": objects.next_season_record,
             "schedule": schedule,
+            # The read-only display once billing_change_blocked_reason is
+            # set (DEFECT 2) — record's own plan/month when a record
+            # exists, else the agreement's intent (same row the schedule
+            # preview above already reads).
+            "plan": plan,
+            "first_billing_month": first_billing_month,
             "steps": steps,
             "steps_done": done,
             "steps_total": total,

@@ -1,7 +1,8 @@
 """review_action_view must honour a validated `next` for the actions the
 Hub's risky-actions tray drives (request_fix, reject) plus the agreement/
 billing actions Tasks 6-7 will drive from the Hub (set_signing_path,
-void_agreement, regenerate_agreement, create_next_season_billing).
+void_agreement, regenerate_agreement, create_next_season_billing,
+recreate_current_billing).
 
 Every action's existing no-`next` destination must be unchanged - staff use
 these flows in Django admin today. `reject` is the one action whose success
@@ -260,3 +261,53 @@ def test_create_next_season_billing_without_next_still_lands_on_the_change_page(
     )
     assert resp.status_code == 302
     assert resp["Location"] == _change_url(signed_active_application.pk)
+
+
+# ---------------------------------------------------------------------------
+# recreate_current_billing - not among the six actions the original next-
+# honouring change covered; `signed_active_application` sets agreement.state
+# to SIGNED directly (bypassing mark_agreement_signed's signal), so it has no
+# BillingRecord and recreate_missing_billing_record's guards are satisfied.
+# ---------------------------------------------------------------------------
+
+
+def test_recreate_current_billing_returns_to_a_safe_next(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        f"{_action_url(signed_active_application.pk)}?next={HUB_URL}",
+        {
+            "action": "recreate_current_billing",
+            "external_invoice_confirmed_absent": "1",
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+
+
+def test_recreate_current_billing_without_next_still_lands_on_the_change_page(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        _action_url(signed_active_application.pk),
+        {
+            "action": "recreate_current_billing",
+            "external_invoice_confirmed_absent": "1",
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == _change_url(signed_active_application.pk)
+
+
+def test_recreate_current_billing_ignores_an_offsite_next(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        f"{_action_url(signed_active_application.pk)}?next=https://evil.example.com/",
+        {
+            "action": "recreate_current_billing",
+            "external_invoice_confirmed_absent": "1",
+        },
+    )
+    assert resp.status_code == 302
+    assert "evil.example.com" not in resp["Location"]

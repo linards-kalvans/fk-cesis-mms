@@ -42,27 +42,44 @@
           <input type="hidden" name="next" value="{{ request.path }}">
           <div class="card__body stack">
             {% if billing_change_blocked_reason %}
-              <div class="callout callout--warn">
-                <span class="callout__icon">&#9888;</span>
+              {% comment %} The confirmed-record case is a normal state once
+                 invoices are about to be issued, not an anomaly — neutral
+                 callout, informational icon. The other reasons (record
+                 missing, invoices pushed/sent) are genuine constraints and
+                 keep the warning treatment. {% endcomment %}
+              <div class="callout {% if not record_confirmed %}callout--warn{% endif %}">
+                <span class="callout__icon">{% if record_confirmed %}&#8505;{% else %}&#9888;{% endif %}</span>
                 <span>{{ billing_change_blocked_reason }}</span>
               </div>
             {% endif %}
             <div class="form-grid">
               <div class="f f--full">
-                <label for="billing_plan">Plāns</label>
-                <select name="billing_plan" id="billing_plan">
-                  {% for plan in active_plans %}
-                    <option value="{{ plan.pk }}" {% if agreement.billing_plan_id == plan.pk %}selected{% endif %}>
-                      {{ plan.name }} — {{ plan.annual_amount }} {{ plan.currency }}, {{ plan.installment_count }} daļas
-                    </option>
-                  {% endfor %}
-                </select>
+                <label {% if not billing_change_blocked_reason %}for="billing_plan"{% endif %}>Plāns</label>
+                {% if billing_change_blocked_reason %}
+                  {% comment %} Read-only once the plan cannot actually be
+                     changed here — an editable-looking select with a
+                     disabled submit button invites an edit that cannot
+                     happen. {% endcomment %}
+                  <div><strong>{{ plan.name|default:"—" }}</strong>{% if plan %} — {{ plan.annual_amount }} {{ plan.currency }}, {{ plan.installment_count }} daļas{% endif %}</div>
+                {% else %}
+                  <select name="billing_plan" id="billing_plan">
+                    {% for option in active_plans %}
+                      <option value="{{ option.pk }}" {% if agreement.billing_plan_id == option.pk %}selected{% endif %}>
+                        {{ option.name }} — {{ option.annual_amount }} {{ option.currency }}, {{ option.installment_count }} daļas
+                      </option>
+                    {% endfor %}
+                  </select>
+                {% endif %}
                 <span class="f-hint">Summas tiek fiksētas ierakstā — vēlākas plāna izmaiņas neietekmē jau izveidotos rēķinus.</span>
               </div>
               <div class="f">
-                <label for="first_billing_month">Pirmais rēķina mēnesis</label>
-                <input type="month" name="first_billing_month" id="first_billing_month"
-                       value="{{ agreement.first_billing_month }}">
+                <label {% if not billing_change_blocked_reason %}for="first_billing_month"{% endif %}>Pirmais rēķina mēnesis</label>
+                {% if billing_change_blocked_reason %}
+                  <div><strong>{{ first_billing_month|default:"—" }}</strong></div>
+                {% else %}
+                  <input type="month" name="first_billing_month" id="first_billing_month"
+                         value="{{ agreement.first_billing_month }}">
+                {% endif %}
                 <span class="f-hint">Formāts GGGG-MM</span>
               </div>
             </div>
@@ -98,6 +115,30 @@
                     {% if billing_change_blocked_reason %}disabled{% endif %}>Saglabāt plānu →</button>
           </div>
         </form>
+
+        {% if billing_recreate_offer %}
+          {% comment %} Signed agreement, no matched record, member active:
+             neither plan endpoint above can work, so this is a distinct
+             form (nested forms are invalid HTML) offering the domain's own
+             remedy — recreate_current_billing. The checkbox is the operator
+             deliberately asserting a fact about Invoice Ninja, not a
+             formality to auto-tick. {% endcomment %}
+          <div class="card__body stack" style="padding-top:0">
+            <form method="post" action="{{ review_action_url }}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <label class="row" style="gap:8px;font-weight:600">
+                <input type="checkbox" name="external_invoice_confirmed_absent"
+                       id="external_invoice_confirmed_absent" required>
+                Es apstiprinu, ka Invoice Ninja nav atbilstoša rēķina.
+              </label>
+              <div class="row" style="justify-content:flex-end">
+                <button type="submit" name="action" value="recreate_current_billing"
+                        class="btn btn-secondary">Atjaunot norēķinu ierakstu →</button>
+              </div>
+            </form>
+          </div>
+        {% endif %}
       </section>
 
       <section class="card">
