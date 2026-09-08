@@ -21,6 +21,7 @@ Target Django monolith with domain apps:
 - `apps/billing` — MembershipPlan, sibling discount, Invoice Ninja sync
 - `apps/documents` — private Document model, audited access views
 - `apps/integrations` — Invoice Ninja / OCR clients, retry state
+- `apps/admin_hub` — staff-facing UI (`/hub/`) that renders derived state (pipeline steps, queue rows, invoice totals) and delegates every mutation to the existing Django admin action endpoints; it is a skin, not a second business-logic layer
 - `apps/admin_ops` — admin dashboards, CSV export *(planned, not yet implemented)*
 
 ## Current Status
@@ -458,6 +459,21 @@ P16-A (Signed-agreement upload + secure serving, LAN acceptance complete — sig
 - Admin activity audit entries for review actions.
 - **DOB-driven member-form prefill.** Normalizer now surfaces `data.date_of_birth` (validated live on 2026-05-22), so `DocumentExtraction.summary` carries DOB. Outstanding: wire OCR-derived DOB into the member form prefill with the same source-badge treatment as other identity fields.
 - **Surname normalization for Latvian IDs.** Live validation showed `data.first_surname` alone does not always match the manifest last name (likely diacritic / two-surname cases on guardian samples); consider folding `data.second_surname` and harmonizing diacritics before scoring downstream.
+
+### Admin Hub delivered — staff-facing UI (2026-09-08)
+`apps/admin_hub` (`/hub/`) is complete: five staff-only pages over existing
+domain state, wired end-to-end (queue → cockpit → agreement → plan/invoices →
+club-wide outstanding invoices), every mutation still POSTing to the pre-existing
+Django admin action endpoints.
+- **Pieteikumu rinda** (`/hub/pieteikumi/`) — the review queue, tabbed by status.
+- **Izskatīšana** (`/hub/pieteikumi/<pk>/`) — the per-application review cockpit (field-by-field check-off against OCR/derived values).
+- **Līgums** (`/hub/pieteikumi/<pk>/ligums/`) — agreement lifecycle actions (generate, mark sent, sign, void) plus a derived history timeline.
+- **Maksas plāns un rēķini** (`/hub/pieteikumi/<pk>/maksajumi/`) — per-application billing plan setup, installment schedule preview, invoice push.
+- **Neapmaksātie rēķini** (`/hub/rekini/`) — club-wide outstanding-invoice review across all members (tabs: unpaid, overdue, partially paid, sync errors, not-yet-issued, all), plus a bulk-selection confirmation guard (`/hub/rekini/apstiprinat/`) against large mis-clicks.
+- Plan: `docs/superpowers/plans/2026-09-07-admin-hub-ui.md`. Spec: `docs/superpowers/specs/2026-09-07-admin-hub-ui-design.md`.
+- Follow-ups explicitly deferred, tracked here so they are not lost:
+  - **Nightly-sweep batch caps.** `sync_billing_payments()` and `send_due_invoices()` (in `apps/billing`) iterate unbounded querysets with no batch-size cap; processing backlogs go undetected until billing review. Distinct from the Admin Hub's `BULK_CONFIRM_THRESHOLD`, which only guards an interactive mis-click.
+  - **Dead kit-size-shorts field.** `RegistrationApplication.member_kit_size_shorts` and `KitSizeOption.Kind.SHORTS` have had nothing writing them since commit `21945c4` collapsed the parent form to a single "Formas izmērs" field. Candidate for removal (model field + migration + admin references).
 
 ### Approved design and research direction (2026-05-05)
 - **Build now:** whole-app visual system and registration form redesign (major parent-flow changes allowed).

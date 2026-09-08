@@ -1,7 +1,24 @@
 """Shared fixtures for P11 family admin hub tests.
 
-Re-exports fixtures from tests/registrations/conftest.py that are not
-automatically visible outside that directory.
+This is a hand-maintained duplicate of the fixtures in
+tests/registrations/conftest.py, not a re-export — pytest does not make one
+directory's conftest fixtures visible to another, so the ones this directory
+needs are copied here instead.
+
+The two copies deliberately disagree on one point: ``submit_payload``'s
+``member_birth_date`` is a real ``datetime.date`` here but an ISO string
+(``"2025-01-01"``) in tests/registrations/conftest.py. That is intentional,
+not drift — this directory's tests read the application's in-memory
+``member_birth_date`` after calling ``create_or_update_draft`` directly (which
+assigns the payload value straight to the model field with no form-cleaning
+step), so it must already be a ``date``. tests/registrations/conftest.py's
+tests POST the payload through the real view/form, which cleans a string into
+a ``date`` for them. Re-syncing the two copies in one direction (string here)
+breaks this directory's tests loudly (a ``str`` where a ``date`` is expected);
+re-syncing the other direction (``date`` in tests/registrations/conftest.py)
+breaks silently, because Django's test client happily serializes a ``date``
+object into a POST body and the form cleans it right back into a ``date`` —
+so do not "helpfully" re-sync these two fixtures.
 """
 
 from __future__ import annotations

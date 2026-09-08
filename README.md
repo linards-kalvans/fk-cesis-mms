@@ -139,6 +139,11 @@ docs/               # Design docs, milestones
 - Single edit form still uses **save draft** and **submit application**
 - Member address supports **Adrese tāda pati kā vecāka** live sync and restore behavior
 
+### Admin Hub (staff-facing, `apps/admin_hub`)
+- `/hub/pieteikumi/` — review queue; each row opens the per-application cockpit, then agreement and plan/invoices pages
+- `/hub/rekini/` — club-wide outstanding-invoice review across all members, with a bulk-selection confirmation guard at `/hub/rekini/apstiprinat/`
+- Every Hub page is staff-only and renders derived state; all mutations still POST to the existing Django admin action endpoints
+
 ### Task 6 follow-up debt
 - Revisit desktop typography in Task 6 UI pass: blue text renders too heavy/thick on desktop and needs refinement.
 

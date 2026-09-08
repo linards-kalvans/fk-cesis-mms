@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
+from django.utils import timezone
 
 from apps.admin_hub import queries
 
@@ -189,5 +190,48 @@ def billing_view(request, pk: int):
             "active_plans": list(
                 MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
             ),
+        },
+    )
+
+
+@staff_member_required
+def invoices_view(request):
+    from apps.admin_hub import invoices as invoice_queries
+
+    tab = invoice_queries.normalize_invoice_tab(request.GET.get("tab"))
+    queryset = invoice_queries.invoice_queryset(tab)
+    totals = invoice_queries.invoice_totals(queryset)
+    return render(
+        request,
+        "admin_hub/invoices.html",
+        {
+            "hub_section": "invoices",
+            "tab": tab,
+            "tabs": invoice_queries.INVOICE_TABS,
+            "totals": totals,
+            "today": timezone.localdate(),
+            "bulk_threshold": invoice_queries.BULK_CONFIRM_THRESHOLD,
+        },
+    )
+
+
+@staff_member_required
+def bulk_confirm_view(request):
+    from django.http import HttpResponseBadRequest
+
+    from apps.admin_hub import invoices as invoice_queries
+
+    ids = invoice_queries.parse_id_list(request.GET.get("ids", ""))
+    if ids is None:
+        return HttpResponseBadRequest("Nederīgs ierakstu saraksts.")
+    return render(
+        request,
+        "admin_hub/bulk_confirm.html",
+        {
+            "hub_section": "invoices",
+            "count": len(ids),
+            "ids": ids,
+            "op": request.GET.get("op", ""),
+            "threshold": invoice_queries.BULK_CONFIRM_THRESHOLD,
         },
     )

@@ -1,0 +1,30 @@
+{% extends "admin_hub/base_hub.html" %}
+
+{% block hub_title %}FK Cēsis Admin — Apstiprināt masveida darbību{% endblock %}
+
+{% block hub_content %}
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Apstiprināt darbību</h1>
+      <p class="page-sub">Izvēlēti daudz ierakstu — pārliecinieties, pirms turpināt.</p>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:720px">
+    <div class="card__body stack">
+      <div class="callout callout--warn">
+        <span class="callout__icon">&#9888;</span>
+        <span>
+          Izvēlēti <strong>{{ count }}</strong> ieraksti. Vienā izpildē tiek apstrādāti
+          ne vairāk par <strong>{{ threshold }}</strong> — pārējie paliek rindā nākamajai reizei.
+        </span>
+      </div>
+      <p class="hint">Darbība: <strong>{{ op }}</strong></p>
+    </div>
+    <div class="card__foot">
+      <a class="btn btn-secondary" href="{% url 'admin_hub:invoices' %}">Atcelt</a>
+      <span class="card__spacer"></span>
+      <button type="button" class="btn btn-red">Apstiprināt un turpināt</button>
+    </div>
+  </div>
+{% endblock %}

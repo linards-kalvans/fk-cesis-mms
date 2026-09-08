@@ -47,12 +47,15 @@ def build_agreement_timeline(agreement: "Agreement") -> list[TimelineEntry]:
     """
     from apps.agreements.models import Agreement
 
-    # django-stubs types a bare class-attribute access like
-    # ``Agreement.State.GENERATED`` as a plain ``tuple[str, str]``, which has
-    # no ``.label`` — a verified mypy-only quirk (this repo's
-    # ``apps/members/exports.py`` already works around the same stub
-    # limitation the same way: constructing through the enum rather than
-    # reading a class attribute recovers the real, ``.label``-bearing type).
+    # This project has no django-stubs installed (dev deps are only mypy and
+    # ruff; mypy.ini has no plugin section) — the real cause is mypy statically
+    # reading Django's own un-stubbed ``enums.py``, where the ``ChoicesType``
+    # metaclass rewrite that gives ``Agreement.State.GENERATED`` a ``.label``
+    # is invisible to static analysis, so mypy sees a bare
+    # ``tuple[str, str]`` instead. A verified mypy-only quirk (this repo's
+    # ``apps/members/exports.py`` already works around the same limitation the
+    # same way: constructing through the enum rather than reading a class
+    # attribute recovers the real, ``.label``-bearing type).
     def _label(value: str) -> str:
         return str(Agreement.State(value).label)
 

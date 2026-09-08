@@ -22,6 +22,7 @@
     </div>
     <nav class="hub-nav">
       <a href="{% url 'admin_hub:queue' %}" class="{% if hub_section == 'queue' %}is-active{% endif %}">Pieteikumi</a>
+      <a href="{% url 'admin_hub:invoices' %}" class="{% if hub_section == 'invoices' %}is-active{% endif %}">Rēķini</a>
       {% block hub_nav_extra %}{% endblock %}
       <a href="{% url 'admin:index' %}">Django admin</a>
     </nav>
