@@ -110,6 +110,44 @@ def test_mark_signed_is_disabled_without_a_billing_plan(
     assert "disabled" in tag
 
 
+def test_mark_signed_is_disabled_with_artifact_but_no_billing_plan(
+    client, reviewer, application_with_agreement
+):
+    """The discriminating case. Both tests above leave the *other*
+    precondition false too (no artifact by default in one; no artifact set
+    in the other), so either alone is satisfied by a template that only
+    checks `not has_signed_artifact` and never looks at the billing plan at
+    all. This is the one scenario where the artifact IS present and only
+    the billing plan is missing — the only test that would fail if
+    `or not has_billing_plan` were dropped from the button's disable
+    condition."""
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SENT
+    agreement.sent_at = timezone.now()
+    agreement.signed_artifact.save(
+        "signed.pdf", ContentFile(b"%PDF-1.7"), save=False
+    )
+    agreement.billing_plan = None
+    agreement.first_billing_month = ""
+    agreement.save(
+        update_fields=[
+            "state",
+            "sent_at",
+            "signed_artifact",
+            "billing_plan",
+            "first_billing_month",
+        ]
+    )
+
+    client.force_login(reviewer)
+    url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    body = client.get(url).content.decode()
+    tag = _signed_button_tag(body)
+    assert "disabled" in tag
+
+
 def test_mark_signed_is_enabled_once_both_preconditions_are_met(
     client, reviewer, application_with_agreement
 ):

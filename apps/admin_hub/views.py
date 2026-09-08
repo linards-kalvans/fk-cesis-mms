@@ -97,8 +97,7 @@ def agreement_view(request, pk: int):
         load_pipeline_objects,
         pipeline_progress,
     )
-    from apps.billing.models import MembershipPlan
-    from apps.members.lanes import agreement_lane
+    from apps.admin_hub.timeline import build_agreement_timeline
     from apps.registrations.models import RegistrationApplication
 
     application = get_object_or_404(RegistrationApplication, pk=pk)
@@ -118,7 +117,6 @@ def agreement_view(request, pk: int):
             "application": application,
             "member": objects.member,
             "agreement": agreement,
-            "lane": agreement_lane(agreement),
             "steps": steps,
             "steps_done": done,
             "steps_total": total,
@@ -128,12 +126,7 @@ def agreement_view(request, pk: int):
             "has_billing_plan": bool(
                 agreement.billing_plan_id and agreement.first_billing_month
             ),
-            "lifecycle_events": list(
-                agreement.lifecycle_events.order_by("-created_at")[:20]
-            ),
-            "active_plans": list(
-                MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
-            ),
+            "lifecycle_events": build_agreement_timeline(agreement)[:20],
         },
     )
 

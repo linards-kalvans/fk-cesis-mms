@@ -155,6 +155,10 @@
           <span class="card__spacer"></span>
           <form method="post" action="{{ review_action_url }}">
             {% csrf_token %}
+            {# Unlike the page's other five forms, next points at step 6 (billing),
+               not back at this page: mark_agreement_signed materialises the
+               BillingRecord from the plan set there, so once signing succeeds
+               the reviewer's next task is that step, not this one. #}
             <input type="hidden" name="next" value="{% url 'admin_hub:billing' application.pk %}">
             <button type="submit" name="action" value="mark_agreement_signed"
                     class="btn btn-red"
@@ -207,8 +211,8 @@
             <li>
               <span class="tl__dot tl__dot--done">&#10003;</span>
               <div>
-                <div class="tl__txt">{{ event.get_event_type_display }}</div>
-                <div class="tl__when">{{ event.created_at|date:"d.m.Y H:i" }}{% if event.actor_label %} · {{ event.actor_label }}{% endif %}</div>
+                <div class="tl__txt">{{ event.label }}</div>
+                <div class="tl__when">{{ event.when|date:"d.m.Y H:i" }}{% if event.detail %} · {{ event.detail }}{% endif %}</div>
               </div>
             </li>
           {% empty %}
