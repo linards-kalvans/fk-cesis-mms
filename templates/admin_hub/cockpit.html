@@ -24,10 +24,10 @@
     </div>
     <div class="row">
       <span class="badge {{ status_badge_class }}">{{ application.get_status_display }}</span>
-      {# Typo fixes happen inline further down ("Labot datus"). These reach the
+      {% comment %} Typo fixes happen inline further down ("Labot datus"). These reach the
          full records for everything the inline panel deliberately excludes —
          the verified e-mail, kit size, training group, payment preferences.
-         Both are one-way trips: saving returns to the admin changelist. #}
+         Both are one-way trips: saving returns to the admin changelist. {% endcomment %}
       <a class="btn btn-secondary btn-sm"
          href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">Pilnais ieraksts (Django)</a>
       {% if application.guardian_id %}
@@ -50,13 +50,13 @@
         <button type="button" class="btn btn-secondary btn-sm" data-checklist-all>&#10003; Apstiprināt visus</button>
       </div>
 
-      {# In-place correction. The readout below stays read-only — it is the
+      {% comment %} In-place correction. The readout below stays read-only — it is the
          comparison surface — but a typo should not require leaving the Hub for
          Django admin. Posts to the admin endpoint so it inherits
          has_change_permission; the e-mail is absent on purpose (see
          update_reviewed_fields). Editing is allowed after approval too, and
          the service mirrors the child's fields onto the Member so a
-         regenerated agreement picks the correction up. #}
+         regenerated agreement picks the correction up. {% endcomment %}
       <details class="tray" style="margin-bottom:14px">
         <summary>&#9998; Labot datus</summary>
         <div class="tray__body">
@@ -210,14 +210,14 @@
       <span class="actionbar__note">Solis {{ steps_done }} / {{ steps_total }}</span>
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:queue' %}">← Atpakaļ uz rindu</a>
-      {# The primary action follows the application's actual state: approval is
+      {% comment %} The primary action follows the application's actual state: approval is
          only offered for a submitted application, because approve_application
-         refuses anything else. Once approved, the next task is the agreement. #}
+         refuses anything else. Once approved, the next task is the agreement. {% endcomment %}
       {% if can_approve %}
         <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
-        {# Submits the step-2 form above via its id, so the training-group
+        {% comment %} Submits the step-2 form above via its id, so the training-group
            select stays in its card while the action stays on screen. The
-           checklist never gates this - see the card copy. #}
+           checklist never gates this - see the card copy. {% endcomment %}
         <button type="submit" form="approve-form" class="btn btn-red">Apstiprināt pieteikumu →</button>
       {% elif agreement_url %}
         <a class="btn btn-red" href="{{ agreement_url }}">Turpināt: Līgums →</a>

@@ -33,10 +33,20 @@
           <span class="card__step">6</span>
           <h2 class="anton">Maksas plāns</h2>
         </div>
-        <form id="plan-form" method="post" action="{{ review_action_url }}">
+{% comment %} Posts to whichever endpoint owns the plan at this point in the
+   pipeline: set_billing_setup before signing, billing_billingrecord_reassign
+   after, since the record then IS the billing. Both take the same two field
+   names. See _billing_change_route. {% endcomment %}
+        <form id="plan-form" method="post" action="{{ billing_change_url }}">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.path }}">
           <div class="card__body stack">
+            {% if billing_change_blocked_reason %}
+              <div class="callout callout--warn">
+                <span class="callout__icon">&#9888;</span>
+                <span>{{ billing_change_blocked_reason }}</span>
+              </div>
+            {% endif %}
             <div class="form-grid">
               <div class="f f--full">
                 <label for="billing_plan">Plāns</label>
@@ -83,7 +93,9 @@
               <span class="hint">Kopā <strong style="color:var(--fk-blue)">{{ record.final_amount }} €</strong> · bāze {{ record.base_amount }} € · atlaide {{ record.discount_amount }} €</span>
             {% endif %}
             <span class="card__spacer"></span>
-            <button type="submit" name="action" value="set_billing_setup" class="btn btn-primary">Saglabāt plānu →</button>
+            <button type="submit" name="action" value="set_billing_setup"
+                    class="btn btn-primary"
+                    {% if billing_change_blocked_reason %}disabled{% endif %}>Saglabāt plānu →</button>
           </div>
         </form>
       </section>
@@ -229,10 +241,11 @@
       {% endif %}
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:agreement' application.pk %}">← Līgums</a>
-      {# Submits the step-6 plan form via its id: the plan selects stay in
-         their card while the save stays on screen. #}
+      {% comment %} Submits the step-6 plan form via its id: the plan selects stay in
+         their card while the save stays on screen. {% endcomment %}
       <button type="submit" form="plan-form" name="action" value="set_billing_setup"
-              class="btn btn-red">Saglabāt plānu →</button>
+              class="btn btn-red"
+              {% if billing_change_blocked_reason %}disabled{% endif %}>Saglabāt plānu →</button>
     </div>
   </div>
 {% endblock %}

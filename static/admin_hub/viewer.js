@@ -65,36 +65,44 @@
   }
 
   function fit() {
-    // "Ietilpināt" means fit, not 100%. Setting scale = 1 was a no-op at the
-    // default zoom, which is why the button appeared dead - and a document
-    // turned a quarter turn overflowed, because its bounding box swaps.
+    // "Ietilpināt" means fit, not 100%: setting scale = 1 was a no-op at the
+    // default zoom, which is why the button appeared dead.
     var doc = activeDoc();
     var stage = activeStage();
     if (!doc || !stage) { return; }
-
-    // Measure the untransformed render. The CSS caps both axes at 100%, so
-    // this is already the fitted size at 0 degrees.
-    var previous = doc.style.transform;
-    doc.style.transform = "none";
-    var width = doc.clientWidth || doc.offsetWidth;
-    var height = doc.clientHeight || doc.offsetHeight;
-    doc.style.transform = previous;
-    if (!width || !height) { return; }
 
     var styles = window.getComputedStyle(stage);
     var boxWidth = stage.clientWidth
       - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
     var boxHeight = stage.clientHeight
       - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom);
-    if (boxWidth <= 0 || boxHeight <= 0) { return; }
+    if (!(boxWidth > 0) || !(boxHeight > 0)) { return; }
 
-    // A quarter turn swaps the axes the document needs.
+    // Measure the picture, not the element box. With object-fit: contain the
+    // box is the stage and the picture is letterboxed inside it, so reading
+    // clientWidth/Height would overstate the height of a portrait photo and
+    // under-scale it after a rotation. naturalWidth/Height are the true
+    // pixels; they are 0 until the image has loaded, hence the guard.
+    var naturalWidth = doc.naturalWidth || 0;
+    var naturalHeight = doc.naturalHeight || 0;
+    if (!naturalWidth || !naturalHeight) { return; }
+
+    // How large the picture renders at scale 1, after the CSS caps letterbox
+    // it into the stage.
+    var containScale = Math.min(
+      1, Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight)
+    );
+    var pictureWidth = naturalWidth * containScale;
+    var pictureHeight = naturalHeight * containScale;
+
+    // A quarter turn swaps which axis the picture needs.
     var quarterTurned = Math.abs(Math.round(state.deg / 90)) % 2 === 1;
-    var neededWidth = quarterTurned ? height : width;
-    var neededHeight = quarterTurned ? width : height;
+    var neededWidth = quarterTurned ? pictureHeight : pictureWidth;
+    var neededHeight = quarterTurned ? pictureWidth : pictureHeight;
+    if (!(neededWidth > 0) || !(neededHeight > 0)) { return; }
 
     // Rotation is preserved: the button fits what is on screen rather than
-    // silently undoing the reviewer's orientation.
+    // silently undoing the reviewer's chosen orientation.
     state.scale = Math.min(boxWidth / neededWidth, boxHeight / neededHeight);
     apply();
   }

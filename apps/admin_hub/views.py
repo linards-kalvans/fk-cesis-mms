@@ -10,6 +10,61 @@ from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
+def _billing_change_route(application, record) -> tuple[str, str]:
+    """Where the step-6 plan form should POST, and why it cannot.
+
+    Two endpoints own the plan, at different points in the pipeline, and the
+    Hub previously only ever used the first:
+
+    * Before signing there is no BillingRecord yet, so the plan is an
+      *intent* on the agreement — ``set_billing_setup``, which deliberately
+      refuses a signed agreement ("billing is already realised against the
+      locked record").
+    * After signing the record exists and IS the billing, so changing it
+      means reassigning that record — ``billing_billingrecord_reassign``,
+      which takes the same ``billing_plan`` + ``first_billing_month`` fields.
+
+    Posting ``set_billing_setup`` after signing therefore surfaced the raw
+    English "cannot change billing setup after signing" in a Latvian UI, for
+    a change the domain in fact supports. Returns ``(url, blocked_reason)``
+    with exactly one populated: reassignment has hard guards (draft only, no
+    invoice pushed to Invoice Ninja, none e-mailed to a parent), and where
+    they bite the reviewer is told which one rather than being allowed to
+    submit into an error.
+    """
+    from django.urls import reverse
+
+    from apps.billing.models import BillingRecord
+
+    if record is None:
+        return (
+            reverse(
+                "admin:registrations_registrationapplication_review-action",
+                args=[application.pk],
+            ),
+            "",
+        )
+    if str(record.status) != str(BillingRecord.Status.DRAFT):
+        return "", (
+            "Maksājumu ieraksts jau ir apstiprināts. Lai mainītu plānu, "
+            "vispirms atsauciet ierakstu pilnajā administrācijā."
+        )
+    if record.invoices.exclude(external_invoice_id="").exists():
+        return "", (
+            "Rēķini jau ir izrakstīti Invoice Ninja — plānu vairs nevar "
+            "mainīt, neatsaucot tos."
+        )
+    if record.invoices.filter(sent_at__isnull=False).exists():
+        return "", (
+            "Rēķini jau ir nosūtīti vecākam — plānu vairs nevar mainīt, "
+            "neatsaucot tos."
+        )
+    return (
+        reverse("admin:billing_billingrecord_reassign", args=[record.pk]),
+        "",
+    )
+
+
 def _step_urls(application, objects) -> dict[str, str]:
     """Which Hub page owns each pipeline step.
 
@@ -219,6 +274,10 @@ def billing_view(request, pk: int):
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
     record = objects.billing_record
+    # Computed once: the guards behind it hit the invoice table.
+    billing_change_url, billing_change_blocked_reason = _billing_change_route(
+        application, record
+    )
 
     # Preview the schedule from whatever is selected now, so the reviewer sees
     # the consequence before saving. Falls back to an empty list when there is
@@ -243,6 +302,9 @@ def billing_view(request, pk: int):
             "agreement": agreement,
             "record": record,
             "step_urls": _step_urls(application, objects),
+            # Which endpoint owns the plan right now - see _billing_change_route.
+            "billing_change_url": billing_change_url,
+            "billing_change_blocked_reason": billing_change_blocked_reason,
             # The template must not compare against a domain enum literal.
             "record_confirmed": (
                 record is not None

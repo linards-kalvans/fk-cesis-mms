@@ -168,10 +168,10 @@
           <span class="card__spacer"></span>
           <form id="mark-signed-form" method="post" action="{{ review_action_url }}">
             {% csrf_token %}
-            {# Unlike the page's other five forms, next points at step 6 (billing),
+            {% comment %} Unlike the page's other five forms, next points at step 6 (billing),
                not back at this page: mark_agreement_signed materialises the
                BillingRecord from the plan set there, so once signing succeeds
-               the reviewer's next task is that step, not this one. #}
+               the reviewer's next task is that step, not this one. {% endcomment %}
             <input type="hidden" name="next" value="{% url 'admin_hub:billing' application.pk %}">
             <button type="submit" name="action" value="mark_agreement_signed"
                     class="btn btn-red"
@@ -246,9 +246,9 @@
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:cockpit' application.pk %}">← Dati</a>
       <a class="btn btn-secondary" href="{% url 'admin_hub:billing' application.pk %}">Maksas plāns →</a>
-      {# Submits the step-5 form via its id so the primary transition is
+      {% comment %} Submits the step-5 form via its id so the primary transition is
          reachable without scrolling past three cards. Both preconditions
-         still gate it, exactly as the in-card button does. #}
+         still gate it, exactly as the in-card button does. {% endcomment %}
       <button type="submit" form="mark-signed-form" name="action" value="mark_agreement_signed"
               class="btn btn-red"
               {% if not has_signed_artifact or not has_billing_plan %}disabled{% endif %}>

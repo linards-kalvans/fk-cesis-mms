@@ -367,3 +367,86 @@ def test_next_season_action_is_enabled_when_current_record_exists_and_no_next_se
     ).content.decode()
     tag = _next_season_button_tag(body)
     assert "disabled" not in tag
+
+
+def _plan_form_action(body: str) -> str:
+    """The step-6 form's action attribute, scoped to that form."""
+    import re
+
+    match = re.search(r'<form id="plan-form"[^>]*action="([^"]*)"', body)
+    assert match, "step-6 plan form not found"
+    return match.group(1)
+
+
+def test_plan_form_posts_set_billing_setup_before_signing(
+    client, reviewer, approved_application, default_plan
+):
+    """No BillingRecord exists yet, so the plan is an intent on the agreement."""
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[approved_application.pk])
+    ).content.decode()
+    assert _plan_form_action(body) == reverse(
+        "admin:registrations_registrationapplication_review-action",
+        args=[approved_application.pk],
+    )
+
+
+def test_plan_form_posts_reassign_once_a_record_exists(
+    client, reviewer, signed_application, default_plan
+):
+    """After signing the record IS the billing, so changing the plan means
+    reassigning that record. Posting set_billing_setup here raised the raw
+    English "cannot change billing setup after signing" for a change the
+    domain actually supports."""
+    from decimal import Decimal
+
+    from apps.billing.models import BillingRecord
+
+    record = BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+    )
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+    assert _plan_form_action(body) == reverse(
+        "admin:billing_billingrecord_reassign", args=[record.pk]
+    )
+    assert "disabled" not in _plan_form_action(body)
+
+
+def test_plan_change_is_blocked_with_a_reason_once_invoices_are_issued(
+    client, reviewer, signed_application, default_plan
+):
+    """reassign_draft_billing_record refuses a record with a pushed invoice.
+    The reviewer must be told which guard bit, not allowed to submit into it."""
+    import datetime
+    from decimal import Decimal
+
+    from apps.billing.models import BillingInvoice, BillingRecord
+
+    record = BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+    )
+    BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date=datetime.date(2026, 9, 20),
+        amount=Decimal("30.00"),
+        external_invoice_id="IN-9001",
+    )
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+    assert "Invoice Ninja" in body
+    assert "Rēķini jau ir izrakstīti" in body

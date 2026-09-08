@@ -1,12 +1,12 @@
 {% extends "admin/change_form.html" %}
 
-{# P16 — Agreement admin read-only change page.
+{% comment %} P16 — Agreement admin read-only change page.
 
    Renders the inherited Django admin form (all fields are already in the
    ``readonly_fields`` list on the model admin) plus an inline preview iframe
    and a forced-download anchor for any agreement row that has a DocuSeal
    ``external_id``. The document route is admin-only and streams the PDF
-   through the shared proxy; the DocuSeal URL itself is never rendered. #}
+   through the shared proxy; the DocuSeal URL itself is never rendered. {% endcomment %}
 
 {% block content %}
   {{ block.super }}

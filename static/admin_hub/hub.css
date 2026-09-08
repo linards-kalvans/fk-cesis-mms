@@ -460,7 +460,15 @@ a { color: inherit; text-decoration: none; }
 }
 .viewer__stage {
   height: 460px;
-  display: grid; place-items: center;
+  /* One definite track in each axis. With auto-sized tracks the row height is
+     indefinite, so `max-height: 100%` on the document resolves to `none` and
+     a tall photo overflows regardless - which is why an earlier fit attempt
+     had no visible effect. minmax(0, 1fr) makes both tracks resolve against
+     the stage's own explicit box. */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
   background:
     linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%) 0 0/22px 22px,
     linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%) 11px 11px/22px 22px,
@@ -475,6 +483,10 @@ a { color: inherit; text-decoration: none; }
 .viewer__doc {
   max-width: 100%;
   max-height: 100%;
+  /* min-* defaults would otherwise floor the box at the intrinsic size and
+     defeat the max-* caps for a large photo. */
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
   transform-origin: center center;
   transition: transform 0.25s ease;
