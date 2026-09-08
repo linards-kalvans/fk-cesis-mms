@@ -166,7 +166,7 @@
         <div class="card__foot">
           <span class="hint">Solis 5 no 8</span>
           <span class="card__spacer"></span>
-          <form method="post" action="{{ review_action_url }}">
+          <form id="mark-signed-form" method="post" action="{{ review_action_url }}">
             {% csrf_token %}
             {# Unlike the page's other five forms, next points at step 6 (billing),
                not back at this page: mark_agreement_signed materialises the
@@ -234,5 +234,26 @@
         </ul>
       </div>
     </aside>
+  </div>
+{% endblock %}
+
+{% block hub_actionbar %}
+  <div class="actionbar">
+    <div class="actionbar__inner">
+      <span class="actionbar__note">Solis <strong>{{ steps_done }} / {{ steps_total }}</strong></span>
+      <span class="actionbar__note">·</span>
+      <span class="actionbar__note">{{ agreement.get_state_display }}</span>
+      <span class="actionbar__spacer"></span>
+      <a class="btn btn-secondary" href="{% url 'admin_hub:cockpit' application.pk %}">← Dati</a>
+      <a class="btn btn-secondary" href="{% url 'admin_hub:billing' application.pk %}">Maksas plāns →</a>
+      {# Submits the step-5 form via its id so the primary transition is
+         reachable without scrolling past three cards. Both preconditions
+         still gate it, exactly as the in-card button does. #}
+      <button type="submit" form="mark-signed-form" name="action" value="mark_agreement_signed"
+              class="btn btn-red"
+              {% if not has_signed_artifact or not has_billing_plan %}disabled{% endif %}>
+        Atzīmēt kā parakstītu →
+      </button>
+    </div>
   </div>
 {% endblock %}

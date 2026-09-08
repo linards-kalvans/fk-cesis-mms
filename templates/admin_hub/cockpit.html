@@ -24,8 +24,18 @@
     </div>
     <div class="row">
       <span class="badge {{ status_badge_class }}">{{ application.get_status_display }}</span>
+      {# The readout below is deliberately read-only, but a reviewer who spots a
+         typo needs a way to correct it. The child's fields are editable on the
+         application's own admin form and the parent's on the guardian record,
+         so link to each explicitly rather than leaving one "Django admin"
+         button that reads like a debug hatch. Both are one-way trips: saving
+         returns to the admin changelist, not here. #}
       <a class="btn btn-secondary btn-sm"
-         href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">Atvērt Django admin</a>
+         href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">&#9998; Labot bērna datus</a>
+      {% if application.guardian_id %}
+        <a class="btn btn-secondary btn-sm"
+           href="{% url 'admin:members_guardian_change' application.guardian_id %}">&#9998; Labot vecāka datus</a>
+      {% endif %}
     </div>
   </div>
 
@@ -49,7 +59,7 @@
           <span class="card__step">2</span>
           <h2 class="anton">Apstiprināšana</h2>
         </div>
-        <form method="post"
+        <form id="approve-form" method="post"
               action="{% url 'admin:registrations_registrationapplication_approve' application.pk %}?next={{ request.path|urlencode }}">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.path }}">
@@ -79,7 +89,7 @@
         </form>
       </div>
 
-      <details class="tray" style="margin-top:14px">
+      <details class="tray" id="riskantas-darbibas" style="margin-top:14px">
         <summary>&#9888; Riskantās darbības — labojuma pieprasījums, noraidīšana</summary>
         <div class="tray__body">
           <form method="post"
@@ -109,6 +119,11 @@
       <span class="actionbar__note">Solis {{ steps_done }} / {{ steps_total }}</span>
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:queue' %}">← Atpakaļ uz rindu</a>
+      <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
+      {# Submits the step-2 form above via its id, so the training-group select
+         stays in its card while the primary action is always on screen. The
+         checklist never gates this - see the card copy. #}
+      <button type="submit" form="approve-form" class="btn btn-red">Apstiprināt pieteikumu →</button>
     </div>
   </div>
 {% endblock %}

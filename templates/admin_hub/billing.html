@@ -32,7 +32,7 @@
           <span class="card__step">6</span>
           <h2 class="anton">Maksas plāns</h2>
         </div>
-        <form method="post" action="{{ review_action_url }}">
+        <form id="plan-form" method="post" action="{{ review_action_url }}">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.path }}">
           <div class="card__body stack">
@@ -215,5 +215,23 @@
         </dl>
       </div>
     </aside>
+  </div>
+{% endblock %}
+
+{% block hub_actionbar %}
+  <div class="actionbar">
+    <div class="actionbar__inner">
+      <span class="actionbar__note">Solis <strong>{{ steps_done }} / {{ steps_total }}</strong></span>
+      {% if record %}
+        <span class="actionbar__note">·</span>
+        <span class="actionbar__note">{{ record.get_status_display }} · {{ record.final_amount }} €</span>
+      {% endif %}
+      <span class="actionbar__spacer"></span>
+      <a class="btn btn-secondary" href="{% url 'admin_hub:agreement' application.pk %}">← Līgums</a>
+      {# Submits the step-6 plan form via its id: the plan selects stay in
+         their card while the save stays on screen. #}
+      <button type="submit" form="plan-form" name="action" value="set_billing_setup"
+              class="btn btn-red">Saglabāt plānu →</button>
+    </div>
   </div>
 {% endblock %}
