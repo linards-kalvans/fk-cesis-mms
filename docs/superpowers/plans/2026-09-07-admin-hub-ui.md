@@ -2337,7 +2337,23 @@ git commit -m "feat(admin-hub): add review cockpit with document viewer and fiel
 | Augšupielādēt parakstīto | `admin:registrations_registrationapplication_signed_artifact_upload` | POST multipart, args `[application.pk, agreement.pk]` |
 | Skatīt parakstīto | `admin:registrations_registrationapplication_signed_artifact` | GET, args `[application.pk, agreement.pk]` |
 
-`review_action_view` already ends every branch with `_after_review_redirect`, which honours a validated `next` — so no backend change is needed for this task.
+**Correction (2026-09-08): the sentence this plan originally carried here was
+false.** It claimed `review_action_view` ends every branch with
+`_after_review_redirect` and that no backend change was needed. Mapping every
+branch showed only three actions honoured `next` — `mark_agreement_sent`,
+`mark_agreement_signed`, `set_billing_setup` (11 call sites) — while thirteen
+ignored it (46 sites), including `set_signing_path`, `regenerate_agreement` and
+`void_agreement`, which this task drives. Every one of those bounced the reviewer
+into Django admin, defeating the Hub.
+
+Task 5's fix round corrected this once for every action the Hub uses
+(`request_fix`, `reject`, `set_signing_path`, `regenerate_agreement`,
+`void_agreement`, `create_next_season_billing`), extracting the validation into a
+`_validated_next` helper so each call site keeps its own no-`next` fallback —
+`reject` in particular must still land on the changelist, not the change page.
+`url_has_allowed_host_and_scheme` remains the only gate on `next`; it must not be
+weakened. **So by the time this task runs, the actions below do honour `next` —
+verify that rather than assuming it, and do not add a second redirect path.**
 
 **Step 6 gates step 5.** The spec requires the billing plan to be set before the
 signed transition completes, because `mark_agreement_signed` is what materialises
