@@ -302,7 +302,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
         """Two-step reassignment of a draft BillingRecord to a new plan + first
         billing month. GET renders a confirmation form; POST commits through
         the service. The service is the source of truth for guards (DRAFT
-        only, no pushed/sent invoices)."""
+        only, no pushed/sent invoices). On success, returns via
+        ``_safe_redirect`` (same open-redirect-safe ``next`` handling as
+        ``confirm_view``/``push_view``) rather than a hardcoded destination,
+        so the Admin Hub's plan-form post — which carries a hidden ``next``
+        back to the Hub page it came from — actually returns there."""
         if not self.has_change_permission(request):
             raise PermissionDenied
         record = get_object_or_404(BillingRecord, pk=object_id)
@@ -335,9 +339,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
                             actor=request.user,
                         )
                         self.message_user(request, "Norēķinu ieraksts pārpiešķirts.")
-                        return redirect(
-                            "admin:billing_billingrecord_change", object_id
-                        )
+                        return self._safe_redirect(request, object_id)
                     except ValueError as exc:
                         raw = str(exc)
                         if raw == "next year plan required":

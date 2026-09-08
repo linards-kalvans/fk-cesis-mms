@@ -838,6 +838,14 @@ def reassign_draft_billing_record(
     — explicit staff replacement is a deliberate P15 transformation. A
     blank ``first_billing_month`` keeps the legacy full-annual / NULL-count
     path. The audit event carries the new scheduled count when set.
+
+    When ``record.agreement`` is set, its ``billing_plan`` /
+    ``first_billing_month`` are updated in the same transaction to match the
+    record's new values — after a staff reassignment the agreement's billing
+    intent has genuinely changed, and leaving it stale desyncs
+    ``load_pipeline_objects``' record-to-agreement matching (by season).
+    ``agreement`` is nullable (``on_delete=SET_NULL``); a record with none is
+    reassigned with no agreement write.
     """
     from apps.billing.models import BillingRecord
     from apps.core.audit import record_audit_event
@@ -878,37 +886,57 @@ def reassign_draft_billing_record(
     old_plan_id = record.plan_id
     old_month = record.first_billing_month
 
-    record.invoices.all().delete()
-    percent = record.sibling_discount_percent_applied
-    # P15: a non-blank month always lands on the partial base + saved
-    # count, even when the prior record was a legacy NULL-count row.
-    # Blank input preserves the legacy full-annual / NULL-count path.
-    if new_count is not None:
-        record.base_amount = partial_base_amount(plan, new_count)
-    else:
-        record.base_amount = _money(plan.annual_amount)
-    record.plan = plan
-    record.season = plan.season
-    record.first_billing_month = normalized_month or first_billing_month
-    record.scheduled_installment_count = new_count
-    record.discount_amount = _money(record.base_amount * percent / Decimal("100"))
-    record.final_amount = (
-        record.manual_amount_override
-        if record.manual_amount_override is not None
-        else _money(record.base_amount - record.discount_amount)
-    )
-    record.save(
-        update_fields=[
-            "plan",
-            "season",
-            "first_billing_month",
-            "scheduled_installment_count",
-            "base_amount",
-            "discount_amount",
-            "final_amount",
-            "updated_at",
-        ]
-    )
+    with transaction.atomic():
+        record.invoices.all().delete()
+        percent = record.sibling_discount_percent_applied
+        # P15: a non-blank month always lands on the partial base + saved
+        # count, even when the prior record was a legacy NULL-count row.
+        # Blank input preserves the legacy full-annual / NULL-count path.
+        if new_count is not None:
+            record.base_amount = partial_base_amount(plan, new_count)
+        else:
+            record.base_amount = _money(plan.annual_amount)
+        record.plan = plan
+        record.season = plan.season
+        record.first_billing_month = normalized_month or first_billing_month
+        record.scheduled_installment_count = new_count
+        record.discount_amount = _money(record.base_amount * percent / Decimal("100"))
+        record.final_amount = (
+            record.manual_amount_override
+            if record.manual_amount_override is not None
+            else _money(record.base_amount - record.discount_amount)
+        )
+        record.save(
+            update_fields=[
+                "plan",
+                "season",
+                "first_billing_month",
+                "scheduled_installment_count",
+                "base_amount",
+                "discount_amount",
+                "final_amount",
+                "updated_at",
+            ]
+        )
+
+        # Keep the Agreement's billing intent in sync with the record that
+        # now materialises it. load_pipeline_objects (apps/admin_hub/pipeline.py)
+        # identifies the current BillingRecord by comparing record.season
+        # against agreement.billing_plan.season; leaving the agreement
+        # unsynced after a cross-season reassignment made it misclassify
+        # this very record as next_season_record (or drop it), which routed
+        # the Hub back to set_billing_setup — which refuses a signed
+        # agreement, reproducing the exact error this change exists to
+        # eliminate. ``agreement`` is nullable (SET_NULL): a record with no
+        # agreement has nothing to sync and must still reassign cleanly.
+        if record.agreement_id is not None:
+            agreement = record.agreement
+            agreement.billing_plan = plan
+            agreement.first_billing_month = record.first_billing_month
+            agreement.save(
+                update_fields=["billing_plan", "first_billing_month", "updated_at"]
+            )
+
     audit_metadata = {
         "old_plan_id": old_plan_id,
         "new_plan_id": plan.pk,

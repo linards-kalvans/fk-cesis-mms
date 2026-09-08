@@ -144,3 +144,73 @@ def test_invoices_step_is_done_only_when_every_invoice_is_pushed(
 def test_only_one_step_is_current(approved_application):
     steps = build_pipeline(load_pipeline_objects(approved_application))
     assert [s.state for s in steps].count("current") <= 1
+
+
+def test_reassign_across_season_boundary_keeps_record_current(
+    approved_application, default_plan
+):
+    """CRITICAL 1 repro: reassign_draft_billing_record used to touch only the
+    BillingRecord, never Agreement.billing_plan / first_billing_month. Since
+    load_pipeline_objects identifies the current record by comparing
+    record.season against agreement.billing_plan.season, an unsynced
+    agreement after a cross-season reassignment (offered by the reassign
+    dropdown, and unguarded here because a blank first_billing_month skips
+    season validation) reclassified the very record just reassigned as
+    next_season_record — losing objects.billing_record entirely and, in the
+    Hub, routing step 6 back to set_billing_setup, which refuses a signed
+    agreement."""
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.billing.models import BillingRecord, MembershipPlan
+    from apps.billing.services import reassign_draft_billing_record
+
+    agreement = approved_application.approved_member.agreements.get(is_current=True)
+    agreement.billing_plan = default_plan
+    agreement.first_billing_month = "2026-09"
+    agreement.state = agreement.State.SIGNED
+    agreement.sent_at = timezone.now()
+    agreement.signed_at = timezone.now()
+    agreement.save(
+        update_fields=[
+            "billing_plan",
+            "first_billing_month",
+            "state",
+            "sent_at",
+            "signed_at",
+        ]
+    )
+
+    record = BillingRecord.objects.create(
+        member=agreement.member,
+        agreement=agreement,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        first_billing_month="2026-09",
+        status=BillingRecord.Status.DRAFT,
+    )
+
+    next_season_plan = MembershipPlan.objects.create(
+        name="Hub Next Season Plan",
+        season="2027/2028",
+        annual_amount=Decimal("320.00"),
+        is_active=True,
+    )
+
+    # Blank first_billing_month deliberately skips P15 season validation —
+    # this is the unguarded path the reassign dropdown allows across a
+    # season boundary.
+    reassign_draft_billing_record(
+        record,
+        next_season_plan,
+        first_billing_month="",
+        actor=None,
+    )
+
+    objects = load_pipeline_objects(approved_application)
+    assert objects.billing_record is not None
+    assert objects.billing_record.pk == record.pk
+    assert objects.next_season_record is None

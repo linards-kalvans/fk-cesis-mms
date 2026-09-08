@@ -10,7 +10,7 @@ from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
-def _billing_change_route(application, record) -> tuple[str, str]:
+def _billing_change_route(application, record, invoices) -> tuple[str, str]:
     """Where the step-6 plan form should POST, and why it cannot.
 
     Two endpoints own the plan, at different points in the pipeline, and the
@@ -31,6 +31,11 @@ def _billing_change_route(application, record) -> tuple[str, str]:
     invoice pushed to Invoice Ninja, none e-mailed to a parent), and where
     they bite the reviewer is told which one rather than being allowed to
     submit into an error.
+
+    ``invoices`` is the already-materialised list for ``record`` (from
+    ``load_pipeline_objects``, which prefetches it) — checked in Python
+    rather than with two fresh ``record.invoices.exists()`` queries against
+    rows the caller already fetched. Pass ``[]`` when ``record`` is None.
     """
     from django.urls import reverse
 
@@ -49,12 +54,12 @@ def _billing_change_route(application, record) -> tuple[str, str]:
             "Maksājumu ieraksts jau ir apstiprināts. Lai mainītu plānu, "
             "vispirms atsauciet ierakstu pilnajā administrācijā."
         )
-    if record.invoices.exclude(external_invoice_id="").exists():
+    if any(invoice.external_invoice_id for invoice in invoices):
         return "", (
             "Rēķini jau ir izrakstīti Invoice Ninja — plānu vairs nevar "
             "mainīt, neatsaucot tos."
         )
-    if record.invoices.filter(sent_at__isnull=False).exists():
+    if any(invoice.sent_at is not None for invoice in invoices):
         return "", (
             "Rēķini jau ir nosūtīti vecākam — plānu vairs nevar mainīt, "
             "neatsaucot tos."
@@ -274,22 +279,33 @@ def billing_view(request, pk: int):
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
     record = objects.billing_record
-    # Computed once: the guards behind it hit the invoice table.
+    # Uses objects.invoices — already prefetched/materialised by
+    # load_pipeline_objects for this same record — instead of two fresh
+    # .exists() queries against rows already in memory.
     billing_change_url, billing_change_blocked_reason = _billing_change_route(
-        application, record
+        application, record, objects.invoices
     )
 
     # Preview the schedule from whatever is selected now, so the reviewer sees
     # the consequence before saving. Falls back to an empty list when there is
     # no plan yet - never to a guess.
+    #
+    # Once a BillingRecord exists it IS the billing, so its own plan / month
+    # are what the preview must reflect — not the agreement's. CRITICAL 1's
+    # reassignment fix keeps the two in sync, but reading the row actually
+    # displayed (record when present, agreement's intent otherwise) is
+    # correct independent of that sync and costs nothing extra here.
     schedule: list[tuple[datetime.date, Decimal]] = []
-    plan = agreement.billing_plan
+    plan = record.plan if record is not None else agreement.billing_plan
+    first_billing_month = (
+        record.first_billing_month if record is not None else agreement.first_billing_month
+    )
     if plan is not None:
         total_amount = record.final_amount if record is not None else plan.annual_amount
         schedule = derive_installment_schedule(
             plan,
             total_amount,
-            first_billing_month=agreement.first_billing_month,
+            first_billing_month=first_billing_month,
         )
 
     return render(

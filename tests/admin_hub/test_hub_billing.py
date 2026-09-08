@@ -123,6 +123,58 @@ def test_schedule_preview_hint_when_no_plan_is_selected(
     assert "Izvēlieties plānu un pirmo mēnesi, lai redzētu grafiku." in body
 
 
+def test_schedule_preview_uses_the_record_plan_and_month_once_one_exists(
+    client, reviewer, signed_application, default_plan
+):
+    """IMPORTANT 3: once a BillingRecord exists it IS the billing, so the
+    preview must read *its* plan/first_billing_month, not the agreement's —
+    even though CRITICAL 1's reassignment sync should normally keep the two
+    equal. This isolates the view's read path from that sync by building a
+    record that deliberately disagrees with the agreement (e.g. a record
+    from before the sync existed), the way a regression in it would."""
+    from apps.billing.models import BillingRecord, MembershipPlan
+
+    # Deliberately different from the agreement's default_plan (1
+    # installment, anchored September): 3 installments anchored in a
+    # different month than either the plan default or the agreement.
+    record_plan = MembershipPlan.objects.create(
+        name="Record-Only Plan",
+        season="2026/2027",
+        annual_amount=Decimal("450.00"),
+        installment_count=3,
+        first_installment_month=11,
+        skip_months="",
+        payment_due_day=20,
+        is_active=True,
+    )
+    BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=record_plan,
+        season=record_plan.season,
+        base_amount=Decimal("450.00"),
+        final_amount=Decimal("450.00"),
+        first_billing_month="2026-12",
+    )
+
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+
+    # Each <div class="schedrow"> contains only <span> children (no nested
+    # <div>), so its own close tag is the first </div> encountered — unlike
+    # the sibling helper above, this does not require (and must not
+    # require) a second, immediately-following </div>, which would only
+    # ever match the last row before the wrapping .sched container closes.
+    schedule_rows = re.findall(r'<div class="schedrow">.*?</div>', body, re.S)
+    # Reading the agreement (default_plan, 1 installment, anchored
+    # 2026-09) would render exactly one row due 20.09.2026. Reading the
+    # record (record_plan, 3 installments, anchored 2026-12) renders three
+    # rows, the first due 20.12.2026.
+    assert len(schedule_rows) == 3
+    assert any("20.12.2026" in row for row in schedule_rows)
+
+
 def test_invoice_table_shows_a_created_invoice(
     client, reviewer, signed_application, default_plan
 ):
@@ -378,6 +430,23 @@ def _plan_form_action(body: str) -> str:
     return match.group(1)
 
 
+def _plan_form_submit_button_tag(body: str) -> str:
+    """The step-6 form's own submit button, scoped to its opening tag.
+
+    ``_plan_form_action`` returns only the form's ``action="..."`` URL,
+    which can never contain the word "disabled" — asserting against it
+    cannot fail regardless of the button's real state. The button carrying
+    ``{% if billing_change_blocked_reason %}disabled{% endif %}`` is the
+    in-form ``card__foot`` submit (the first ``value="set_billing_setup"``
+    button in document order; the actionbar's mirrors it via
+    ``form="plan-form"`` further down the page)."""
+    match = re.search(
+        r'<button[^>]*value="set_billing_setup"[^>]*>', body, re.DOTALL
+    )
+    assert match is not None, "step-6 plan form submit button must be present"
+    return match.group(0)
+
+
 def test_plan_form_posts_set_billing_setup_before_signing(
     client, reviewer, approved_application, default_plan
 ):
@@ -417,7 +486,7 @@ def test_plan_form_posts_reassign_once_a_record_exists(
     assert _plan_form_action(body) == reverse(
         "admin:billing_billingrecord_reassign", args=[record.pk]
     )
-    assert "disabled" not in _plan_form_action(body)
+    assert "disabled" not in _plan_form_submit_button_tag(body)
 
 
 def test_plan_change_is_blocked_with_a_reason_once_invoices_are_issued(
@@ -448,5 +517,11 @@ def test_plan_change_is_blocked_with_a_reason_once_invoices_are_issued(
     body = client.get(
         reverse("admin_hub:billing", args=[signed_application.pk])
     ).content.decode()
-    assert "Invoice Ninja" in body
+    # "Invoice Ninja" renders unconditionally in step 7's card header on
+    # every billing page, blocking logic or not — it would pass even with
+    # _billing_change_route's guard deleted. The form's action being empty
+    # and its submit button carrying "disabled" are what _billing_change_route
+    # actually controls, so only these fail when the blocking breaks.
+    assert _plan_form_action(body) == ""
+    assert "disabled" in _plan_form_submit_button_tag(body)
     assert "Rēķini jau ir izrakstīti" in body
