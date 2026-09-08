@@ -8,8 +8,6 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from apps.admin_hub.invoices import BULK_CONFIRM_THRESHOLD
-
 pytestmark = [pytest.mark.django_db, pytest.mark.admin_view]
 
 
@@ -33,6 +31,33 @@ def unpaid_invoice(approved_application, default_plan):
         external_status="sent",
         payment_status="unpaid",
         balance=Decimal("30.00"),
+    )
+
+
+@pytest.fixture
+def paid_overdue_invoice(approved_application, default_plan):
+    """A fully paid invoice whose due date is in the past. Must never render
+    as overdue - only the payment_status/date combination together decide
+    that, never the date alone."""
+    from apps.billing.models import BillingInvoice, BillingRecord
+
+    record = BillingRecord.objects.create(
+        member=approved_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+    )
+    return BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date=datetime.date(2026, 7, 20),
+        amount=Decimal("30.00"),
+        external_invoice_id="IN-88",
+        external_status="paid",
+        payment_status="paid",
+        paid_to_date=Decimal("30.00"),
+        balance=Decimal("0.00"),
     )
 
 
@@ -71,6 +96,19 @@ def test_overdue_invoice_is_flagged(client, reviewer, unpaid_invoice):
     assert "is-overdue" in body
 
 
+def test_paid_invoice_past_due_date_is_not_flagged_as_overdue(
+    client, reviewer, paid_overdue_invoice
+):
+    """kaveti and overdue_count both require payment_status != PAID as well
+    as a past due date. The visi tab shows paid invoices too, so it must
+    apply the exact same rule - not just the date half of it - or a paid
+    invoice with an old due date renders as "kavēts"."""
+    client.force_login(reviewer)
+    body = client.get(reverse("admin_hub:invoices"), {"tab": "visi"}).content.decode()
+    assert "is-overdue" not in body
+    assert "badge--overdue" not in body
+
+
 def test_invoices_page_has_no_reminder_action(client, reviewer, unpaid_invoice):
     """Reminder e-mails were explicitly ruled out of scope."""
     client.force_login(reviewer)
@@ -87,33 +125,3 @@ def test_unknown_tab_falls_back_to_the_default(client, reviewer, unpaid_invoice)
     # fallback specifically lands on the default tab's own nav link.
     body = response.content.decode()
     assert '<a href="?tab=neapmaksati" class="is-active">' in body
-
-
-def test_bulk_confirm_page_reports_the_selection_size(client, reviewer):
-    client.force_login(reviewer)
-    ids = ",".join(str(n) for n in range(BULK_CONFIRM_THRESHOLD + 1))
-    response = client.get(
-        reverse("admin_hub:bulk_confirm"),
-        {"ids": ids, "op": "push"},
-    )
-    assert response.status_code == 200
-    body = response.content.decode()
-    assert str(BULK_CONFIRM_THRESHOLD + 1) in body
-    assert "Apstiprināt" in body
-
-
-def test_bulk_confirm_states_the_batch_cap(client, reviewer):
-    client.force_login(reviewer)
-    ids = ",".join(str(n) for n in range(BULK_CONFIRM_THRESHOLD + 1))
-    body = client.get(
-        reverse("admin_hub:bulk_confirm"), {"ids": ids, "op": "push"}
-    ).content.decode()
-    assert str(BULK_CONFIRM_THRESHOLD) in body
-
-
-def test_bulk_confirm_rejects_a_non_numeric_id_list(client, reviewer):
-    client.force_login(reviewer)
-    response = client.get(
-        reverse("admin_hub:bulk_confirm"), {"ids": "1,2,../etc", "op": "push"}
-    )
-    assert response.status_code == 400

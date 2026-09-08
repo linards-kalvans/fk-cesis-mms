@@ -48,7 +48,7 @@
         </thead>
         <tbody>
           {% for invoice in totals.rows %}
-            <tr class="{% if invoice.due_date < today %}is-overdue{% endif %}">
+            <tr class="{% if invoice.is_overdue %}is-overdue{% endif %}">
               <td>
                 <div class="cellstack">
                   <strong>{{ invoice.billing_record.member.full_name }}</strong>
@@ -61,7 +61,7 @@
               <td>{{ invoice.billing_record.season }}</td>
               <td>{{ invoice.sequence }}</td>
               <td>
-                {% if invoice.due_date < today %}
+                {% if invoice.is_overdue %}
                   <span class="badge badge--sm badge--overdue">{{ invoice.due_date|date:"d.m.Y" }}</span>
                 {% else %}
                   {{ invoice.due_date|date:"d.m.Y" }}

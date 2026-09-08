@@ -11,14 +11,24 @@ The two copies deliberately disagree on one point: ``submit_payload``'s
 not drift — this directory's tests read the application's in-memory
 ``member_birth_date`` after calling ``create_or_update_draft`` directly (which
 assigns the payload value straight to the model field with no form-cleaning
-step), so it must already be a ``date``. tests/registrations/conftest.py's
-tests POST the payload through the real view/form, which cleans a string into
-a ``date`` for them. Re-syncing the two copies in one direction (string here)
-breaks this directory's tests loudly (a ``str`` where a ``date`` is expected);
-re-syncing the other direction (``date`` in tests/registrations/conftest.py)
-breaks silently, because Django's test client happily serializes a ``date``
-object into a POST body and the form cleans it right back into a ``date`` —
-so do not "helpfully" re-sync these two fixtures.
+step), so it must already be a ``date``.
+
+Do not "helpfully" re-sync the two copies. Re-syncing this directory's copy to
+a string breaks it loudly (a ``str`` where a ``date`` is expected). Syncing
+the other direction (a real ``date`` into tests/registrations/conftest.py) is
+NOT safe because "those tests POST through a form that cleans it" — that is
+false for the fixture itself: tests/registrations/conftest.py's own
+``submitted_application`` fixture calls
+``create_or_update_draft(data=submit_payload, ...)`` directly, the identical
+no-form-cleaning path this directory uses. The real reason re-syncing that
+direction happens not to break anything today is narrower: nothing in
+tests/registrations asserts ``member_birth_date``'s type or value at all.
+Exactly one test file there consumes the ``submit_payload`` fixture by name
+(``test_parent_edit_permissions.py``, via real ``client.post()`` calls), and
+both of its uses override ``member_birth_date`` to a literal string before
+sending it — so even that one consumer never reads the fixture's own value.
+That makes tests/registrations indifferent to the type, not protected from it
+by form-cleaning.
 """
 
 from __future__ import annotations
