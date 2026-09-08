@@ -137,7 +137,7 @@
 
       <div class="card{% if not can_approve %} card--locked{% endif %}" style="margin-top:18px">
         <div class="card__head{% if not can_approve %} card__head--locked{% endif %}">
-          <span class="card__step">{% if application.status == "approved" %}&#10003;{% else %}2{% endif %}</span>
+          <span class="card__step">{% if is_approved %}&#10003;{% else %}2{% endif %}</span>
           <h2 class="anton">Apstiprināšana</h2>
         </div>
         <form id="approve-form" method="post"

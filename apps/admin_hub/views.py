@@ -106,6 +106,11 @@ def cockpit_view(request, pk: int):
                 str(application.status)
                 == str(RegistrationApplication.Status.SUBMITTED)
             ),
+            # The template must not compare against a domain enum literal.
+            "is_approved": (
+                str(application.status)
+                == str(RegistrationApplication.Status.APPROVED)
+            ),
             "agreement_url": (
                 reverse("admin_hub:agreement", args=[application.pk])
                 if objects.agreement is not None
@@ -200,6 +205,7 @@ def billing_view(request, pk: int):
         load_pipeline_objects,
         pipeline_progress,
     )
+    from apps.admin_hub import invoices as invoice_queries
     from apps.billing.models import BillingRecord, MembershipPlan
     from apps.billing.services import derive_installment_schedule
     from apps.registrations.models import RegistrationApplication
@@ -243,6 +249,7 @@ def billing_view(request, pk: int):
                 and str(record.status) == str(BillingRecord.Status.CONFIRMED)
             ),
             "invoices": objects.invoices,
+            "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
             "next_season_record": objects.next_season_record,
             "schedule": schedule,
             "steps": steps,

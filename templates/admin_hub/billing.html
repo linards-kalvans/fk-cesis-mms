@@ -1,4 +1,5 @@
 {% extends "admin_hub/base_hub.html" %}
+{% load hub_tags %}
 
 {% block hub_title %}FK Cēsis Admin — {{ member.full_name }} · Maksājumi{% endblock %}
 {% block hub_page_class %}hub-page--flush{% endblock %}
@@ -120,7 +121,7 @@
                         {% endif %}
                       </td>
                       <td>
-                        <span class="badge badge--sm badge--{{ invoice.payment_status|default:'unpaid' }}">
+                        <span class="badge badge--sm {{ payment_badge_classes|get_item:invoice.payment_status|default:"badge--unpaid" }}">
                           {{ invoice.get_payment_status_display|default:"Nav apmaksāts" }}
                         </span>
                       </td>

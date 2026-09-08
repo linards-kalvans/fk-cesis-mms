@@ -54,6 +54,24 @@ def test_corrects_a_guardian_typo(client, editor, submitted_application):
     assert submitted_application.guardian.family_name == "Bērziņa-Ozola"
 
 
+def test_corrects_a_phone_number_via_the_parent_account(
+    client, editor, submitted_application
+):
+    """Guardian.phone (apps/members/models.py) is a read-only @property
+    proxying ParentAccount.phone — it has no setter. The correction must
+    write through to parent_account.phone, not to the Guardian row, or the
+    endpoint raises AttributeError the first time a reviewer edits it."""
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application), {"phone": "+37129998888"}
+    )
+    assert response.status_code == 302
+    submitted_application.refresh_from_db()
+    assert submitted_application.guardian_contact_phone == "+37129998888"
+    submitted_application.parent_account.refresh_from_db()
+    assert submitted_application.parent_account.phone == "+37129998888"
+
+
 def test_rejects_a_malformed_personal_id_and_writes_nothing(
     client, editor, submitted_application
 ):
@@ -73,6 +91,109 @@ def test_rejects_a_malformed_personal_id_and_writes_nothing(
     assert submitted_application.member_full_name == before
 
 
+def test_an_out_of_range_date_gets_the_latvian_message_not_the_raw_exception(
+    client, editor, submitted_application
+):
+    """Django's parse_date raises ValueError itself for a string shaped like
+    a date but with an out-of-range component (e.g. month 13), rather than
+    returning None — bypassing the `if parsed is None` check and leaking the
+    raw internal message to the reviewer instead of the Latvian one."""
+    before = submitted_application.member_birth_date
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application), {"member_birth_date": "2015-13-45"}
+    )
+    assert response.status_code == 302
+    from django.contrib.messages import get_messages
+
+    texts = [str(m) for m in get_messages(response.wsgi_request)]
+    assert any("GGGG-MM-DD" in text for text in texts)
+    assert not any("must be in 1..12" in text for text in texts)
+    submitted_application.refresh_from_db()
+    assert submitted_application.member_birth_date == before
+
+
+def test_a_blank_required_field_is_rejected_and_writes_nothing(
+    client, editor, submitted_application
+):
+    """member_full_name was mandatory at submission
+    (RegistrationApplicationForm.submit_required_fields); a reviewer clearing
+    it must be rejected like a malformed personal id, not silently accepted.
+    The valid field in the same submission must not land either."""
+    before_name = submitted_application.member_full_name
+    before_address = submitted_application.member_actual_address
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application),
+        {"member_full_name": "", "member_actual_address": "Jauna adrese 5"},
+    )
+    assert response.status_code == 302
+    submitted_application.refresh_from_db()
+    assert submitted_application.member_full_name == before_name
+    assert submitted_application.member_actual_address == before_address
+
+
+def test_a_blank_name_on_an_approved_application_does_not_reach_the_member(
+    client, editor, approved_application
+):
+    """The case that motivated the fix: a blank mirrors onto the Member,
+    which apps.integrations.docuseal reads verbatim into the agreement
+    payload, so an accidentally cleared name would silently blank a
+    regenerated legal agreement."""
+    member = approved_application.approved_member
+    before_member_name = member.full_name
+
+    client.force_login(editor)
+    client.post(_edit_url(approved_application), {"member_full_name": ""})
+
+    approved_application.refresh_from_db()
+    member.refresh_from_db()
+    assert approved_application.member_full_name != ""
+    assert member.full_name == before_member_name
+
+
+def test_an_edit_after_approval_mirrors_personal_id_onto_the_member(
+    client, editor, approved_application
+):
+    """Only full_name and birth_date were covered before; a typo in the
+    personal_id entry of _MEMBER_MIRRORED_FIELDS would have gone unnoticed."""
+    member = approved_application.approved_member
+
+    client.force_login(editor)
+    client.post(
+        _edit_url(approved_application),
+        {"member_personal_id": "020202-23456"},
+    )
+
+    approved_application.refresh_from_db()
+    member.refresh_from_db()
+    assert approved_application.member_personal_id == "020202-23456"
+    assert member.personal_id == "020202-23456"
+
+
+def test_an_invalid_guardian_field_writes_nothing_even_when_an_application_field_was_valid(
+    client, editor, submitted_application
+):
+    """Both loops (application, then guardian) finish collecting changes
+    before the transaction opens — so an invalid guardian field must still
+    block an already-collected, valid application field from the same
+    request. Untested from this direction before."""
+    before_name = submitted_application.member_full_name
+    before_family_name = submitted_application.guardian.family_name
+
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application),
+        {"member_full_name": "Changed Name", "personal_id": "not-a-code"},
+    )
+
+    assert response.status_code == 302
+    submitted_application.refresh_from_db()
+    submitted_application.guardian.refresh_from_db()
+    assert submitted_application.member_full_name == before_name
+    assert submitted_application.guardian.family_name == before_family_name
+
+
 def test_the_email_is_not_editable(client, editor, submitted_application):
     """A non-null parent_account IS the proof the address is reachable, and
     the cockpit says so. Rewriting it here would make that claim false."""
@@ -89,6 +210,12 @@ def test_the_email_is_not_editable(client, editor, submitted_application):
 def test_records_an_audit_event_naming_the_fields_but_not_the_values(
     client, editor, submitted_application
 ):
+    """Checks the WHOLE row, not just metadata: record_audit_event auto-fills
+    target_repr from str(target) when a caller omits it, and
+    RegistrationApplication.__str__ returns
+    "{guardian_email} — {member_full_name}" — exactly the values this test's
+    own name claims are excluded. A version of this test that inspects only
+    metadata would pass even if target_repr leaked both."""
     from apps.core.models import AuditEvent
 
     client.force_login(editor)
@@ -102,6 +229,9 @@ def test_records_an_audit_event_naming_the_fields_but_not_the_values(
     assert "member_full_name" in event.metadata["fields"]
     # The values are personal data and must not be in the audit trail.
     assert "Pēteris Liepa" not in str(event.metadata)
+    assert event.target_repr == f"pieteikums #{submitted_application.pk}"
+    assert "@" not in event.target_repr
+    assert "Pēteris Liepa" not in event.target_repr
 
 
 def test_an_unchanged_submission_records_no_audit_event(
@@ -173,7 +303,10 @@ def test_staff_without_change_permission_is_refused(
     response = client.post(
         _edit_url(submitted_application), {"member_full_name": "Not Allowed"}
     )
-    assert response.status_code in (302, 403)
+    # RegistrationApplicationAdmin does not override has_change_permission,
+    # so a refusal is always 403 — a (302, 403) tolerance here would mask a
+    # change in how refusal gets signalled.
+    assert response.status_code == 403
     submitted_application.refresh_from_db()
     assert submitted_application.member_full_name == before
 
