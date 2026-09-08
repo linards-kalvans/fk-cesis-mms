@@ -47,7 +47,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for invoice in totals.rows %}
+          {% for invoice in rows %}
             <tr class="{% if invoice.is_overdue %}is-overdue{% endif %}">
               <td>
                 <div class="cellstack">
@@ -70,7 +70,7 @@
               <td class="num">{{ invoice.amount }} €</td>
               <td class="num">{{ invoice.paid_to_date }} €</td>
               <td class="num">{{ invoice.balance|default:invoice.amount }} €</td>
-              <td><span class="badge badge--sm badge--{{ invoice.payment_status|default:'unpaid' }}">{{ invoice.get_payment_status_display|default:"Nav apmaksāts" }}</span></td>
+              <td><span class="badge badge--sm {{ payment_badge_classes|get_item:invoice.payment_status|default:"badge--unpaid" }}">{{ invoice.get_payment_status_display|default:"Nav apmaksāts" }}</span></td>
               <td>
                 {% if invoice.external_error_code %}
                   <span class="badge badge--sm badge--rejected">{{ invoice.external_error_code }}</span>
@@ -88,4 +88,26 @@
       </table>
     </div>
   </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pager">
+      {% if page_obj.has_previous %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.previous_page_number }}">&lsaquo;</a>
+      {% else %}
+        <span>&lsaquo;</span>
+      {% endif %}
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <span class="is-active">{{ num }}</span>
+        {% else %}
+          <a href="?tab={{ tab }}&amp;page={{ num }}">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.next_page_number }}">&rsaquo;</a>
+      {% else %}
+        <span>&rsaquo;</span>
+      {% endif %}
+    </div>
+  {% endif %}
 {% endblock %}

@@ -7,6 +7,18 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
 
 from apps.admin_hub import queries
+from apps.admin_hub.badges import agreement_badge_class, application_badge_class
+
+
+def _step_is_done(steps, key: str) -> bool:
+    """Whether one pipeline step is complete, by key.
+
+    Pages read a step's state from here rather than recomputing the rule that
+    decided it — two copies of one rule is what let the overdue flag and the
+    tab filter disagree earlier on this branch."""
+    from apps.admin_hub.pipeline import DONE
+
+    return any(step.key == key and step.state == DONE for step in steps)
 
 
 @staff_member_required
@@ -61,6 +73,7 @@ def cockpit_view(request, pk: int):
         {
             "hub_section": "queue",
             "application": application,
+            "status_badge_class": application_badge_class(application.status),
             "objects": objects,
             "steps": steps,
             "steps_done": done,
@@ -117,15 +130,20 @@ def agreement_view(request, pk: int):
             "application": application,
             "member": objects.member,
             "agreement": agreement,
+            "state_badge_class": agreement_badge_class(agreement.state),
             "steps": steps,
             "steps_done": done,
             "steps_total": total,
+            # DocuSeal writes external_id asynchronously, so it is blank
+            # whenever the worker is behind or the submission failed. Without
+            # it the download view redirects instead of serving a file.
+            "agreement_document_ready": bool(agreement.external_id),
             "has_signed_artifact": bool(agreement.signed_artifact),
-            # mark_agreement_signed materialises the BillingRecord from these
-            # two values, so step 5 cannot complete before step 6.
-            "has_billing_plan": bool(
-                agreement.billing_plan_id and agreement.first_billing_month
-            ),
+            # Read step 6's own state rather than recomputing its rule here.
+            # mark_agreement_signed materialises the BillingRecord from the
+            # plan + first month, so step 5 cannot complete before step 6 —
+            # and pipeline.build_pipeline already decides when that holds.
+            "has_billing_plan": _step_is_done(steps, "plan"),
             "lifecycle_events": build_agreement_timeline(agreement)[:20],
         },
     )
@@ -144,7 +162,7 @@ def billing_view(request, pk: int):
         load_pipeline_objects,
         pipeline_progress,
     )
-    from apps.billing.models import MembershipPlan
+    from apps.billing.models import BillingRecord, MembershipPlan
     from apps.billing.services import derive_installment_schedule
     from apps.registrations.models import RegistrationApplication
 
@@ -180,6 +198,11 @@ def billing_view(request, pk: int):
             "member": objects.member,
             "agreement": agreement,
             "record": record,
+            # The template must not compare against a domain enum literal.
+            "record_confirmed": (
+                record is not None
+                and str(record.status) == str(BillingRecord.Status.CONFIRMED)
+            ),
             "invoices": objects.invoices,
             "next_season_record": objects.next_season_record,
             "schedule": schedule,
@@ -199,7 +222,10 @@ def invoices_view(request):
 
     tab = invoice_queries.normalize_invoice_tab(request.GET.get("tab"))
     queryset = invoice_queries.invoice_queryset(tab)
+    # Totals come from the unpaged queryset on purpose: they report money owed,
+    # so a figure describing only the current page would understate it.
     totals = invoice_queries.invoice_totals(queryset)
+    rows, page_obj = invoice_queries.invoice_page(queryset, request.GET.get("page"))
     return render(
         request,
         "admin_hub/invoices.html",
@@ -208,5 +234,8 @@ def invoices_view(request):
             "tab": tab,
             "tabs": invoice_queries.INVOICE_TABS,
             "totals": totals,
+            "rows": rows,
+            "page_obj": page_obj,
+            "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
         },
     )

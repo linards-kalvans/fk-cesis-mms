@@ -105,8 +105,68 @@ def test_paid_invoice_past_due_date_is_not_flagged_as_overdue(
     invoice with an old due date renders as "kavēts"."""
     client.force_login(reviewer)
     body = client.get(reverse("admin_hub:invoices"), {"tab": "visi"}).content.decode()
+    # Assert the row is actually on screen first: without this, a regression
+    # that dropped the row entirely would satisfy the absence checks below.
+    member = paid_overdue_invoice.billing_record.member
+    assert member.full_name in body
     assert "is-overdue" not in body
     assert "badge--overdue" not in body
+
+
+def test_invoices_page_paginates_and_totals_cover_the_whole_set(
+    client, reviewer, approved_application, default_plan
+):
+    """Rows paginate; the stat strip does not.
+
+    The stat cards report money owed, so they are computed over the whole
+    filtered queryset — a figure describing only page 1 would understate the
+    debt. This asserts both halves: PAGE_SIZE rows on screen, but a count and
+    an outstanding total reflecting every invoice."""
+    import datetime
+    from decimal import Decimal
+
+    from apps.admin_hub.invoices import PAGE_SIZE
+    from apps.billing.models import BillingInvoice, BillingRecord
+
+    record = BillingRecord.objects.create(
+        member=approved_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+    )
+    total_rows = PAGE_SIZE + 3
+    for sequence in range(1, total_rows + 1):
+        BillingInvoice.objects.create(
+            billing_record=record,
+            sequence=sequence,
+            due_date=datetime.date(2026, 9, 20),
+            amount=Decimal("10.00"),
+            balance=Decimal("10.00"),
+            payment_status="unpaid",
+        )
+
+    client.force_login(reviewer)
+    response = client.get(reverse("admin_hub:invoices"), {"tab": "visi"})
+    assert response.status_code == 200
+    page_obj = response.context["page_obj"]
+    assert len(response.context["rows"]) == PAGE_SIZE
+    assert page_obj.paginator.num_pages == 2
+    # Totals span every row, not just this page.
+    totals = response.context["totals"]
+    assert totals["count"] == total_rows
+    assert totals["outstanding"] == Decimal("10.00") * total_rows
+
+
+def test_invoices_invalid_page_falls_back_to_page_one(
+    client, reviewer, unpaid_invoice
+):
+    client.force_login(reviewer)
+    response = client.get(
+        reverse("admin_hub:invoices"), {"tab": "visi", "page": "../etc/passwd"}
+    )
+    assert response.status_code == 200
+    assert response.context["page_obj"].number == 1
 
 
 def test_invoices_page_has_no_reminder_action(client, reviewer, unpaid_invoice):

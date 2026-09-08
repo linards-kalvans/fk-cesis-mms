@@ -24,6 +24,10 @@ from apps.admin_hub.pipeline import (
 )
 from apps.agreements.models import Agreement
 from apps.documents.models import Document
+from apps.admin_hub.badges import (
+    APPLICATION_STATUS_BADGE_CLASSES,
+    FALLBACK_BADGE_CLASS,
+)
 from apps.registrations.models import RegistrationApplication
 from apps.registrations.presentation import active_documents_by_kind
 
@@ -40,15 +44,11 @@ QUEUE_TABS: dict[str, str] = {
 }
 DEFAULT_TAB = "jaizskata"
 
-# Status -> badge class. The mock-up varies the pill colour per status; a
-# hardcoded class renders a rejected application in "submitted" green.
-STATUS_BADGE_CLASSES: dict[str, str] = {
-    str(RegistrationApplication.Status.DRAFT): "badge--draft",
-    str(RegistrationApplication.Status.SUBMITTED): "badge--submitted",
-    str(RegistrationApplication.Status.FIX_REQUESTED): "badge--fix",
-    str(RegistrationApplication.Status.APPROVED): "badge--approved",
-    str(RegistrationApplication.Status.REJECTED): "badge--rejected",
-}
+# Status -> badge class. Defined once in apps/admin_hub/badges.py and aliased
+# here for the row assembly below; the cockpit and agreement pages read the
+# same module, so a rejected application can never show a green pill on one
+# page and a red one on another.
+STATUS_BADGE_CLASSES = APPLICATION_STATUS_BADGE_CLASSES
 
 # kind -> (dot letter, tooltip). Derived from the Latvian labels, not from the
 # internal enum value: guardian_identity/member_identity/member_portrait all
@@ -131,7 +131,7 @@ def _build_row(application: RegistrationApplication, now: datetime.datetime) -> 
         next_name=step.name if step else "",
         documents=_document_badges(application),
         is_aging=is_aging,
-        status_badge_class=STATUS_BADGE_CLASSES.get(application.status, "badge--neutral"),
+        status_badge_class=STATUS_BADGE_CLASSES.get(str(application.status), FALLBACK_BADGE_CLASS),
     )
 
 

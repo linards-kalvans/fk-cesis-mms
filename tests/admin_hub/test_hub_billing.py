@@ -76,9 +76,16 @@ def test_plan_form_posts_set_billing_setup(client, reviewer, signed_application)
     body = client.get(
         reverse("admin_hub:billing", args=[signed_application.pk])
     ).content.decode()
+    # Scope to the step-6 form: both field names also appear in step 8's
+    # next-season form, so a whole-body check would survive deleting either
+    # input from this one.
+    step6 = body.split('value="set_billing_setup"')[0]
+    form_start = step6.rfind("<form")
+    assert form_start != -1, "no form precedes the set_billing_setup button"
+    step6_form = step6[form_start:]
     assert 'value="set_billing_setup"' in body
-    assert 'name="billing_plan"' in body
-    assert 'name="first_billing_month"' in body
+    assert 'name="billing_plan"' in step6_form
+    assert 'name="first_billing_month"' in step6_form
 
 
 def test_schedule_preview_lists_the_installments(client, reviewer, signed_application):
@@ -87,7 +94,11 @@ def test_schedule_preview_lists_the_installments(client, reviewer, signed_applic
         reverse("admin_hub:billing", args=[signed_application.pk])
     ).content.decode()
     assert "Aprēķinātais grafiks" in body
-    assert "2026" in body
+    # Scope to the schedule rows: a bare "2026" also matches the season
+    # string, the plan name and every date elsewhere on the page.
+    schedule_rows = re.findall(r'<div class="schedrow">.*?</div>\s*</div>', body, re.S)
+    assert schedule_rows, "no schedule rows rendered"
+    assert any("2026" in row for row in schedule_rows)
 
 
 def test_schedule_preview_hint_when_no_plan_is_selected(
@@ -209,6 +220,47 @@ def test_push_endpoint_refuses_an_unconfirmed_record(
     enqueue.assert_not_called()
     record.refresh_from_db()
     assert record.external_status != "synced"
+    assert not AuditEvent.objects.filter(
+        action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+        target_id=str(record.pk),
+    ).exists()
+
+
+def test_push_endpoint_refuses_a_get_request(
+    client, signed_application, default_plan
+):
+    """push_view's POST-only guard is the one security-motivated line in this
+    endpoint: Django does not CSRF-protect GET, so without it a link prefetch
+    or an <img> tag could fire a real Invoice Ninja push on any staff session
+    with no token and no confirmation click.
+
+    Every other test here uses client.post, so deleting the guard broke
+    nothing - which is exactly the regression it exists to prevent. This test
+    is the one that fails if it goes. The record is CONFIRMED on purpose:
+    every guard *after* the method check would otherwise let the request
+    through, so a refusal here can only be the method check."""
+    from django.contrib.auth.models import User
+
+    from apps.billing.models import BillingRecord
+    from apps.core.models import AuditEvent
+
+    admin_user = User.objects.create_superuser(
+        username="pusher_get", email="pget@example.lv", password="x"
+    )
+    record = BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        status=BillingRecord.Status.CONFIRMED,
+    )
+    client.force_login(admin_user)
+    push_url = reverse("admin:billing_billingrecord_push", args=[record.pk])
+    with patch("apps.integrations.tasks.enqueue_push_billing_record") as enqueue:
+        response = client.get(push_url)
+    assert response.status_code == 302
+    enqueue.assert_not_called()
     assert not AuditEvent.objects.filter(
         action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
         target_id=str(record.pk),

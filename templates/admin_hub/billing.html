@@ -137,7 +137,7 @@
           <div class="card__foot">
             <span class="hint">Ieraksta stāvoklis: {{ record.get_status_display }}</span>
             <span class="card__spacer"></span>
-            {% if record.status != "confirmed" %}
+            {% if not record_confirmed %}
               <form method="post" action="{% url 'admin:billing_billingrecord_confirm' record.pk %}?next={{ request.path|urlencode }}">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-secondary">Apstiprināt ierakstu</button>
@@ -145,7 +145,7 @@
             {% endif %}
             <form method="post" action="{% url 'admin:billing_billingrecord_push' record.pk %}?next={{ request.path|urlencode }}">
               {% csrf_token %}
-              <button type="submit" class="btn btn-red" {% if record.status != "confirmed" %}disabled{% endif %}>
+              <button type="submit" class="btn btn-red" {% if not record_confirmed %}disabled{% endif %}>
                 Izrakstīt rēķinus →
               </button>
             </form>

@@ -23,7 +23,7 @@
       </p>
     </div>
     <div class="row">
-      <span class="badge badge--submitted">{{ application.get_status_display }}</span>
+      <span class="badge {{ status_badge_class }}">{{ application.get_status_display }}</span>
       <a class="btn btn-secondary btn-sm"
          href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">Atvērt Django admin</a>
     </div>

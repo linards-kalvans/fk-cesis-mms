@@ -97,8 +97,18 @@
   var resetBtn = document.querySelector("[data-viewer-reset]");
   if (resetBtn) { resetBtn.addEventListener("click", reset); }
 
+  function isTextEntry(target) {
+    if (!target || !target.tagName) { return false; }
+    var tag = target.tagName.toUpperCase();
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+      || target.isContentEditable === true;
+  }
+
   document.addEventListener("keydown", function (event) {
     if (!event.shiftKey) { return; }
+    // Shift+Arrow is extend-selection while typing: this page has a rejection
+    // textarea, and rotating the document mid-sentence is not a shortcut.
+    if (isTextEntry(event.target)) { return; }
     if (event.key === "ArrowLeft") { state.deg -= 90; apply(); }
     if (event.key === "ArrowRight") { state.deg += 90; apply(); }
   });

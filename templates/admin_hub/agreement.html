@@ -23,7 +23,7 @@
       </p>
     </div>
     <div class="row">
-      <span class="badge badge--approved">{{ agreement.get_state_display }}</span>
+      <span class="badge {{ state_badge_class }}">{{ agreement.get_state_display }}</span>
     </div>
   </div>
 
@@ -83,14 +83,27 @@
         </div>
         <div class="card__body">
           <div class="dltile">
-            <div class="dltile__icon">PDF</div>
+            <div class="dltile__icon">&#128196;</div>
             <div class="dltile__txt">
-              <strong>{{ agreement.agreement_number|default:"Līgums" }}.pdf</strong>
+              <strong>{{ agreement.agreement_number|default:"Līgums" }}</strong>
               <span>Ģenerēts {{ agreement.generated_at|date:"d.m.Y H:i" }}</span>
             </div>
-            <a class="btn btn-primary"
-               href="{% url 'admin:registrations_registrationapplication_docuseal_document' application.pk agreement.pk %}">&#8681; Lejupielādēt</a>
+            {% if agreement_document_ready %}
+              <a class="btn btn-primary"
+                 href="{% url 'admin:registrations_registrationapplication_docuseal_document' application.pk agreement.pk %}?next={{ request.path|urlencode }}">&#8681; Lejupielādēt</a>
+            {% else %}
+              <button type="button" class="btn btn-primary" disabled>&#8681; Lejupielādēt</button>
+            {% endif %}
           </div>
+          {% if not agreement_document_ready %}
+            <div class="callout callout--warn" style="margin-top:14px">
+              <span class="callout__icon">&#9888;</span>
+              <span>
+                Dokuments vēl nav pieejams — tas tiek sagatavots fonā. Atjaunini
+                lapu pēc brīža; ja tas neparādās, pārbaudi līguma sinhronizāciju.
+              </span>
+            </div>
+          {% endif %}
           <p class="hint" style="margin-top:14px">
             Sistēma šobrīd neveic elektronisko parakstīšanu. Izdrukā, izsniedz vecākam
             un augšupielādē parakstīto eksemplāru zemāk.
@@ -124,7 +137,7 @@
 
           {% if has_signed_artifact %}
             <div class="filecard">
-              <div class="filecard__icon">PDF</div>
+              <div class="filecard__icon">&#128206;</div>
               <div class="filecard__txt">
                 <strong>{{ agreement.signed_artifact_original_filename }}</strong>
                 <span>{{ agreement.signed_artifact_file_size|filesizeformat }} · augšupielādēts {{ agreement.signed_artifact_uploaded_at|date:"d.m.Y H:i" }}</span>

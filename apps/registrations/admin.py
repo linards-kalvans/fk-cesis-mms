@@ -187,7 +187,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         * ``AgreementPlatformError`` — provider failure surfaced as a
           fixed Latvian copy (never the raw provider exception text).
 
-        Both paths redirect to the application's change page (the staff
+        Both error paths honour a validated `next` and otherwise redirect
+        to the application's change page (the staff
         surface where the agreement actions already live).
         """
         if not self.has_change_permission(request):
@@ -210,7 +211,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "DocuSeal sūtījums vēl nav izveidots.",
                 level=messages.ERROR,
             )
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         try:
             return build_agreement_document_response(
                 agreement, disposition=disposition
@@ -223,7 +224,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "Radās kļūda saziņā ar DocuSeal.",
                 level=messages.ERROR,
             )
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
     def signed_artifact_upload_view(self, request, object_id, agreement_id):
         """Sole upload surface for a signed PDF/.edoc artifact (P16-A).

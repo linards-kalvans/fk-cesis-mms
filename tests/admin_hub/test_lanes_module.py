@@ -39,6 +39,8 @@ def test_family_hub_no_longer_defines_the_lanes_itself():
     assert "def application_lane(" not in source
     assert "def agreement_lane(" not in source
     assert "def billing_lane(" not in source
+    assert "def membership_lane(" not in source
+    assert "def canonical_kit_size_label(" not in source
     assert "class FamilyLaneStatus" not in source
 
 
