@@ -55,6 +55,7 @@ from apps.registrations.models import (
     RegistrationSubmissionDigestSettings,
 )
 from apps.registrations.services import (
+    update_reviewed_fields,
     approve_application,
     reject_application,
     request_application_fix,
@@ -122,6 +123,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "<int:object_id>/review-action/",
                 self.admin_site.admin_view(self.review_action_view),
                 name="registrations_registrationapplication_review-action",
+            ),
+            path(
+                "<int:object_id>/edit-fields/",
+                self.admin_site.admin_view(self.edit_fields_view),
+                name="registrations_registrationapplication_edit-fields",
             ),
             path(
                 "<int:object_id>/approve/",
@@ -703,6 +709,38 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             )
             return False
         return True
+
+    def edit_fields_view(self, request, object_id):
+        """Apply a reviewer's in-place corrections from the Admin Hub cockpit.
+
+        Lives on the admin rather than in ``apps.admin_hub`` so it inherits
+        ``has_change_permission`` like every other mutation the Hub drives —
+        the Hub's own views only require ``is_staff``. POST-only, because
+        Django does not CSRF-protect GET and this writes personal data.
+
+        The whitelist, the validation, the Member mirroring and the audit
+        event all live in ``update_reviewed_fields``; this view only
+        translates the result into a message and a redirect.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        if request.method != "POST":
+            return self._after_review_redirect(request, object_id)
+        try:
+            changed = update_reviewed_fields(
+                application, data=request.POST, actor=request.user
+            )
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._after_review_redirect(request, object_id)
+        if not changed:
+            self.message_user(request, "Izmaiņu nebija.", level=messages.INFO)
+        else:
+            self.message_user(
+                request, f"Saglabāti {len(changed)} lauki."
+            )
+        return self._after_review_redirect(request, object_id)
 
     def approve_view(self, request, object_id):
         """Confirm-then-commit approval (port of the views.py approve branch)."""

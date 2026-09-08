@@ -1,10 +1,13 @@
 """Django forms for registration workflow."""
 
-import re
 
 from django import forms
 
 from apps.registrations.messages import STEP_FIELD_FORMAT, STEP_FIELD_REQUIRED
+from apps.registrations.validators import (
+    PERSONAL_ID_FORMAT_MESSAGE,
+    is_valid_personal_id,
+)
 
 
 class RegistrationApplicationForm(forms.Form):
@@ -257,14 +260,14 @@ class RegistrationApplicationForm(forms.Form):
 
     def clean_guardian_personal_id(self):
         value = self.cleaned_data.get("guardian_personal_id", "")
-        if value and not re.match(r"^\d{6}-\d{5}$", value):
-            raise forms.ValidationError("Ievadiet personas kodu formātā DDDDDD-DDDDD.")
+        if not is_valid_personal_id(value):
+            raise forms.ValidationError(PERSONAL_ID_FORMAT_MESSAGE)
         return value
 
     def clean_member_personal_id(self):
         value = self.cleaned_data.get("member_personal_id", "")
-        if value and not re.match(r"^\d{6}-\d{5}$", value):
-            raise forms.ValidationError("Ievadiet personas kodu formātā DDDDDD-DDDDD.")
+        if not is_valid_personal_id(value):
+            raise forms.ValidationError(PERSONAL_ID_FORMAT_MESSAGE)
         return value
 
     def error_summary_items(self):

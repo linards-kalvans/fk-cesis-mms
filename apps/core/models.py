@@ -25,6 +25,10 @@ class AuditEvent(models.Model):
         APPLICATION_APPROVED = "application_approved", "Application approved"
         APPLICATION_REJECTED = "application_rejected", "Application rejected"
         APPLICATION_FIX_REQUESTED = "application_fix_requested", "Application fix requested"
+        APPLICATION_DATA_EDITED = (
+            "application_data_edited",
+            "Application data edited by staff",
+        )
         TRAINING_GROUP_ASSIGNED = "training_group_assigned", "Training group assigned"
         TRAINING_GROUP_CLEARED = "training_group_cleared", "Training group cleared"
         DOCUMENT_PREVIEWED = "document_previewed", "Document previewed"

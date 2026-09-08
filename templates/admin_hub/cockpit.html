@@ -24,17 +24,15 @@
     </div>
     <div class="row">
       <span class="badge {{ status_badge_class }}">{{ application.get_status_display }}</span>
-      {# The readout below is deliberately read-only, but a reviewer who spots a
-         typo needs a way to correct it. The child's fields are editable on the
-         application's own admin form and the parent's on the guardian record,
-         so link to each explicitly rather than leaving one "Django admin"
-         button that reads like a debug hatch. Both are one-way trips: saving
-         returns to the admin changelist, not here. #}
+      {# Typo fixes happen inline further down ("Labot datus"). These reach the
+         full records for everything the inline panel deliberately excludes —
+         the verified e-mail, kit size, training group, payment preferences.
+         Both are one-way trips: saving returns to the admin changelist. #}
       <a class="btn btn-secondary btn-sm"
-         href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">&#9998; Labot bērna datus</a>
+         href="{% url 'admin:registrations_registrationapplication_change' application.pk %}">Pilnais ieraksts (Django)</a>
       {% if application.guardian_id %}
         <a class="btn btn-secondary btn-sm"
-           href="{% url 'admin:members_guardian_change' application.guardian_id %}">&#9998; Labot vecāka datus</a>
+           href="{% url 'admin:members_guardian_change' application.guardian_id %}">Vecāka ieraksts (Django)</a>
       {% endif %}
     </div>
   </div>
@@ -51,6 +49,89 @@
         <div class="checkbar__track"><span data-checklist-track></span></div>
         <button type="button" class="btn btn-secondary btn-sm" data-checklist-all>&#10003; Apstiprināt visus</button>
       </div>
+
+      {# In-place correction. The readout below stays read-only — it is the
+         comparison surface — but a typo should not require leaving the Hub for
+         Django admin. Posts to the admin endpoint so it inherits
+         has_change_permission; the e-mail is absent on purpose (see
+         update_reviewed_fields). Editing is allowed after approval too, and
+         the service mirrors the child's fields onto the Member so a
+         regenerated agreement picks the correction up. #}
+      <details class="tray" style="margin-bottom:14px">
+        <summary>&#9998; Labot datus</summary>
+        <div class="tray__body">
+          <form method="post"
+                action="{% url 'admin:registrations_registrationapplication_edit-fields' application.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+
+            <p class="hint" style="margin-bottom:12px">
+              Labo tikai pārrakstīšanās kļūdas. E-pastu maina atsevišķi — tas ir
+              konta apstiprinājuma pamats.
+            </p>
+
+            <strong style="color:var(--fk-blue)">Bērns</strong>
+            <div class="form-grid" style="margin:8px 0 16px">
+              <div class="f">
+                <label for="edit_member_full_name">Vārds, uzvārds</label>
+                <input type="text" id="edit_member_full_name" name="member_full_name"
+                       value="{{ application.member_full_name }}">
+              </div>
+              <div class="f">
+                <label for="edit_member_personal_id">Personas kods</label>
+                <input type="text" id="edit_member_personal_id" name="member_personal_id"
+                       value="{{ application.member_personal_id }}" placeholder="DDDDDD-DDDDD">
+              </div>
+              <div class="f">
+                <label for="edit_member_birth_date">Dzimšanas datums</label>
+                <input type="date" id="edit_member_birth_date" name="member_birth_date"
+                       value="{{ application.member_birth_date|date:'Y-m-d' }}">
+              </div>
+              <div class="f">
+                <label for="edit_member_actual_address">Faktiskā adrese</label>
+                <input type="text" id="edit_member_actual_address" name="member_actual_address"
+                       value="{{ application.member_actual_address }}">
+              </div>
+            </div>
+
+            {% if application.guardian_id %}
+              <strong style="color:var(--fk-blue)">Vecāks</strong>
+              <div class="form-grid" style="margin:8px 0 16px">
+                <div class="f">
+                  <label for="edit_guardian_first_name">Vārds</label>
+                  <input type="text" id="edit_guardian_first_name" name="first_name"
+                         value="{{ application.guardian_first_name }}">
+                </div>
+                <div class="f">
+                  <label for="edit_guardian_family_name">Uzvārds</label>
+                  <input type="text" id="edit_guardian_family_name" name="family_name"
+                         value="{{ application.guardian_family_name }}">
+                </div>
+                <div class="f">
+                  <label for="edit_guardian_personal_id">Personas kods</label>
+                  <input type="text" id="edit_guardian_personal_id" name="personal_id"
+                         value="{{ application.guardian_pid }}" placeholder="DDDDDD-DDDDD">
+                </div>
+                <div class="f">
+                  <label for="edit_guardian_phone">Tālrunis</label>
+                  <input type="text" id="edit_guardian_phone" name="phone"
+                         value="{{ application.guardian_contact_phone }}">
+                </div>
+                <div class="f f--full">
+                  <label for="edit_guardian_address">Adrese</label>
+                  <input type="text" id="edit_guardian_address" name="address"
+                         value="{{ application.guardian_address }}">
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="row">
+              <button type="submit" class="btn btn-primary">Saglabāt labojumus</button>
+              <span class="hint">Izmaiņas tiek auditētas.</span>
+            </div>
+          </form>
+        </div>
+      </details>
 
       {% for group in groups %}{% include "admin_hub/_field_group.html" %}{% endfor %}
 

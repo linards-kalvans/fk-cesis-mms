@@ -9,6 +9,7 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from apps.accounts.models import ParentAccount
 from apps.agreements.models import Agreement
@@ -22,6 +23,10 @@ from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import KitSizeOption, Member, TrainingGroup
 from apps.members.services import resolve_guardian_for_account
+from apps.registrations.validators import (
+    PERSONAL_ID_FORMAT_MESSAGE,
+    is_valid_personal_id,
+)
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
     RegistrationApplication,
@@ -860,3 +865,130 @@ def _render_and_send_notification(
         recipient_list=[application.guardian_contact_email],
         fail_silently=False,
     )
+
+# ---------------------------------------------------------------------------
+# Staff inline edit (Admin Hub cockpit)
+# ---------------------------------------------------------------------------
+
+# Fields a reviewer may correct in place. The parent's e-mail is deliberately
+# absent: a non-null ``parent_account`` IS the proof the address is reachable
+# (the one-time-code flow is what sets it), so silently rewriting it would
+# invalidate the "Sistēma apstiprinājusi" claim the cockpit makes about it.
+# Changing a verified e-mail has its own admin-initiated service.
+EDITABLE_APPLICATION_FIELDS = (
+    "member_full_name",
+    "member_personal_id",
+    "member_birth_date",
+    "member_actual_address",
+)
+EDITABLE_GUARDIAN_FIELDS = (
+    "first_name",
+    "family_name",
+    "personal_id",
+    "phone",
+    "address",
+)
+
+# Approval COPIES the child's data onto a Member row, and agreement generation
+# reads the Member - not the application. So a correction made after approval
+# has to reach both, or regenerating the agreement would rebuild it from the
+# stale snapshot and the fix would appear to do nothing. These are the fields
+# that exist on both sides; the guardian's live on the shared Guardian row and
+# so need no copying, and member_actual_address exists only on the application.
+_MEMBER_MIRRORED_FIELDS = {
+    "member_full_name": "full_name",
+    "member_personal_id": "personal_id",
+    "member_birth_date": "birth_date",
+}
+
+_PERSONAL_ID_FIELDS = {"member_personal_id", "personal_id"}
+
+
+def _parse_edited_value(field: str, raw: str):
+    """Coerce one submitted value, raising ValueError with a Latvian message."""
+    value = (raw or "").strip()
+    if field in _PERSONAL_ID_FIELDS and not is_valid_personal_id(value):
+        raise ValueError(PERSONAL_ID_FORMAT_MESSAGE)
+    if field == "member_birth_date":
+        if not value:
+            return None
+        parsed = parse_date(value)
+        if parsed is None:
+            raise ValueError("Ievadiet dzimšanas datumu formātā GGGG-MM-DD.")
+        return parsed
+    return value
+
+
+def update_reviewed_fields(application, *, data, actor) -> list[str]:
+    """Apply a reviewer's in-place corrections to one application.
+
+    Writes only whitelisted fields, only when the submitted value actually
+    differs, and mirrors the child's fields onto an approved Member so a
+    later agreement regeneration picks the correction up. Returns the names
+    of the fields that changed, which is also all the audit trail records —
+    the values themselves are personal data and are deliberately not logged.
+
+    Raises ``ValueError`` with a reviewer-facing Latvian message when a
+    submitted value fails validation. Nothing is written in that case.
+    """
+    guardian = application.guardian
+
+    application_changes: dict[str, object] = {}
+    for field in EDITABLE_APPLICATION_FIELDS:
+        if field not in data:
+            continue
+        new_value = _parse_edited_value(field, data[field])
+        if new_value != getattr(application, field):
+            application_changes[field] = new_value
+
+    guardian_changes: dict[str, object] = {}
+    if guardian is not None:
+        for field in EDITABLE_GUARDIAN_FIELDS:
+            if field not in data:
+                continue
+            new_value = _parse_edited_value(field, data[field])
+            if new_value != getattr(guardian, field):
+                guardian_changes[field] = new_value
+
+    if not application_changes and not guardian_changes:
+        return []
+
+    member = application.approved_member
+    member_changes: dict[str, object] = {}
+    if member is not None:
+        for source, target in _MEMBER_MIRRORED_FIELDS.items():
+            if source in application_changes:
+                member_changes[target] = application_changes[source]
+
+    with transaction.atomic():
+        if application_changes:
+            for field, value in application_changes.items():
+                setattr(application, field, value)
+            application.save(
+                update_fields=[*application_changes, "updated_at"]
+            )
+        if guardian_changes:
+            for field, value in guardian_changes.items():
+                setattr(guardian, field, value)
+            guardian.save(update_fields=list(guardian_changes))
+        if member_changes:
+            for field, value in member_changes.items():
+                setattr(member, field, value)
+            member.save(update_fields=list(member_changes))
+
+    changed = [
+        *sorted(application_changes),
+        *(f"guardian.{name}" for name in sorted(guardian_changes)),
+    ]
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_DATA_EDITED),
+        actor=actor,
+        target=application,
+        metadata={
+            # Field NAMES only. The values are personal data.
+            "fields": changed,
+            "mirrored_to_member": sorted(member_changes),
+        },
+    )
+    return changed
+
