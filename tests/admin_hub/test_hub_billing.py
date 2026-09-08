@@ -608,3 +608,58 @@ def test_confirmed_record_renders_plan_read_only_with_informational_note(
     # `callout--warn` does not.
     assert "callout--warn" not in plan_form
     assert "callout" in plan_form
+
+
+def test_season_desynced_record_withholds_the_recreate_offer(
+    client, reviewer, signed_application, default_plan
+):
+    """The recreate offer must not appear when a record already exists for
+    this agreement under a different season.
+
+    The two seasons are the whole point of the finding: the pipeline's
+    matcher and ``recreate_missing_billing_record``'s already-exists guard
+    read the *same* ``agreement.billing_plan.season``, so neither sees the
+    row. Offering recreate here does not produce a refusal the operator can
+    learn from — it succeeds, leaving a second BillingRecord (the unique key
+    is ``(member, season)``) with the invoices still attached to the first
+    and nothing on screen to say so. The page names both seasons instead, so
+    the operator repairs the link rather than duplicating the record."""
+    from apps.billing.models import BillingRecord, MembershipPlan
+
+    member = signed_application.approved_member
+    agreement = member.agreements.get(is_current=True)
+    later_plan = MembershipPlan.objects.create(
+        name="Hub Desync View Plan",
+        season="2027/2028",
+        annual_amount=Decimal("320.00"),
+        is_active=True,
+    )
+    agreement.billing_plan = later_plan
+    agreement.save(update_fields=["billing_plan"])
+
+    BillingRecord.objects.create(
+        member=member,
+        agreement=agreement,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        first_billing_month="2026-09",
+        status=BillingRecord.Status.DRAFT,
+    )
+
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+
+    # The remedy that would silently duplicate is not rendered at all.
+    assert 'value="recreate_current_billing"' not in body
+    assert 'name="external_invoice_confirmed_absent"' not in body
+    # Neither is the plan form left submittable — set_billing_setup refuses
+    # a signed agreement, which is what produced the raw English error.
+    assert _plan_form_action(body) == ""
+    # Both seasons are named, so the mismatch is diagnosable from the page.
+    plan_form = _plan_form_html(body)
+    assert default_plan.season in plan_form
+    assert later_plan.season in plan_form

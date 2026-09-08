@@ -55,6 +55,12 @@ class PipelineObjects:
     billing_record: "BillingRecord | None"
     invoices: list["BillingInvoice"]
     next_season_record: "BillingRecord | None"
+    # A record linked to THIS agreement whose season disagrees with the
+    # agreement's plan season - i.e. billing that was realised against this
+    # agreement but that the season matcher below cannot see. It is not a
+    # past season the member legitimately has: those belong to earlier,
+    # superseded agreements. See the guard in views._billing_change_route.
+    mismatched_record: "BillingRecord | None" = None
 
 
 def load_pipeline_objects(application: RegistrationApplication) -> PipelineObjects:
@@ -67,6 +73,7 @@ def load_pipeline_objects(application: RegistrationApplication) -> PipelineObjec
     billing_record = None
     invoices: list[BillingInvoice] = []
     next_season_record = None
+    mismatched_record = None
 
     if member is not None:
         agreement = (
@@ -88,6 +95,18 @@ def load_pipeline_objects(application: RegistrationApplication) -> PipelineObjec
                 billing_record = record
             elif current_season and record.season > current_season:
                 next_season_record = next_season_record or record
+            elif (
+                current_season
+                and agreement is not None
+                and record.agreement_id == agreement.pk
+            ):
+                # Season below the agreement's plan season, yet created for
+                # this very agreement: a desync, not history. Surfacing it
+                # keeps the Hub from offering to "recreate" billing that
+                # already exists under another season - the unique key is
+                # (member, season), so that would succeed and silently
+                # leave two records.
+                mismatched_record = mismatched_record or record
         if billing_record is None and records and not current_season:
             billing_record = records[0]
         if billing_record is not None:
@@ -100,6 +119,7 @@ def load_pipeline_objects(application: RegistrationApplication) -> PipelineObjec
         billing_record=billing_record,
         invoices=invoices,
         next_season_record=next_season_record,
+        mismatched_record=mismatched_record,
     )
 
 

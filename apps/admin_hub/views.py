@@ -11,7 +11,7 @@ from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
 def _billing_change_route(
-    application, agreement, member, record, invoices
+    application, agreement, member, record, invoices, mismatched_record=None
 ) -> tuple[str, str, bool]:
     """Where the step-6 plan form should POST, why it cannot, and whether the
     Hub should instead offer the record-recreation remedy.
@@ -52,6 +52,25 @@ def _billing_change_route(
        ``recreate_current_billing`` will actually succeed:
        ("", <explanatory reason>, True). Otherwise: ("", <blocked reason>,
        False) — the Hub must not dangle a control the POST would refuse.
+
+       ``mismatched_record`` overrides that offer. Both the pipeline's
+       season matcher and ``recreate_missing_billing_record``'s
+       already-exists guard test the identical value
+       (``agreement.billing_plan.season``), so a record whose season
+       disagrees with it is invisible to *both*: the recreate does not
+       refuse, it succeeds, and the member ends up with two records — the
+       unique key is ``(member, season)`` and the seasons differ. The old
+       row keeps the invoices and the new one is empty, with nothing on
+       screen saying so. Where the domain cannot tell the two apart, the
+       Hub refuses the shortcut and names the two seasons instead: the
+       repair is re-pointing the link, never a second record.
+
+       Detection is deliberately narrow — a record created for *this*
+       agreement. A member's genuinely older seasons also sort below the
+       current one, and blocking on those would break the ordinary renewal
+       this remedy exists for. The material-amendment variant (record left
+       pointing at the superseded agreement) therefore still slips through;
+       it is tracked separately.
 
     ``invoices`` is the already-materialised list for ``record`` (from
     ``load_pipeline_objects``, which prefetches it) — checked in Python
@@ -104,6 +123,20 @@ def _billing_change_route(
     # to reassign. recreate_missing_billing_record can rebuild one, but only
     # under the same guard the POST enforces (_signed_active_agreement) —
     # mirror it exactly rather than offering a control guaranteed to fail.
+    if mismatched_record is not None:
+        plan_season = (
+            agreement.billing_plan.season
+            if agreement.billing_plan_id is not None
+            else "—"
+        )
+        return "", (
+            f"Līgumam ir piesaistīts norēķinu ieraksts par sezonu "
+            f"{mismatched_record.season}, bet līguma plāns ir sezonai "
+            f"{plan_season}. Atjaunošana izveidotu otru ierakstu, tāpēc tā "
+            f"nav pieejama — vispirms saskaņojiet līguma plāna sezonu ar "
+            f"esošo ierakstu pilnajā administrācijā."
+        ), False
+
     if (
         agreement.state == Agreement.State.SIGNED
         and agreement.billing_plan_id is not None
@@ -339,7 +372,12 @@ def billing_view(request, pk: int):
         billing_change_blocked_reason,
         billing_recreate_offer,
     ) = _billing_change_route(
-        application, agreement, objects.member, record, objects.invoices
+        application,
+        agreement,
+        objects.member,
+        record,
+        objects.invoices,
+        objects.mismatched_record,
     )
 
     # Preview the schedule from whatever is selected now, so the reviewer sees

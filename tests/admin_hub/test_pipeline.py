@@ -214,3 +214,129 @@ def test_reassign_across_season_boundary_keeps_record_current(
     assert objects.billing_record is not None
     assert objects.billing_record.pk == record.pk
     assert objects.next_season_record is None
+
+
+def test_record_created_for_this_agreement_below_its_plan_season_is_flagged(
+    approved_application, default_plan
+):
+    """A record whose season sits *below* the agreement's plan season, yet
+    which was created for that very agreement, is a desync — and it is
+    invisible to the season matcher, which only recognises equality (current)
+    and greater-than (next season).
+
+    That invisibility is what makes it dangerous rather than merely untidy:
+    ``recreate_missing_billing_record``'s already-exists guard tests the same
+    ``agreement.billing_plan.season`` value, so it does not refuse either.
+    Surfacing the row as ``mismatched_record`` is what lets the Hub withhold
+    a "recreate" that would in fact succeed and leave two records behind."""
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.billing.models import BillingRecord, MembershipPlan
+
+    agreement = approved_application.approved_member.agreements.get(is_current=True)
+    later_plan = MembershipPlan.objects.create(
+        name="Hub Desync Later Plan",
+        season="2027/2028",
+        annual_amount=Decimal("320.00"),
+        is_active=True,
+    )
+    agreement.billing_plan = later_plan
+    agreement.first_billing_month = "2027-09"
+    agreement.state = agreement.State.SIGNED
+    agreement.sent_at = timezone.now()
+    agreement.signed_at = timezone.now()
+    agreement.save(
+        update_fields=[
+            "billing_plan",
+            "first_billing_month",
+            "state",
+            "sent_at",
+            "signed_at",
+        ]
+    )
+
+    record = BillingRecord.objects.create(
+        member=agreement.member,
+        agreement=agreement,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        first_billing_month="2026-09",
+        status=BillingRecord.Status.DRAFT,
+    )
+    assert record.season < later_plan.season
+
+    objects = load_pipeline_objects(approved_application)
+    # Still invisible to the matcher — that part is unchanged and is the
+    # premise of the finding, not a regression.
+    assert objects.billing_record is None
+    assert objects.next_season_record is None
+    # But no longer invisible to the caller.
+    assert objects.mismatched_record is not None
+    assert objects.mismatched_record.pk == record.pk
+
+
+def test_earlier_season_record_from_a_previous_agreement_is_not_flagged(
+    approved_application, default_plan
+):
+    """The counterpart guard: an ordinary returning member has records for
+    seasons gone by, and those also sort below the current plan's season.
+
+    They belong to earlier agreements, not this one, so they are history
+    rather than desync. Flagging them would block ``recreate_current_billing``
+    for exactly the returning member the remedy exists for — a false positive
+    that costs more than the defect it prevents."""
+    from decimal import Decimal
+
+    from django.utils import timezone
+
+    from apps.agreements.models import Agreement
+    from apps.billing.models import BillingRecord, MembershipPlan
+
+    member = approved_application.approved_member
+    agreement = member.agreements.get(is_current=True)
+    later_plan = MembershipPlan.objects.create(
+        name="Hub History Later Plan",
+        season="2027/2028",
+        annual_amount=Decimal("320.00"),
+        is_active=True,
+    )
+    agreement.billing_plan = later_plan
+    agreement.first_billing_month = "2027-09"
+    agreement.state = agreement.State.SIGNED
+    agreement.sent_at = timezone.now()
+    agreement.signed_at = timezone.now()
+    agreement.save(
+        update_fields=[
+            "billing_plan",
+            "first_billing_month",
+            "state",
+            "sent_at",
+            "signed_at",
+        ]
+    )
+
+    previous_agreement = Agreement.objects.create(
+        member=member,
+        billing_plan=default_plan,
+        first_billing_month="2026-09",
+        state=Agreement.State.SUPERSEDED,
+        is_current=False,
+        generated_at=timezone.now(),
+    )
+    BillingRecord.objects.create(
+        member=member,
+        agreement=previous_agreement,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        first_billing_month="2026-09",
+        status=BillingRecord.Status.CONFIRMED,
+    )
+
+    objects = load_pipeline_objects(approved_application)
+    assert objects.mismatched_record is None
