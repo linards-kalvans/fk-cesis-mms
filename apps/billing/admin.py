@@ -232,6 +232,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
                 name="billing_billingrecord_confirm",
             ),
             path(
+                "<int:object_id>/push/",
+                self.admin_site.admin_view(self.push_view),
+                name="billing_billingrecord_push",
+            ),
+            path(
                 "<int:object_id>/reassign/",
                 self.admin_site.admin_view(self.reassign_view),
                 name="billing_billingrecord_reassign",
@@ -255,6 +260,42 @@ class BillingRecordAdmin(admin.ModelAdmin):
             self.message_user(request, "Ieraksts apstiprināts.")
         else:
             self.message_user(request, "Ieraksts jau ir apstiprināts.", level=messages.INFO)
+        return self._safe_redirect(request, object_id)
+
+    def push_view(self, request, object_id):
+        """Issue one record's invoices. Same work as the bulk action, but
+        addressable per record so the Admin Hub can offer it inline and come
+        back via `next`. No new domain logic: it enqueues the same job and
+        records the same audit event."""
+        from apps.integrations.tasks import enqueue_push_billing_record
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        record = get_object_or_404(BillingRecord, pk=object_id)
+        # Mirrors confirm_view: GET is not CSRF-protected by Django, so
+        # without this guard a bare GET (an <img> tag, a link prefetch) could
+        # trigger a real invoice push for any staff session with no token
+        # and no confirmation click.
+        if request.method != "POST":
+            return self._safe_redirect(request, object_id)
+        if record.status != BillingRecord.Status.CONFIRMED:
+            self.message_user(
+                request,
+                "Vispirms apstipriniet maksājumu ierakstu.",
+                level=messages.ERROR,
+            )
+            return self._safe_redirect(request, object_id)
+        if record.external_status == "synced":
+            self.message_user(request, "Rēķini jau ir izrakstīti.")
+            return self._safe_redirect(request, object_id)
+        enqueue_push_billing_record(record.pk)
+        record_audit_event(
+            action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+            actor=request.user,
+            request=request,
+            target=record,
+        )
+        self.message_user(request, "Rēķinu izrakstīšana sākta.")
         return self._safe_redirect(request, object_id)
 
     def reassign_view(self, request, object_id):

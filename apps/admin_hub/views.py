@@ -133,5 +133,61 @@ def agreement_view(request, pk: int):
 
 @staff_member_required
 def billing_view(request, pk: int):
-    """Minimal stub for the billing-plan step (Task 7 replaces this)."""
-    return render(request, "admin_hub/billing.html", {})
+    import datetime
+    from decimal import Decimal
+
+    from django.http import Http404
+    from django.shortcuts import get_object_or_404
+
+    from apps.admin_hub.pipeline import (
+        build_pipeline,
+        load_pipeline_objects,
+        pipeline_progress,
+    )
+    from apps.billing.models import MembershipPlan
+    from apps.billing.services import derive_installment_schedule
+    from apps.registrations.models import RegistrationApplication
+
+    application = get_object_or_404(RegistrationApplication, pk=pk)
+    objects = load_pipeline_objects(application)
+    if objects.agreement is None:
+        raise Http404("Šim pieteikumam vēl nav līguma.")
+
+    steps = build_pipeline(objects)
+    done, total = pipeline_progress(steps)
+    agreement = objects.agreement
+    record = objects.billing_record
+
+    # Preview the schedule from whatever is selected now, so the reviewer sees
+    # the consequence before saving. Falls back to an empty list when there is
+    # no plan yet - never to a guess.
+    schedule: list[tuple[datetime.date, Decimal]] = []
+    plan = agreement.billing_plan
+    if plan is not None:
+        total_amount = record.final_amount if record is not None else plan.annual_amount
+        schedule = derive_installment_schedule(
+            plan,
+            total_amount,
+            first_billing_month=agreement.first_billing_month,
+        )
+
+    return render(
+        request,
+        "admin_hub/billing.html",
+        {
+            "hub_section": "queue",
+            "application": application,
+            "member": objects.member,
+            "agreement": agreement,
+            "record": record,
+            "invoices": objects.invoices,
+            "next_season_record": objects.next_season_record,
+            "schedule": schedule,
+            "steps": steps,
+            "steps_done": done,
+            "steps_total": total,
+            "active_plans": list(
+                MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
+            ),
+        },
+    )

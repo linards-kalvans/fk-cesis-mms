@@ -1,13 +1,219 @@
 {% extends "admin_hub/base_hub.html" %}
-{% comment %}
-Minimal stub for the billing-plan step (6). Task 7 replaces this template
-and its view with the real page — keep this deliberately empty so the
-agreement page's {% url 'admin_hub:billing' %} link resolves without
-building ahead of that task.
-{% endcomment %}
 
-{% block hub_title %}FK Cēsis Admin — Maksas plāns{% endblock %}
+{% block hub_title %}FK Cēsis Admin — {{ member.full_name }} · Maksājumi{% endblock %}
+{% block hub_page_class %}hub-page--flush{% endblock %}
+{% block hub_steprail %}{% include "admin_hub/_step_rail.html" %}{% endblock %}
 
 {% block hub_content %}
-  <p class="hint">Šī lapa vēl nav gatava.</p>
+  {% url 'admin:registrations_registrationapplication_review-action' application.pk as review_action_url %}
+
+  <div class="crumbs">
+    <a href="{% url 'admin_hub:queue' %}">← Pieteikumu rinda</a><span>/</span>
+    <a href="{% url 'admin_hub:agreement' application.pk %}">{{ member.full_name }}</a><span>/</span>
+    <span>Maksas plāns un rēķini</span>
+  </div>
+
+  <div class="page-head" style="margin-bottom:16px">
+    <div>
+      <h1 class="page-title">{{ member.full_name }} · Maksājumi</h1>
+      <p class="page-sub">
+        Līgums <strong>{{ agreement.agreement_number|default:"—" }}</strong>
+        · parakstīts {{ agreement.signed_at|date:"d.m.Y"|default:"—" }}
+        {% if record %}· sezona <strong>{{ record.season }}</strong>{% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="split-side">
+    <div class="stack">
+
+      <section class="card">
+        <div class="card__head">
+          <span class="card__step">6</span>
+          <h2 class="anton">Maksas plāns</h2>
+        </div>
+        <form method="post" action="{{ review_action_url }}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <div class="card__body stack">
+            <div class="form-grid">
+              <div class="f f--full">
+                <label for="billing_plan">Plāns</label>
+                <select name="billing_plan" id="billing_plan">
+                  {% for plan in active_plans %}
+                    <option value="{{ plan.pk }}" {% if agreement.billing_plan_id == plan.pk %}selected{% endif %}>
+                      {{ plan.name }} — {{ plan.annual_amount }} {{ plan.currency }}, {{ plan.installment_count }} daļas
+                    </option>
+                  {% endfor %}
+                </select>
+                <span class="f-hint">Summas tiek fiksētas ierakstā — vēlākas plāna izmaiņas neietekmē jau izveidotos rēķinus.</span>
+              </div>
+              <div class="f">
+                <label for="first_billing_month">Pirmais rēķina mēnesis</label>
+                <input type="month" name="first_billing_month" id="first_billing_month"
+                       value="{{ agreement.first_billing_month }}">
+                <span class="f-hint">Formāts GGGG-MM</span>
+              </div>
+            </div>
+
+            {% if schedule %}
+              <div>
+                <div class="row" style="justify-content:space-between;margin-bottom:10px">
+                  <strong style="color:var(--fk-blue)">Aprēķinātais grafiks</strong>
+                  <span class="muted" style="font-weight:600">{{ schedule|length }} daļas</span>
+                </div>
+                <div class="sched">
+                  {% for due_date, amount in schedule %}
+                    <div class="schedrow">
+                      <span class="schedrow__seq">{{ forloop.counter }}</span>
+                      <span>{{ due_date|date:"F Y" }}</span>
+                      <span class="muted">termiņš {{ due_date|date:"d.m.Y" }}</span>
+                      <span class="schedrow__amt">{{ amount }} €</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% else %}
+              <p class="hint">Izvēlieties plānu un pirmo mēnesi, lai redzētu grafiku.</p>
+            {% endif %}
+          </div>
+          <div class="card__foot">
+            {% if record %}
+              <span class="hint">Kopā <strong style="color:var(--fk-blue)">{{ record.final_amount }} €</strong> · bāze {{ record.base_amount }} € · atlaide {{ record.discount_amount }} €</span>
+            {% endif %}
+            <span class="card__spacer"></span>
+            <button type="submit" name="action" value="set_billing_setup" class="btn btn-primary">Saglabāt plānu →</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card__head">
+          <span class="card__step">7</span>
+          <h2 class="anton">Rēķini</h2>
+          <span class="badge badge--sm badge--neutral" style="margin-left:auto">Invoice Ninja</span>
+        </div>
+        <div class="card__body">
+          {% if invoices %}
+            <div class="tablewrap">
+              <table class="grid">
+                <thead>
+                  <tr>
+                    <th style="width:44px">#</th><th>Termiņš</th>
+                    <th class="num">Summa</th><th class="num">Apmaksāts</th><th class="num">Atlikums</th>
+                    <th>IN statuss</th><th>Maksājums</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for invoice in invoices %}
+                    <tr>
+                      <td class="strong">{{ invoice.sequence }}</td>
+                      <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+                      <td class="num">{{ invoice.amount }} €</td>
+                      <td class="num">{{ invoice.paid_to_date }} €</td>
+                      <td class="num">{{ invoice.balance|default:invoice.amount }} €</td>
+                      <td>
+                        {% if invoice.external_invoice_id %}
+                          <span class="badge badge--sm badge--approved">{{ invoice.external_status|default:"izrakstīts" }}</span>
+                        {% else %}
+                          <span class="badge badge--sm badge--neutral">Nav izrakstīts</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <span class="badge badge--sm badge--{{ invoice.payment_status|default:'unpaid' }}">
+                          {{ invoice.get_payment_status_display|default:"Nav apmaksāts" }}
+                        </span>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="hint">Rēķini vēl nav izveidoti. Tie rodas, kad līgums tiek atzīmēts kā parakstīts.</p>
+          {% endif %}
+        </div>
+        {% if record %}
+          <div class="card__foot">
+            <span class="hint">Ieraksta stāvoklis: {{ record.get_status_display }}</span>
+            <span class="card__spacer"></span>
+            {% if record.status != "confirmed" %}
+              <form method="post" action="{% url 'admin:billing_billingrecord_confirm' record.pk %}?next={{ request.path|urlencode }}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary">Apstiprināt ierakstu</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{% url 'admin:billing_billingrecord_push' record.pk %}?next={{ request.path|urlencode }}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-red" {% if record.status != "confirmed" %}disabled{% endif %}>
+                Izrakstīt rēķinus →
+              </button>
+            </form>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="card {% if not record %}card--locked{% endif %}">
+        <div class="card__head {% if not record %}card__head--locked{% endif %}">
+          <span class="card__step">8</span>
+          <h2 class="anton">Nākamā sezona</h2>
+          {% if next_season_record %}
+            <span class="badge badge--sm badge--submitted" style="margin-left:auto">Izveidots — {{ next_season_record.season }}</span>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ review_action_url }}">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <div class="card__body">
+            <div class="form-grid">
+              <div class="f">
+                <label for="next_year_plan">Nākamās sezonas plāns</label>
+                <select name="billing_plan" id="next_year_plan">
+                  <option value="">— Izvēlieties plānu —</option>
+                  {% for plan in active_plans %}
+                    <option value="{{ plan.pk }}">{{ plan.name }} — {{ plan.season }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="f">
+                <label for="next_year_first_billing_month">Pirmais rēķina mēnesis</label>
+                <input type="month" name="first_billing_month" id="next_year_first_billing_month">
+                <span class="f-hint">Formāts GGGG-MM</span>
+              </div>
+            </div>
+            <p class="hint" style="margin-top:12px">
+              Nākamās sezonas ieraksts pārmanto pašreizējā līguma atlaides un maksājuma
+              veidu. Rēķini netiek izrakstīti automātiski.
+            </p>
+          </div>
+          <div class="card__foot">
+            <span class="hint">Solis 8 no 8</span>
+            <span class="card__spacer"></span>
+            <button type="submit" name="action" value="create_next_season_billing"
+                    class="btn btn-primary" {% if not record or next_season_record %}disabled{% endif %}>
+              Izveidot nākamās sezonas ierakstu
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <aside class="sidecar">
+      <div class="minicard">
+        <h3 class="anton">Maksājumu kopsavilkums</h3>
+        <dl class="kv">
+          {% if record %}
+            <dt>Sezona</dt><dd>{{ record.season }}</dd>
+            <dt>Bāzes summa</dt><dd>{{ record.base_amount }} €</dd>
+            <dt>Atlaide</dt><dd>{{ record.discount_amount }} €</dd>
+            <dt>Gala summa</dt><dd style="color:var(--fk-blue)">{{ record.final_amount }} €</dd>
+            <dt>Veids</dt><dd>{{ record.get_payment_mode_display }}</dd>
+            <dt>Stāvoklis</dt><dd>{{ record.get_status_display }}</dd>
+          {% else %}
+            <dt>Ieraksts</dt><dd>Nav izveidots</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </aside>
+  </div>
 {% endblock %}
