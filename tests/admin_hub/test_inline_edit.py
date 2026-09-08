@@ -72,6 +72,73 @@ def test_corrects_a_phone_number_via_the_parent_account(
     assert submitted_application.parent_account.phone == "+37129998888"
 
 
+def test_a_phone_edit_with_no_linked_parent_account_writes_nothing_and_does_not_raise(
+    client, editor, submitted_application, parent_account
+):
+    """A draft application may have no parent_account, and the raw Django
+    admin change form can also produce this directly (neither `guardian`
+    nor `parent_account` is readonly or excluded there): a staff user can
+    set `guardian` while leaving `parent_account` blank. The endpoint must
+    neither crash nor silently claim a change was made."""
+    submitted_application.parent_account = None
+    submitted_application.save(update_fields=["parent_account"])
+    # The fixture's in-memory `parent_account` predates the draft-save that
+    # copied guardian_phone onto it, so read the real current value fresh.
+    parent_account.refresh_from_db()
+    before_phone = parent_account.phone
+
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application), {"phone": "+37166600000"}
+    )
+    assert response.status_code == 302
+
+    from django.contrib.messages import get_messages
+
+    texts = [str(m) for m in get_messages(response.wsgi_request)]
+    assert any("nav piesaistīts vecāka konts" in text for text in texts)
+
+    parent_account.refresh_from_db()
+    assert parent_account.phone == before_phone
+
+
+def test_a_phone_edit_with_a_guardian_application_account_mismatch_writes_nothing(
+    client, editor, submitted_application, other_parent_account
+):
+    """guardian.phone (apps/members/models.py) is displayed to the reviewer
+    via the Guardian's OWN parent_account, but a correction is written onto
+    application.parent_account — two independently-nullable FKs that
+    nothing enforces agree. The raw Django admin change form can point them
+    at different accounts directly. A correction must never land on an
+    account the reviewer was not looking at, so this must be refused rather
+    than silently written to either side."""
+    guardian_account = submitted_application.guardian.parent_account
+    before_guardian_account_phone = guardian_account.phone
+    before_other_account_phone = other_parent_account.phone
+
+    submitted_application.parent_account = other_parent_account
+    submitted_application.save(update_fields=["parent_account"])
+
+    client.force_login(editor)
+    response = client.post(
+        _edit_url(submitted_application), {"phone": "+37177700000"}
+    )
+    assert response.status_code == 302
+
+    from django.contrib.messages import get_messages
+
+    texts = [str(m) for m in get_messages(response.wsgi_request)]
+    assert any("konti nesakrīt" in text for text in texts)
+
+    guardian_account.refresh_from_db()
+    other_parent_account.refresh_from_db()
+    assert guardian_account.phone == before_guardian_account_phone
+    # The account this write would actually target — the one a naive fix
+    # (compare to guardian.phone, always write to application.parent_account)
+    # would have silently overwritten.
+    assert other_parent_account.phone == before_other_account_phone
+
+
 def test_rejects_a_malformed_personal_id_and_writes_nothing(
     client, editor, submitted_application
 ):

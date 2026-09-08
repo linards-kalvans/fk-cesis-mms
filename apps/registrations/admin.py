@@ -728,18 +728,23 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         if request.method != "POST":
             return self._after_review_redirect(request, object_id)
         try:
-            changed = update_reviewed_fields(
+            changed, phone_discard_reason = update_reviewed_fields(
                 application, data=request.POST, actor=request.user
             )
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return self._after_review_redirect(request, object_id)
-        if not changed:
-            self.message_user(request, "Izmaiņu nebija.", level=messages.INFO)
-        else:
+        # An attempted "phone" edit that update_reviewed_fields could not
+        # write anywhere gets its own message — without it, this case reads
+        # exactly like submitting an unchanged value.
+        if phone_discard_reason:
+            self.message_user(request, phone_discard_reason, level=messages.WARNING)
+        if changed:
             self.message_user(
                 request, f"Saglabāti {len(changed)} lauki."
             )
+        elif not phone_discard_reason:
+            self.message_user(request, "Izmaiņu nebija.", level=messages.INFO)
         return self._after_review_redirect(request, object_id)
 
     def approve_view(self, request, object_id):

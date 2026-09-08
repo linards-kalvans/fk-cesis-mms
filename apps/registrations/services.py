@@ -888,8 +888,10 @@ EDITABLE_APPLICATION_FIELDS = (
 # @property proxying ParentAccount.phone: the phone number is contact
 # information, not the verification anchor (a non-null parent_account is),
 # so it has no setter. A correction is therefore written through to
-# application.parent_account.phone, never assigned onto the Guardian row —
-# see update_reviewed_fields.
+# application.parent_account.phone, never assigned onto the Guardian row.
+# guardian.parent_account and application.parent_account are two
+# independently-nullable FKs that nothing enforces agree, so the write is
+# refused (not guessed) whenever they disagree — see update_reviewed_fields.
 EDITABLE_GUARDIAN_FIELDS = (
     "first_name",
     "family_name",
@@ -947,6 +949,17 @@ _REQUIRED_EDITABLE_FIELDS = frozenset(
 
 _BLANK_REQUIRED_MESSAGE = "Šis lauks ir obligāts un nedrīkst būt tukšs."
 
+# Reviewer-facing reasons an attempted "phone" edit could not be written —
+# surfaced by edit_fields_view instead of the field silently no-op'ing and
+# reading, from the reviewer's side, exactly like an unchanged submission.
+_PHONE_NO_ACCOUNT_MESSAGE = (
+    "Tālruņa numuru nevarēja saglabāt — pieteikumam nav piesaistīts vecāka konts."
+)
+_PHONE_ACCOUNT_MISMATCH_MESSAGE = (
+    "Tālruņa numuru nevarēja saglabāt — vecāka un pieteikuma piesaistītie "
+    "konti nesakrīt. Labojiet ierakstu pilnajā administrācijā."
+)
+
 
 def _parse_edited_value(field: str, raw: str):
     """Coerce one submitted value, raising ValueError with a Latvian message."""
@@ -968,17 +981,32 @@ def _parse_edited_value(field: str, raw: str):
     return value
 
 
-def update_reviewed_fields(application, *, data, actor) -> list[str]:
+def update_reviewed_fields(
+    application, *, data, actor
+) -> tuple[list[str], str | None]:
     """Apply a reviewer's in-place corrections to one application.
 
     Writes only whitelisted fields, only when the submitted value actually
     differs, and mirrors the child's fields onto an approved Member so a
     later agreement regeneration picks the correction up. A "phone"
     correction writes through to ``application.parent_account.phone``
-    instead of the Guardian row (Guardian.phone has no setter) and is a
-    no-op when there is no linked parent_account. Returns the names of the
-    fields that changed, which is also all the audit trail records — the
-    values themselves are personal data and are deliberately not logged.
+    instead of the Guardian row (Guardian.phone has no setter).
+
+    "phone" is displayed to the reviewer via ``guardian.phone`` — a
+    read-only property proxying the *Guardian's own* ``parent_account`` —
+    but the write target is ``application.parent_account``. Those are two
+    independently-nullable FKs that nothing enforces agree, so an attempted
+    edit is discarded (nothing written, nowhere) rather than guessing,
+    whenever there is no linked ``application.parent_account`` or it
+    disagrees with ``guardian.parent_account``. A correction must never
+    land on an account the reviewer was not looking at.
+
+    Returns a 2-tuple: the names of the fields that changed (also all the
+    audit trail records — the values themselves are personal data and are
+    deliberately not logged), and, when an attempted "phone" edit was
+    discarded for one of the two reasons above, a reviewer-facing Latvian
+    message explaining why (``None`` otherwise). The message is not part of
+    the audit trail: nothing was written for it to describe.
 
     Raises ``ValueError`` with a reviewer-facing Latvian message when a
     submitted value fails validation, or when a field that was required at
@@ -986,6 +1014,7 @@ def update_reviewed_fields(application, *, data, actor) -> list[str]:
     Nothing is written in that case.
     """
     guardian = application.guardian
+    account = application.parent_account
 
     application_changes: dict[str, object] = {}
     for field in EDITABLE_APPLICATION_FIELDS:
@@ -997,28 +1026,30 @@ def update_reviewed_fields(application, *, data, actor) -> list[str]:
 
     guardian_changes: dict[str, object] = {}
     parent_account_changes: dict[str, object] = {}
+    phone_discard_reason: str | None = None
     if guardian is not None:
         for field in EDITABLE_GUARDIAN_FIELDS:
             if field not in data:
                 continue
             new_value = _parse_edited_value(field, data[field])
-            if new_value != getattr(guardian, field):
-                if field == "phone":
-                    # No Guardian column to write — see EDITABLE_GUARDIAN_FIELDS.
-                    parent_account_changes["phone"] = new_value
-                else:
-                    guardian_changes[field] = new_value
-
-    # A phone correction is only writable when the application has a linked,
-    # verified parent_account (a draft application may have none). Treat a
-    # missing account as a no-op rather than crashing or reporting a change
-    # that was never actually written.
-    account = application.parent_account
-    if parent_account_changes and account is None:
-        parent_account_changes = {}
+            # "did this change" is decided against guardian.phone even for
+            # "phone" — that is what is actually displayed to the reviewer
+            # (see cockpit.html) — but see the docstring for why the write
+            # itself does not simply follow the same comparison.
+            if new_value == getattr(guardian, field):
+                continue
+            if field != "phone":
+                guardian_changes[field] = new_value
+                continue
+            if account is None:
+                phone_discard_reason = _PHONE_NO_ACCOUNT_MESSAGE
+            elif guardian.parent_account_id != account.id:
+                phone_discard_reason = _PHONE_ACCOUNT_MISMATCH_MESSAGE
+            else:
+                parent_account_changes["phone"] = new_value
 
     if not application_changes and not guardian_changes and not parent_account_changes:
-        return []
+        return [], phone_discard_reason
 
     member = application.approved_member
     member_changes: dict[str, object] = {}
@@ -1070,5 +1101,5 @@ def update_reviewed_fields(application, *, data, actor) -> list[str]:
             "mirrored_to_member": sorted(member_changes),
         },
     )
-    return changed
+    return changed, phone_discard_reason
 
