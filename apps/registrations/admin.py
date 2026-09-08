@@ -232,13 +232,17 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         then the agreement must belong to the application's approved member
         (foreign -> deterministic 404). POST-only; non-POST redirects to the
         change page. Service ``ValueError`` maps to a Latvian admin message;
-        success shows a Latvian confirmation and redirects to the change page.
+        success shows a Latvian confirmation. Every return honours a
+        validated ``next`` (Task 6's Hub agreement page posts here and
+        expects to land back on itself), falling back to the change page
+        exactly as before when no ``next`` is supplied — same contract as
+        ``_after_review_redirect``.
         """
         if not self.has_change_permission(request):
             raise PermissionDenied
         application = get_object_or_404(RegistrationApplication, pk=object_id)
         if request.method != "POST":
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         agreement = get_object_or_404(
             Agreement,
             pk=agreement_id,
@@ -251,14 +255,14 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "Lūdzu izvēlieties parakstītā līguma failu.",
                 level=messages.ERROR,
             )
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         try:
             upload_signed_artifact(agreement, file_upload, request.user)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         self.message_user(request, "Parakstītais līgums augšupielādēts.")
-        return self._change_redirect(object_id)
+        return self._after_review_redirect(request, object_id)
 
     def signed_artifact_view(self, request, object_id, agreement_id):
         """Stream a source-member signed artifact through the shared proxy.

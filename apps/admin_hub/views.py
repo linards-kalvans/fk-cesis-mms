@@ -85,3 +85,60 @@ def cockpit_view(request, pk: int):
             ),
         },
     )
+
+
+@staff_member_required
+def agreement_view(request, pk: int):
+    from django.http import Http404
+    from django.shortcuts import get_object_or_404
+
+    from apps.admin_hub.pipeline import (
+        build_pipeline,
+        load_pipeline_objects,
+        pipeline_progress,
+    )
+    from apps.billing.models import MembershipPlan
+    from apps.members.lanes import agreement_lane
+    from apps.registrations.models import RegistrationApplication
+
+    application = get_object_or_404(RegistrationApplication, pk=pk)
+    objects = load_pipeline_objects(application)
+    if objects.agreement is None:
+        raise Http404("Šim pieteikumam vēl nav līguma.")
+
+    steps = build_pipeline(objects)
+    done, total = pipeline_progress(steps)
+    agreement = objects.agreement
+
+    return render(
+        request,
+        "admin_hub/agreement.html",
+        {
+            "hub_section": "queue",
+            "application": application,
+            "member": objects.member,
+            "agreement": agreement,
+            "lane": agreement_lane(agreement),
+            "steps": steps,
+            "steps_done": done,
+            "steps_total": total,
+            "has_signed_artifact": bool(agreement.signed_artifact),
+            # mark_agreement_signed materialises the BillingRecord from these
+            # two values, so step 5 cannot complete before step 6.
+            "has_billing_plan": bool(
+                agreement.billing_plan_id and agreement.first_billing_month
+            ),
+            "lifecycle_events": list(
+                agreement.lifecycle_events.order_by("-created_at")[:20]
+            ),
+            "active_plans": list(
+                MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
+            ),
+        },
+    )
+
+
+@staff_member_required
+def billing_view(request, pk: int):
+    """Minimal stub for the billing-plan step (Task 7 replaces this)."""
+    return render(request, "admin_hub/billing.html", {})
