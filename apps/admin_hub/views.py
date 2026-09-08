@@ -10,6 +10,29 @@ from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
+def _step_urls(application, objects) -> dict[str, str]:
+    """Which Hub page owns each pipeline step.
+
+    The step rail is the only place the eight steps appear together, so it is
+    also the natural way to move between them — an earlier ruling made it a
+    non-clickable status display on the grounds that each page's own buttons
+    would navigate, and those buttons were never built, leaving steps 3-8
+    reachable only by typing a URL. A step with no entry here renders as plain
+    text, which is what an unreachable step should look like."""
+    from django.urls import reverse
+
+    cockpit = reverse("admin_hub:cockpit", args=[application.pk])
+    urls = {"verify": cockpit, "approve": cockpit}
+    if objects.agreement is not None:
+        agreement = reverse("admin_hub:agreement", args=[application.pk])
+        billing = reverse("admin_hub:billing", args=[application.pk])
+        for key in ("agreement", "handover", "signed"):
+            urls[key] = agreement
+        for key in ("plan", "invoices", "next_season"):
+            urls[key] = billing
+    return urls
+
+
 def _step_is_done(steps, key: str) -> bool:
     """Whether one pipeline step is complete, by key.
 
@@ -51,6 +74,8 @@ def cockpit_view(request, pk: int):
     )
     from apps.documents.models import Document
     from apps.members.models import TrainingGroup
+    from django.urls import reverse
+
     from apps.registrations.admin_panels import build_doc_panel
     from apps.registrations.models import RegistrationApplication
 
@@ -74,6 +99,18 @@ def cockpit_view(request, pk: int):
             "hub_section": "queue",
             "application": application,
             "status_badge_class": application_badge_class(application.status),
+            "step_urls": _step_urls(application, objects),
+            # approve_application itself refuses anything but a submitted
+            # application, so the button must not offer it otherwise.
+            "can_approve": (
+                str(application.status)
+                == str(RegistrationApplication.Status.SUBMITTED)
+            ),
+            "agreement_url": (
+                reverse("admin_hub:agreement", args=[application.pk])
+                if objects.agreement is not None
+                else ""
+            ),
             "objects": objects,
             "steps": steps,
             "steps_done": done,
@@ -131,6 +168,7 @@ def agreement_view(request, pk: int):
             "member": objects.member,
             "agreement": agreement,
             "state_badge_class": agreement_badge_class(agreement.state),
+            "step_urls": _step_urls(application, objects),
             "steps": steps,
             "steps_done": done,
             "steps_total": total,
@@ -198,6 +236,7 @@ def billing_view(request, pk: int):
             "member": objects.member,
             "agreement": agreement,
             "record": record,
+            "step_urls": _step_urls(application, objects),
             # The template must not compare against a domain enum literal.
             "record_confirmed": (
                 record is not None

@@ -54,9 +54,9 @@
 
       {% for group in groups %}{% include "admin_hub/_field_group.html" %}{% endfor %}
 
-      <div class="card" style="margin-top:18px">
-        <div class="card__head">
-          <span class="card__step">2</span>
+      <div class="card{% if not can_approve %} card--locked{% endif %}" style="margin-top:18px">
+        <div class="card__head{% if not can_approve %} card__head--locked{% endif %}">
+          <span class="card__step">{% if application.status == "approved" %}&#10003;{% else %}2{% endif %}</span>
           <h2 class="anton">Apstiprināšana</h2>
         </div>
         <form id="approve-form" method="post"
@@ -69,6 +69,15 @@
               Treniņu grupu var piešķirt arī vēlāk. Lauku atzīmes ir tikai pārbaudes
               palīglīdzeklis — tās neietekmē apstiprināšanu.
             </p>
+            {% if not can_approve %}
+              <div class="callout" style="margin-bottom:14px">
+                <span class="callout__icon">i</span>
+                <span>
+                  Apstiprināt var tikai iesniegtu pieteikumu. Šis pieteikums ir
+                  <strong>{{ application.get_status_display }}</strong>.
+                </span>
+              </div>
+            {% endif %}
             <div class="form-grid">
               <div class="f">
                 <label for="approve_training_group">Treniņu grupa</label>
@@ -84,7 +93,8 @@
           <div class="card__foot">
             <span class="hint">Solis 2 no 8</span>
             <span class="card__spacer"></span>
-            <button type="submit" class="btn btn-red">Apstiprināt pieteikumu →</button>
+            <button type="submit" class="btn btn-red"
+                    {% if not can_approve %}disabled{% endif %}>Apstiprināt pieteikumu →</button>
           </div>
         </form>
       </div>
@@ -119,11 +129,20 @@
       <span class="actionbar__note">Solis {{ steps_done }} / {{ steps_total }}</span>
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:queue' %}">← Atpakaļ uz rindu</a>
-      <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
-      {# Submits the step-2 form above via its id, so the training-group select
-         stays in its card while the primary action is always on screen. The
-         checklist never gates this - see the card copy. #}
-      <button type="submit" form="approve-form" class="btn btn-red">Apstiprināt pieteikumu →</button>
+      {# The primary action follows the application's actual state: approval is
+         only offered for a submitted application, because approve_application
+         refuses anything else. Once approved, the next task is the agreement. #}
+      {% if can_approve %}
+        <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
+        {# Submits the step-2 form above via its id, so the training-group
+           select stays in its card while the action stays on screen. The
+           checklist never gates this - see the card copy. #}
+        <button type="submit" form="approve-form" class="btn btn-red">Apstiprināt pieteikumu →</button>
+      {% elif agreement_url %}
+        <a class="btn btn-red" href="{{ agreement_url }}">Turpināt: Līgums →</a>
+      {% else %}
+        <span class="actionbar__note">{{ application.get_status_display }} — nav darbību šajā solī</span>
+      {% endif %}
     </div>
   </div>
 {% endblock %}

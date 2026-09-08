@@ -120,3 +120,71 @@ def test_cockpit_404s_for_an_unknown_application(client, reviewer):
     client.force_login(reviewer)
     response = client.get(reverse("admin_hub:cockpit", args=[999999]))
     assert response.status_code == 404
+
+def _approve_button_tag(body: str) -> str:
+    """The in-card approve button's own tag, so an assertion cannot be
+    satisfied by a `disabled` belonging to some other element."""
+    import re
+
+    match = re.search(
+        r"<button[^>]*>\s*Apstiprināt pieteikumu[^<]*</button>", body, re.S
+    )
+    assert match, "approve button not found"
+    return match.group(0)
+
+
+def test_step_rail_links_forward_once_an_agreement_exists(
+    client, reviewer, approved_application
+):
+    """Steps 3-8 live on other pages, and the rail is the only place all eight
+    appear together. It shipped as non-clickable text with no other forward
+    link anywhere, so the agreement download and signed-copy upload were
+    reachable only by typing a URL."""
+    client.force_login(reviewer)
+    url = reverse("admin_hub:cockpit", args=[approved_application.pk])
+    body = client.get(url).content.decode()
+    agreement_url = reverse("admin_hub:agreement", args=[approved_application.pk])
+    billing_url = reverse("admin_hub:billing", args=[approved_application.pk])
+    assert f'href="{agreement_url}"' in body
+    assert f'href="{billing_url}"' in body
+
+
+def test_step_rail_does_not_link_to_pages_that_would_404(
+    client, reviewer, submitted_application
+):
+    """A submitted application has no agreement, so the agreement and billing
+    views raise 404. The rail must not offer those steps as links."""
+    client.force_login(reviewer)
+    url = reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    body = client.get(url).content.decode()
+    agreement_url = reverse("admin_hub:agreement", args=[submitted_application.pk])
+    assert f'href="{agreement_url}"' not in body
+
+
+def test_approve_action_is_offered_for_a_submitted_application(
+    client, reviewer, submitted_application
+):
+    """approve_application refuses anything but a submitted application, so
+    offering the button regardless of status promised an action that errors.
+    The bar showed "Apstiprināt pieteikumu" on every application.
+
+    Note these are two tests, not one: approved_application is *derived from*
+    submitted_application, so a single test requesting both would receive the
+    same, already-approved object and assert against itself."""
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+    assert "disabled" not in _approve_button_tag(body)
+
+
+def test_approve_action_is_withdrawn_once_approved(
+    client, reviewer, approved_application
+):
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[approved_application.pk])
+    ).content.decode()
+    assert "disabled" in _approve_button_tag(body)
+    # and the bar points at the next real step instead
+    assert "Turpināt: Līgums" in body
