@@ -21,13 +21,9 @@
   // different (or no longer relevant) document - each call rebuilds both
   // from scratch off the active tab's own data attributes.
   //
-  // Both the `hidden` property (kept for semantics/assistive tech) and an
-  // explicit inline `style.display` are set together: `.vbtn` declares its
-  // own `display: inline-flex`, and a plain author stylesheet rule always
-  // outranks the user-agent `[hidden] { display: none }` rule regardless of
-  // selector specificity - so `hidden` alone would not actually hide these
-  // particular elements. The inline style (highest-precedence, short of
-  // `!important`) is what does the actual hiding.
+  // Toggling the `hidden` property is enough: hub.css carries a global
+  // `[hidden] { display: none !important; }` guard, so it wins over `.vbtn`'s
+  // own `display` rule regardless of specificity. No inline style needed.
   function syncQuickLinks() {
     var tab = document.querySelector("[data-viewer-tab].is-active");
     var previewUrl = tab ? tab.getAttribute("data-viewer-preview") : "";
@@ -37,22 +33,18 @@
       if (previewUrl) {
         openLink.href = previewUrl;
         openLink.hidden = false;
-        openLink.style.display = "";
       } else {
         openLink.removeAttribute("href");
         openLink.hidden = true;
-        openLink.style.display = "none";
       }
     }
     if (getLink) {
       if (downloadUrl) {
         getLink.href = downloadUrl;
         getLink.hidden = false;
-        getLink.style.display = "";
       } else {
         getLink.removeAttribute("href");
         getLink.hidden = true;
-        getLink.style.display = "none";
       }
     }
   }

@@ -35,6 +35,10 @@
 
 * { box-sizing: border-box; }
 
+/* Author rules beat the UA stylesheet's [hidden] regardless of specificity,
+   so any element with a display rule would otherwise ignore the attribute. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
