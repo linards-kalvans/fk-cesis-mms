@@ -34,6 +34,13 @@ Two ways to settle it:
 
 I have not implemented either. Pick one.
 
+Demonstrated, not theoretical: the Hub test suite's `reviewer` fixture is
+`is_staff=True` and nothing else, and it renders every page and every control
+in the pipeline. Writing an end-to-end test that actually POSTs a review action
+required adding a second fixture, `acting_reviewer`, because the first gets 403
+from the endpoint — see `tests/admin_hub/conftest.py`. That is exactly the
+production shape: full read, zero write.
+
 ### 1.2 Member's legal name in the download filename
 
 Agreement downloads are now named `<member-name>-<sign-type>-<number>.pdf`, as
