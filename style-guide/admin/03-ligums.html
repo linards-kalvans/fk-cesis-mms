@@ -156,13 +156,47 @@
         <div class="card__head">
           <span class="card__step">5</span>
           <h2 class="anton">Parakstītais līgums</h2>
-          <span class="badge badge--sm badge--fix" style="margin-left:auto">Gaida augšupielādi</span>
         </div>
         <div class="card__body stack">
+          <!-- Step 6's plan lives here too: signing refuses a missing plan or a
+               blank first month, so the reviewer must be able to set both
+               without leaving this page. Read-only once signed - from then on
+               the payment record owns it and step 6 handles reassignment. -->
+          <div class="form-grid">
+            <div class="f f--full">
+              <label for="billing_plan">Maksas plāns</label>
+              <select id="billing_plan">
+                <option>Pamata plāns 2026/2027 — 300.00 EUR, 10 daļas</option>
+                <option>Atlaides plāns 2026/2027 — 240.00 EUR, 10 daļas</option>
+              </select>
+            </div>
+            <div class="f">
+              <label for="first_billing_month">Pirmais rēķina mēnesis</label>
+              <input type="month" id="first_billing_month" value="2026-09">
+              <span class="f-hint">Formāts GGGG-MM</span>
+            </div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn btn-secondary">Saglabāt plānu</button>
+            <span class="hint">Bez plāna un pirmā mēneša līgumu nevar atzīmēt kā parakstītu.</span>
+          </div>
+
+          <div>
+            <div class="row" style="justify-content:space-between;margin-bottom:10px">
+              <strong style="color:var(--fk-blue)">Aprēķinātais grafiks</strong>
+              <span class="muted" style="font-weight:600">10 daļas</span>
+            </div>
+            <div class="sched">
+              <div class="schedrow"><span class="schedrow__seq">1</span><span>septembris 2026</span><span class="muted">termiņš 15.09.2026</span><span class="schedrow__amt">30.00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">2</span><span>oktobris 2026</span><span class="muted">termiņš 15.10.2026</span><span class="schedrow__amt">30.00 €</span></div>
+              <div class="schedrow"><span class="schedrow__seq">3</span><span>novembris 2026</span><span class="muted">termiņš 15.11.2026</span><span class="schedrow__amt">30.00 €</span></div>
+            </div>
+          </div>
+
           <div class="dropzone">
             <div class="dropzone__icon">⬆</div>
-            <strong>Ievelc parakstīto līgumu šeit</strong>
-            <p class="hint" style="margin:6px 0 14px">PDF, JPG vai PNG · līdz 20 MB · glabājas privātajā krātuvē</p>
+            <strong>Ievelc parakstīto līgumu šeit <span class="muted">(neobligāti)</span></strong>
+            <p class="hint" style="margin:6px 0 14px">PDF, JPG vai PNG · līdz 20 MB · glabājas privātajā krātuvē. Parakstīšanu var atzīmēt arī bez faila un pievienot to vēlāk.</p>
             <button class="btn btn-primary">Izvēlēties failu</button>
           </div>
 
@@ -181,7 +215,7 @@
 
           <div class="callout">
             <span class="callout__icon">ℹ</span>
-            <span>Atzīmējot kā parakstītu, tiek izveidots šīs sezonas maksājumu ieraksts pēc 6. solī norādītā plāna. Darbība ir atgriežama tikai ar līguma atcelšanu.</span>
+            <span>Atzīmējot kā parakstītu, tiek izveidots šīs sezonas maksājumu ieraksts pēc augstāk norādītā plāna. Darbība ir atgriežama tikai ar līguma atcelšanu.</span>
           </div>
         </div>
         <div class="card__foot">

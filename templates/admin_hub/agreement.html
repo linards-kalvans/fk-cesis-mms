@@ -115,19 +115,76 @@
         <div class="card__head {% if agreement.signed_at %}card__head--done{% endif %}">
           <span class="card__step">{% if agreement.signed_at %}&#10003;{% else %}5{% endif %}</span>
           <h2 class="anton">Parakstītais līgums</h2>
-          {% if not has_signed_artifact %}
-            <span class="badge badge--sm badge--fix" style="margin-left:auto">Gaida augšupielādi</span>
+          {% if not has_billing_plan %}
+            <span class="badge badge--sm badge--fix" style="margin-left:auto">Gaida maksas plānu</span>
           {% endif %}
         </div>
         <div class="card__body stack">
+          {% comment %} Step 6's plan, rendered here because step 5 cannot complete
+             without it: mark_agreement_signed refuses a missing plan (P9) and a
+             blank first billing month (P15) before it will move the state. Its
+             own <form> — nested forms are invalid HTML — posting to the same
+             set_billing_setup action the billing page uses, so there is one
+             endpoint and one set of validations rather than a second copy.
+             {% endcomment %}
+          {% if plan_editable %}
+            <form method="post" action="{{ review_action_url }}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <div class="form-grid">
+                <div class="f f--full">
+                  <label for="billing_plan">Maksas plāns</label>
+                  <select name="billing_plan" id="billing_plan">
+                    {% for option in active_plans %}
+                      <option value="{{ option.pk }}" {% if agreement.billing_plan_id == option.pk %}selected{% endif %}>
+                        {{ option.name }} — {{ option.annual_amount }} {{ option.currency }}, {{ option.installment_count }} daļas
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="f">
+                  <label for="first_billing_month">Pirmais rēķina mēnesis</label>
+                  <input type="month" name="first_billing_month" id="first_billing_month"
+                         value="{{ agreement.first_billing_month }}">
+                  <span class="f-hint">Formāts GGGG-MM</span>
+                </div>
+              </div>
+              <div class="row" style="margin-top:12px">
+                <button type="submit" name="action" value="set_billing_setup"
+                        class="btn btn-secondary">Saglabāt plānu</button>
+                <span class="hint">Bez plāna un pirmā mēneša līgumu nevar atzīmēt kā parakstītu.</span>
+              </div>
+            </form>
+          {% else %}
+            <div class="form-grid">
+              <div class="f f--full">
+                <label>Maksas plāns</label>
+                <div><strong>{{ plan.name|default:"—" }}</strong>{% if plan %} — {{ plan.annual_amount }} {{ plan.currency }}, {{ plan.installment_count }} daļas{% endif %}</div>
+              </div>
+              <div class="f">
+                <label>Pirmais rēķina mēnesis</label>
+                <div><strong>{{ first_billing_month|default:"—" }}</strong></div>
+              </div>
+            </div>
+            <p class="hint">
+              Līgums ir parakstīts, tāpēc plāns pieder maksājumu ierakstam.
+              <a href="{% url 'admin_hub:billing' application.pk %}" style="text-decoration:underline">Mainīt 6. solī →</a>
+            </p>
+          {% endif %}
+
+          {% include "admin_hub/_schedule_preview.html" %}
+
           <form method="post" enctype="multipart/form-data"
                 action="{% url 'admin:registrations_registrationapplication_signed_artifact_upload' application.pk agreement.pk %}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.path }}">
             <div class="dropzone">
               <div class="dropzone__icon">&#8679;</div>
-              <strong>Augšupielādē parakstīto līgumu</strong>
-              <p class="hint" style="margin:6px 0 14px">PDF, JPG vai PNG · glabājas privātajā krātuvē</p>
+              <strong>Augšupielādē parakstīto līgumu <span class="muted">(neobligāti)</span></strong>
+              <p class="hint" style="margin:6px 0 14px">
+                PDF, JPG vai PNG · glabājas privātajā krātuvē. Parakstīšanu var
+                atzīmēt arī bez faila un pievienot to vēlāk.
+              </p>
               <input type="file" name="signed_artifact" accept=".pdf,.jpg,.jpeg,.png">
               <div class="row" style="justify-content:center;margin-top:12px">
                 <button type="submit" class="btn btn-primary">Augšupielādēt</button>
@@ -150,15 +207,14 @@
           {% if has_billing_plan %}
             <div class="callout">
               <span class="callout__icon">i</span>
-              <span>Atzīmējot kā parakstītu, tiek izveidots šīs sezonas maksājumu ieraksts pēc 6. solī norādītā plāna.</span>
+              <span>Atzīmējot kā parakstītu, tiek izveidots šīs sezonas maksājumu ieraksts pēc augstāk norādītā plāna.</span>
             </div>
           {% else %}
             <div class="callout callout--warn">
               <span class="callout__icon">&#9888;</span>
               <span>
-                Vispirms norādiet maksas plānu — bez tā parakstīšanas atzīmēšana
-                nevar izveidot maksājumu ierakstu.
-                <a href="{% url 'admin_hub:billing' application.pk %}" style="text-decoration:underline">Atvērt 6. soli →</a>
+                Vispirms norādiet maksas plānu un pirmo rēķina mēnesi augstāk —
+                bez tiem parakstīšanas atzīmēšana nevar izveidot maksājumu ierakstu.
               </span>
             </div>
           {% endif %}
@@ -175,7 +231,7 @@
             <input type="hidden" name="next" value="{% url 'admin_hub:billing' application.pk %}">
             <button type="submit" name="action" value="mark_agreement_signed"
                     class="btn btn-red"
-                    {% if not has_signed_artifact or not has_billing_plan %}disabled{% endif %}>
+                    {% if not has_billing_plan %}disabled{% endif %}>
               Atzīmēt kā parakstītu →
             </button>
           </form>
@@ -247,11 +303,13 @@
       <a class="btn btn-secondary" href="{% url 'admin_hub:cockpit' application.pk %}">← Dati</a>
       <a class="btn btn-secondary" href="{% url 'admin_hub:billing' application.pk %}">Maksas plāns →</a>
       {% comment %} Submits the step-5 form via its id so the primary transition is
-         reachable without scrolling past three cards. Both preconditions
-         still gate it, exactly as the in-card button does. {% endcomment %}
+         reachable without scrolling past three cards. The billing plan still
+         gates it, exactly as the in-card button does — the signed artifact
+         does not: mark_agreement_signed never reads it, so a club that signs
+         on paper and files the scan later is not blocked here. {% endcomment %}
       <button type="submit" form="mark-signed-form" name="action" value="mark_agreement_signed"
               class="btn btn-red"
-              {% if not has_signed_artifact or not has_billing_plan %}disabled{% endif %}>
+              {% if not has_billing_plan %}disabled{% endif %}>
         Atzīmēt kā parakstītu →
       </button>
     </div>

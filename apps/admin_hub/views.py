@@ -10,6 +10,59 @@ from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
 
 
+def _billing_is_locked(agreement) -> bool:
+    """Whether the plan has stopped being an intent on the agreement and
+    become the BillingRecord's own data.
+
+    The single definition of that boundary. ``set_billing_setup`` refuses
+    these states, so both the agreement page (which offers the plan inline,
+    because signing cannot happen without one) and the billing page's route
+    decision must agree on where the line falls — a second copy of this
+    three-state tuple is exactly how the overdue flag and its tab filter
+    drifted apart earlier on this branch.
+    """
+    from apps.agreements.models import Agreement
+
+    return agreement is not None and agreement.state in (
+        Agreement.State.SIGNED,
+        Agreement.State.SUPERSEDED,
+        Agreement.State.DISCONTINUED,
+    )
+
+
+def _plan_preview(agreement, record):
+    """The plan, first billing month and installment schedule to display.
+
+    Once a BillingRecord exists it IS the billing, so a preview must reflect
+    its own plan and month rather than the agreement's intent. Shared by the
+    agreement page (step 5, where the plan must be set before signing can
+    materialise the record) and the billing page (step 6) so the two cannot
+    show different numbers for the same member.
+    """
+    import datetime
+    from decimal import Decimal
+
+    from apps.billing.services import derive_installment_schedule
+
+    plan = record.plan if record is not None else agreement.billing_plan
+    first_billing_month = (
+        record.first_billing_month
+        if record is not None
+        else agreement.first_billing_month
+    )
+    schedule: list[tuple[datetime.date, Decimal]] = []
+    if plan is not None:
+        total_amount = (
+            record.final_amount if record is not None else plan.annual_amount
+        )
+        schedule = derive_installment_schedule(
+            plan,
+            total_amount,
+            first_billing_month=first_billing_month,
+        )
+    return plan, first_billing_month, schedule
+
+
 def _billing_change_route(
     application, agreement, member, record, invoices, mismatched_record=None
 ) -> tuple[str, str, bool]:
@@ -88,12 +141,7 @@ def _billing_change_route(
         args=[application.pk],
     )
 
-    locked_states = (
-        Agreement.State.SIGNED,
-        Agreement.State.SUPERSEDED,
-        Agreement.State.DISCONTINUED,
-    )
-    if agreement is None or agreement.state not in locked_states:
+    if not _billing_is_locked(agreement):
         return (review_action_url, "", False)
 
     if record is not None:
@@ -298,6 +346,7 @@ def agreement_view(request, pk: int):
         pipeline_progress,
     )
     from apps.admin_hub.timeline import build_agreement_timeline
+    from apps.billing.models import MembershipPlan
     from apps.registrations.models import RegistrationApplication
 
     application = get_object_or_404(RegistrationApplication, pk=pk)
@@ -308,6 +357,17 @@ def agreement_view(request, pk: int):
     steps = build_pipeline(objects)
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
+    # Step 6's plan is a precondition of step 5's signing, not a successor to
+    # it: mark_agreement_signed raises "billing plan required" (P9) and
+    # "first billing month required" (P15) before it will move the state. The
+    # rail numbering follows the club's own description of the workflow, so
+    # the fix is to bring the control to where it is needed rather than to
+    # renumber - otherwise the reviewer has to leave for step 6 and come back
+    # for every single agreement.
+    plan_editable = not _billing_is_locked(agreement)
+    plan, first_billing_month, schedule = _plan_preview(
+        agreement, objects.billing_record
+    )
 
     return render(
         request,
@@ -332,6 +392,23 @@ def agreement_view(request, pk: int):
             # plan + first month, so step 5 cannot complete before step 6 —
             # and pipeline.build_pipeline already decides when that holds.
             "has_billing_plan": _step_is_done(steps, "plan"),
+            # Step 6's controls, surfaced here because signing needs them.
+            # Editable only while the plan is still an intent on the
+            # agreement; once locked, the BillingRecord owns it and step 6
+            # is where it gets reassigned.
+            "plan_editable": plan_editable,
+            "plan": plan,
+            "first_billing_month": first_billing_month,
+            "schedule": schedule,
+            "active_plans": (
+                list(
+                    MembershipPlan.objects.filter(is_active=True).order_by(
+                        "season", "name"
+                    )
+                )
+                if plan_editable
+                else []
+            ),
             "lifecycle_events": build_agreement_timeline(agreement)[:20],
         },
     )
@@ -339,9 +416,6 @@ def agreement_view(request, pk: int):
 
 @staff_member_required
 def billing_view(request, pk: int):
-    import datetime
-    from decimal import Decimal
-
     from django.http import Http404
     from django.shortcuts import get_object_or_404
 
@@ -352,7 +426,6 @@ def billing_view(request, pk: int):
     )
     from apps.admin_hub import invoices as invoice_queries
     from apps.billing.models import BillingRecord, MembershipPlan
-    from apps.billing.services import derive_installment_schedule
     from apps.registrations.models import RegistrationApplication
 
     application = get_object_or_404(RegistrationApplication, pk=pk)
@@ -381,26 +454,9 @@ def billing_view(request, pk: int):
     )
 
     # Preview the schedule from whatever is selected now, so the reviewer sees
-    # the consequence before saving. Falls back to an empty list when there is
-    # no plan yet - never to a guess.
-    #
-    # Once a BillingRecord exists it IS the billing, so its own plan / month
-    # are what the preview must reflect — not the agreement's. CRITICAL 1's
-    # reassignment fix keeps the two in sync, but reading the row actually
-    # displayed (record when present, agreement's intent otherwise) is
-    # correct independent of that sync and costs nothing extra here.
-    schedule: list[tuple[datetime.date, Decimal]] = []
-    plan = record.plan if record is not None else agreement.billing_plan
-    first_billing_month = (
-        record.first_billing_month if record is not None else agreement.first_billing_month
-    )
-    if plan is not None:
-        total_amount = record.final_amount if record is not None else plan.annual_amount
-        schedule = derive_installment_schedule(
-            plan,
-            total_amount,
-            first_billing_month=first_billing_month,
-        )
+    # the consequence before saving. Shared with the agreement page's step-5
+    # plan block - see _plan_preview.
+    plan, first_billing_month, schedule = _plan_preview(agreement, record)
 
     return render(
         request,

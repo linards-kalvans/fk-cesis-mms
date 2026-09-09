@@ -1,0 +1,24 @@
+{% comment %} Installment schedule preview. Shared by step 5 (agreement page,
+   where the plan must be set before signing) and step 6 (billing page), so
+   the same plan and month render the same rows on both. Expects `schedule`
+   as a list of (due_date, amount) pairs — see views._plan_preview. {% endcomment %}
+{% if schedule %}
+  <div>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <strong style="color:var(--fk-blue)">Aprēķinātais grafiks</strong>
+      <span class="muted" style="font-weight:600">{{ schedule|length }} daļas</span>
+    </div>
+    <div class="sched">
+      {% for due_date, amount in schedule %}
+        <div class="schedrow">
+          <span class="schedrow__seq">{{ forloop.counter }}</span>
+          <span>{{ due_date|date:"F Y" }}</span>
+          <span class="muted">termiņš {{ due_date|date:"d.m.Y" }}</span>
+          <span class="schedrow__amt">{{ amount }} €</span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% else %}
+  <p class="hint">Izvēlieties plānu un pirmo mēnesi, lai redzētu grafiku.</p>
+{% endif %}

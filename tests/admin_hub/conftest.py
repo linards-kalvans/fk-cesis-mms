@@ -182,6 +182,22 @@ def reviewer(db):
 
 
 @pytest.fixture
+def acting_reviewer(db):
+    """A reviewer who can actually POST the review actions.
+
+    The plain ``reviewer`` above is ``is_staff`` only, which is all the Hub's
+    own views require — but every endpoint they drive additionally requires
+    ``has_change_permission``, so that account sees the whole pipeline and
+    gets 403 on every action. Tests that exercise a real transition need this
+    one; tests that only assert rendering do not."""
+    from django.contrib.auth.models import User
+
+    return User.objects.create_superuser(
+        username="hub_acting_reviewer", email="", password="x"
+    )
+
+
+@pytest.fixture
 def default_plan(db):
     from apps.billing.models import MembershipPlan
 
