@@ -248,17 +248,6 @@ def _step_is_actionable(steps, key: str) -> bool:
     )
 
 
-def _step_is_done(steps, key: str) -> bool:
-    """Whether one pipeline step is complete, by key.
-
-    Pages read a step's state from here rather than recomputing the rule that
-    decided it — two copies of one rule is what let the overdue flag and the
-    tab filter disagree earlier on this branch."""
-    from apps.admin_hub.pipeline import DONE
-
-    return any(step.key == key and step.state == DONE for step in steps)
-
-
 @staff_member_required
 def queue_view(request):
     tab = queries.normalize_tab(request.GET.get("tab"))
@@ -410,10 +399,11 @@ def agreement_view(request, pk: int):
             "agreement_document_ready": bool(agreement.external_id),
             "has_signed_artifact": bool(agreement.signed_artifact),
             # Read step 6's own state rather than recomputing its rule here.
-            # mark_agreement_signed materialises the BillingRecord from the
-            # plan + first month, so step 5 cannot complete before step 6 —
-            # and pipeline.build_pipeline already decides when that holds.
-            "has_billing_plan": _step_is_done(steps, "plan"),
+            # The seven-step pipeline no longer has a standalone plan step;
+            # signing still requires this saved plan and first month.
+            "has_billing_plan": (
+                plan is not None and bool(first_billing_month)
+            ),
             # mark_agreement_signed refuses any state but GENERATED/SENT, and
             # raises a raw English ValueError the admin has no Latvian mapping
             # for. The artifact clause used to mask that by accident on the
