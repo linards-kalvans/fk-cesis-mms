@@ -1,6 +1,7 @@
 """Confirming a billing record from the admin emits an AuditEvent."""
 
 from decimal import Decimal
+from unittest.mock import patch
 
 import pytest
 from django.contrib.admin.sites import AdminSite
@@ -51,6 +52,33 @@ def test_already_confirmed_confirm_emits_no_audit(active_plan, guardian):
     assert not AuditEvent.objects.filter(
         action=AuditEvent.Action.BILLING_RECORD_CONFIRMED
     ).exists()
+
+
+def test_push_with_confirm_flag_confirms_audits_and_enqueues(
+    active_plan, guardian
+):
+    """The Hub's one-click action: an explicit confirm_and_push=1 POST to
+    the existing push endpoint confirms a draft, audits the confirmation
+    AND the push trigger separately, and enqueues exactly one push job —
+    all without touching Invoice Ninja during the request."""
+    rec = _draft(active_plan, guardian)
+    c = _staff_client()
+    url = reverse("admin:billing_billingrecord_push", args=[rec.pk])
+
+    with patch("apps.integrations.tasks.enqueue_push_billing_record") as enqueue:
+        response = c.post(url, {"confirm_and_push": "1"})
+
+    assert response.status_code == 302
+    rec.refresh_from_db()
+    assert rec.status == BillingRecord.Status.CONFIRMED
+    enqueue.assert_called_once_with(rec.pk)
+    actions = set(
+        AuditEvent.objects.filter(target_id=str(rec.pk)).values_list(
+            "action", flat=True
+        )
+    )
+    assert str(AuditEvent.Action.BILLING_RECORD_CONFIRMED) in actions
+    assert str(AuditEvent.Action.BILLING_PUSH_TRIGGERED) in actions
 
 
 def test_save_model_dropdown_confirm_emits_audit(active_plan, guardian):

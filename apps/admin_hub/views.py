@@ -320,6 +320,11 @@ def cockpit_view(request, pk: int):
                 if objects.agreement is not None
                 else ""
             ),
+            # Approval always lands on the agreement page. A submitted
+            # application has no agreement yet, but approve_application
+            # creates it before redirecting, so the destination is known
+            # unconditionally here — unlike agreement_url above.
+            "approval_next_url": reverse("admin_hub:agreement", args=[application.pk]),
             "objects": objects,
             "steps": steps,
             "steps_done": done,
@@ -433,6 +438,8 @@ def agreement_view(request, pk: int):
 
 @staff_member_required
 def billing_view(request, pk: int):
+    from decimal import Decimal
+
     from django.http import Http404
     from django.shortcuts import get_object_or_404
 
@@ -443,6 +450,7 @@ def billing_view(request, pk: int):
     )
     from apps.admin_hub import invoices as invoice_queries
     from apps.billing.models import BillingRecord, MembershipPlan
+    from apps.billing.services import derive_installment_schedule
     from apps.registrations.models import RegistrationApplication
 
     application = get_object_or_404(RegistrationApplication, pk=pk)
@@ -454,6 +462,25 @@ def billing_view(request, pk: int):
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
     record = objects.billing_record
+
+    # Read-only preview of the installments the worker would materialise.
+    # Mirrors materialize_installments exactly: zero-value records have no
+    # rows, the snapshot count caps the schedule, and upfront collapses to
+    # one row for the full total on the first due date. Never persisted —
+    # creating rows here would falsely imply invoices exist and interfere
+    # with the worker's idempotency contract.
+    invoice_preview: list = []
+    if record is not None and not objects.invoices and record.final_amount != Decimal("0.00"):
+        schedule = derive_installment_schedule(
+            record.plan,
+            record.final_amount,
+            first_billing_month=record.first_billing_month,
+            installment_count=record.scheduled_installment_count,
+        )
+        if record.payment_mode == BillingRecord.PaymentMode.UPFRONT:
+            invoice_preview = [(schedule[0][0], record.final_amount)]
+        else:
+            invoice_preview = schedule
 
     return render(
         request,
@@ -471,6 +498,7 @@ def billing_view(request, pk: int):
                 and str(record.status) == str(BillingRecord.Status.CONFIRMED)
             ),
             "invoices": objects.invoices,
+            "invoice_preview": invoice_preview,
             "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
             "next_season_record": objects.next_season_record,
             "steps": steps,

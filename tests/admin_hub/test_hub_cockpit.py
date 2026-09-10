@@ -75,11 +75,31 @@ def test_cockpit_posts_approval_to_the_existing_admin_endpoint(
     assert "csrfmiddlewaretoken" in body
 
 
-def test_cockpit_carries_a_next_back_to_itself(client, reviewer, submitted_application):
+def test_cockpit_approval_posts_next_to_agreement(client, reviewer, submitted_application):
+    """Approval must hand off straight to the agreement Hub page: the
+    approve form carries `next` = the agreement URL in both the query string
+    and the hidden input, so the admin approve endpoint redirects there
+    instead of back to the cockpit."""
     client.force_login(reviewer)
-    url = reverse("admin_hub:cockpit", args=[submitted_application.pk])
-    body = client.get(url).content.decode()
-    assert f'value="{url}"' in body
+    cockpit_url = reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    agreement_url = reverse("admin_hub:agreement", args=[submitted_application.pk])
+    body = client.get(cockpit_url).content.decode()
+
+    assert f"?next={agreement_url}" in body
+    assert f'value="{agreement_url}"' in body
+
+
+def test_approved_cockpit_has_no_redundant_agreement_continue_button(
+    client, reviewer, approved_application
+):
+    """With approval landing on the agreement page directly, the cockpit's
+    post-approval continuation CTA is a dead step and must be gone."""
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[approved_application.pk])
+    ).content.decode()
+
+    assert "Turpināt: Līgums" not in body
 
 
 def test_cockpit_document_links_use_the_authorized_preview_view(
@@ -186,5 +206,3 @@ def test_approve_action_is_withdrawn_once_approved(
         reverse("admin_hub:cockpit", args=[approved_application.pk])
     ).content.decode()
     assert "disabled" in _approve_button_tag(body)
-    # and the bar points at the next real step instead
-    assert "Turpināt: Līgums" in body

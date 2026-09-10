@@ -70,26 +70,55 @@
                 </tbody>
               </table>
             </div>
+          {% elif invoice_preview %}
+            {% comment %} Derived only from the record snapshot — the worker has
+               not created any BillingInvoice rows yet, so nothing here is a
+               real invoice. The persisted table above replaces this once rows
+               exist; the two never render together. {% endcomment %}
+            <h3 class="anton" style="margin-bottom:10px">Rēķinu priekšskatījums</h3>
+            <div class="callout" style="margin-bottom:14px">
+              <span class="callout__icon">i</span>
+              <span>Rēķini vēl nav izveidoti Invoice Ninja. Pēc izrakstīšanas šis priekšskatījums kļūs par rēķinu sarakstu.</span>
+            </div>
+            <div class="tablewrap">
+              <table class="grid">
+                <thead>
+                  <tr><th>#</th><th>Termiņš</th><th class="num">Summa</th><th>Statuss</th></tr>
+                </thead>
+                <tbody>
+                  {% for due_date, amount in invoice_preview %}
+                    <tr>
+                      <td class="strong">{{ forloop.counter }}</td>
+                      <td>{{ due_date|date:"d.m.Y" }}</td>
+                      <td class="num">{{ amount }} €</td>
+                      <td><span class="badge badge--sm badge--neutral">Priekšskatījums</span></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           {% else %}
             <p class="hint">Rēķini vēl nav izveidoti. Tie rodas, kad līgums tiek atzīmēts kā parakstīts.</p>
           {% endif %}
         </div>
         {% if record %}
+          {% comment %} One deliberate action: an unsynced record gets a single
+             push button. For a draft it carries confirm_and_push=1, which the
+             admin push endpoint accepts only as an explicit opt-in (it confirms
+             + audits, then enqueues). Direct Django-admin push requests without
+             the flag keep their confirmed-only refusal. {% endcomment %}
           <div class="card__foot">
             <span class="hint">Ieraksta stāvoklis: {{ record.get_status_display }}</span>
             <span class="card__spacer"></span>
-            {% if not record_confirmed %}
-              <form method="post" action="{% url 'admin:billing_billingrecord_confirm' record.pk %}?next={{ request.path|urlencode }}">
+            {% if record.external_status == "synced" %}
+              <span class="hint">Rēķini jau ir izrakstīti.</span>
+            {% else %}
+              <form method="post" action="{% url 'admin:billing_billingrecord_push' record.pk %}?next={{ request.path|urlencode }}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-secondary">Apstiprināt ierakstu</button>
+                {% if not record_confirmed %}<input type="hidden" name="confirm_and_push" value="1">{% endif %}
+                <button type="submit" class="btn btn-red">Izrakstīt rēķinus →</button>
               </form>
             {% endif %}
-            <form method="post" action="{% url 'admin:billing_billingrecord_push' record.pk %}?next={{ request.path|urlencode }}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-red" {% if not record_confirmed %}disabled{% endif %}>
-                Izrakstīt rēķinus →
-              </button>
-            </form>
           </div>
         {% endif %}
       </section>

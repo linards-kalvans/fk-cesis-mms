@@ -125,6 +125,87 @@ def test_invoice_table_shows_a_created_invoice(
     assert "Nav izrakstīts" in body
 
 
+def _invoice_push_button_tag(body: str) -> str:
+    """The ``Izrakstīt rēķinus`` button's own tag, and exactly one of it:
+    a draft record must offer a single invoice action, not a confirm +
+    disabled-push pair. Isolating the real element (not a substring window)
+    lets the caller check ``disabled`` against the button that carries the
+    label, whatever else on the page is or is not disabled."""
+    matches: list[str] = re.findall(
+        r"<button[^>]*>\s*Izrakstīt rēķinus[^<]*</button>", body, re.S
+    )
+    assert len(matches) == 1, (
+        f"exactly one invoice push button must be present, found {len(matches)}"
+    )
+    return matches[0]
+
+
+def test_billing_page_shows_derived_preview_before_invoice_rows_exist(
+    client, reviewer, signed_application, default_plan
+):
+    """A signed member's current draft BillingRecord with no persisted
+    BillingInvoice rows shows a derived installment preview (sequence, due
+    date, amount, ``Priekšskatījums``) plus explicit copy that the invoices
+    do not exist in Invoice Ninja yet, and one enabled confirm-and-push
+    action instead of the separate ``Apstiprināt ierakstu`` step."""
+    from apps.billing.models import BillingRecord
+
+    BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+        first_billing_month="2026-09",
+        scheduled_installment_count=2,
+    )
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+
+    assert "Rēķinu priekšskatījums" in body
+    assert "Rēķini vēl nav izveidoti Invoice Ninja." in body
+    assert "20.09.2026" in body
+    assert "20.10.2026" in body
+    assert "150,00" in body or "150.00" in body
+    assert "Priekšskatījums" in body
+    assert "Apstiprināt ierakstu" not in body
+    assert body.count('name="confirm_and_push"') == 1
+    assert "disabled" not in _invoice_push_button_tag(body)
+
+
+def test_billing_preview_is_absent_after_invoice_rows_exist(
+    client, reviewer, signed_application, default_plan
+):
+    """The preview must never coexist with persisted ``BillingInvoice``
+    rows: once the worker has materialized them, the real invoice table is
+    authoritative and no preview heading or badge renders."""
+    from apps.billing.models import BillingInvoice, BillingRecord
+
+    record = BillingRecord.objects.create(
+        member=signed_application.approved_member,
+        plan=default_plan,
+        season=default_plan.season,
+        base_amount=Decimal("300.00"),
+        final_amount=Decimal("300.00"),
+    )
+    BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date=datetime.date(2026, 9, 20),
+        amount=Decimal("300.00"),
+    )
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:billing", args=[signed_application.pk])
+    ).content.decode()
+
+    assert "Rēķinu priekšskatījums" not in body
+    assert "Priekšskatījums" not in body
+    assert "Nav izrakstīts" in body
+
+
 def test_push_endpoint_honours_next(client, signed_application, default_plan):
     from django.contrib.auth.models import User
 
@@ -195,9 +276,14 @@ def test_push_endpoint_refuses_an_unconfirmed_record(
     assert response.status_code == 302
     enqueue.assert_not_called()
     record.refresh_from_db()
+    assert record.status == BillingRecord.Status.DRAFT
     assert record.external_status != "synced"
     assert not AuditEvent.objects.filter(
         action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+        target_id=str(record.pk),
+    ).exists()
+    assert not AuditEvent.objects.filter(
+        action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
         target_id=str(record.pk),
     ).exists()
 

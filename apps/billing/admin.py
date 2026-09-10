@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -266,35 +267,53 @@ class BillingRecordAdmin(admin.ModelAdmin):
         """Issue one record's invoices. Same work as the bulk action, but
         addressable per record so the Admin Hub can offer it inline and come
         back via `next`. No new domain logic: it enqueues the same job and
-        records the same audit event."""
+        records the same audit event.
+
+        The Hub's one-click action adds one explicit opt-in: a POST carrying
+        the literal value ``confirm_and_push=1`` also confirms a DRAFT record
+        (audited as BILLING_RECORD_CONFIRMED) before enqueueing. Ordinary
+        direct requests keep the confirmed-only refusal below."""
         from apps.integrations.tasks import enqueue_push_billing_record
 
         if not self.has_change_permission(request):
             raise PermissionDenied
-        record = get_object_or_404(BillingRecord, pk=object_id)
+        get_object_or_404(BillingRecord, pk=object_id)
         # Mirrors confirm_view: GET is not CSRF-protected by Django, so
         # without this guard a bare GET (an <img> tag, a link prefetch) could
         # trigger a real invoice push for any staff session with no token
         # and no confirmation click.
         if request.method != "POST":
             return self._safe_redirect(request, object_id)
-        if record.status != BillingRecord.Status.CONFIRMED:
-            self.message_user(
-                request,
-                "Vispirms apstipriniet maksājumu ierakstu.",
-                level=messages.ERROR,
+        confirm_and_push = request.POST.get("confirm_and_push") == "1"
+        # Re-read under a row lock so a concurrent confirm/push cannot slip
+        # between the status check and the enqueue. The confirmation (and its
+        # audit) commits before the worker can observe the job.
+        with transaction.atomic():
+            record = BillingRecord.objects.select_for_update().get(pk=object_id)
+            if record.status == BillingRecord.Status.DRAFT:
+                if not confirm_and_push:
+                    self.message_user(
+                        request,
+                        "Vispirms apstipriniet maksājumu ierakstu.",
+                        level=messages.ERROR,
+                    )
+                    return self._safe_redirect(request, object_id)
+                record.status = BillingRecord.Status.CONFIRMED
+                record.save(update_fields=["status", "updated_at"])
+                record_audit_event(
+                    action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                    actor=request.user, request=request, target=record,
+                )
+            if record.external_status == "synced":
+                self.message_user(request, "Rēķini jau ir izrakstīti.")
+                return self._safe_redirect(request, object_id)
+            enqueue_push_billing_record(record.pk)
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+                actor=request.user,
+                request=request,
+                target=record,
             )
-            return self._safe_redirect(request, object_id)
-        if record.external_status == "synced":
-            self.message_user(request, "Rēķini jau ir izrakstīti.")
-            return self._safe_redirect(request, object_id)
-        enqueue_push_billing_record(record.pk)
-        record_audit_event(
-            action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
-            actor=request.user,
-            request=request,
-            target=record,
-        )
         self.message_user(request, "Rēķinu izrakstīšana sākta.")
         return self._safe_redirect(request, object_id)
 

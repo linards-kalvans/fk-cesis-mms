@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, Django 5/6, PostgreSQL/SQLite, pytest-django, Django admin, pytest, ruff, mypy.
 
-**Status:** DEV complete. All tasks implemented and verified.
+**Status:** LAN acceptance signed off 2026-09-07. All tasks implemented and verified.
 
 ---
 

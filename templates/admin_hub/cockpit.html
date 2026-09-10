@@ -141,9 +141,9 @@
           <h2 class="anton">Apstiprināšana</h2>
         </div>
         <form id="approve-form" method="post"
-              action="{% url 'admin:registrations_registrationapplication_approve' application.pk %}?next={{ request.path|urlencode }}">
+              action="{% url 'admin:registrations_registrationapplication_approve' application.pk %}?next={{ approval_next_url|urlencode }}">
           {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.path }}">
+          <input type="hidden" name="next" value="{{ approval_next_url }}">
           <div class="card__body">
             <p class="hint" style="margin-bottom:14px">
               Apstiprinot tiek izveidots biedra ieraksts un vecāks saņem e-pastu.
@@ -212,15 +212,15 @@
       <a class="btn btn-secondary" href="{% url 'admin_hub:queue' %}">← Atpakaļ uz rindu</a>
       {% comment %} The primary action follows the application's actual state: approval is
          only offered for a submitted application, because approve_application
-         refuses anything else. Once approved, the next task is the agreement. {% endcomment %}
+         refuses anything else. Once approved the agreement page is already the
+         approval redirect target, so no continuation CTA belongs here — the
+         step rail links forward instead. {% endcomment %}
       {% if can_approve %}
         <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
         {% comment %} Submits the step-2 form above via its id, so the training-group
            select stays in its card while the action stays on screen. The
            checklist never gates this - see the card copy. {% endcomment %}
         <button type="submit" form="approve-form" class="btn btn-red">Apstiprināt pieteikumu →</button>
-      {% elif agreement_url %}
-        <a class="btn btn-red" href="{{ agreement_url }}">Turpināt: Līgums →</a>
       {% else %}
         <span class="actionbar__note">{{ application.get_status_display }} — nav darbību šajā solī</span>
       {% endif %}
