@@ -1,4 +1,4 @@
-"""Derivation of the eight-step registration pipeline.
+"""Derivation of the seven-step registration pipeline.
 
 The pipeline is *derived*, never stored. ``load_pipeline_objects`` does the
 database work; ``build_pipeline`` is pure so every state combination is
@@ -32,9 +32,8 @@ STEP_DEFS: tuple[tuple[int, str, str], ...] = (
     (3, "agreement", "Līgums"),
     (4, "handover", "Izsniegts"),
     (5, "signed", "Parakstītais"),
-    (6, "plan", "Maksas plāns"),
-    (7, "invoices", "Rēķini"),
-    (8, "next_season", "Nākamā sezona"),
+    (6, "invoices", "Rēķini"),
+    (7, "next_season", "Nākamā sezona"),
 )
 
 
@@ -128,7 +127,7 @@ def _fmt_date(value) -> str:
 
 
 def build_pipeline(objects: PipelineObjects) -> list[PipelineStep]:
-    """Turn persisted state into eight ordered steps. Pure: no DB access."""
+    """Turn persisted state into seven ordered steps. Pure: no DB access."""
     from apps.agreements.models import Agreement
 
     status = RegistrationApplication.Status
@@ -145,8 +144,11 @@ def build_pipeline(objects: PipelineObjects) -> list[PipelineStep]:
         "approve": application.status == status.APPROVED,
         "agreement": agreement is not None,
         "handover": agreement is not None and agreement.sent_at is not None,
-        "signed": agreement is not None and agreement.state == Agreement.State.SIGNED,
-        "plan": has_plan,
+        "signed": (
+            agreement is not None
+            and agreement.state == Agreement.State.SIGNED
+            and has_plan
+        ),
         "invoices": bool(objects.invoices) and len(pushed) == len(objects.invoices),
         "next_season": objects.next_season_record is not None,
     }
@@ -157,7 +159,6 @@ def build_pipeline(objects: PipelineObjects) -> list[PipelineStep]:
         "handover": agreement is not None,
         "signed": agreement is not None
         and agreement.state in (Agreement.State.GENERATED, Agreement.State.SENT),
-        "plan": agreement is not None,
         "invoices": objects.billing_record is not None,
         "next_season": objects.billing_record is not None and done["signed"],
     }
@@ -167,7 +168,6 @@ def build_pipeline(objects: PipelineObjects) -> list[PipelineStep]:
         "agreement": _fmt_date(getattr(agreement, "generated_at", None)),
         "handover": _fmt_date(getattr(agreement, "sent_at", None)),
         "signed": _fmt_date(getattr(agreement, "signed_at", None)),
-        "plan": getattr(agreement, "first_billing_month", "") if has_plan else "",
         "invoices": (
             f"{len(pushed)}/{len(objects.invoices)} izrakstīti"
             if objects.invoices

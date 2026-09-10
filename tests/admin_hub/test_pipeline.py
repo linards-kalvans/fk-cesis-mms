@@ -1,4 +1,4 @@
-"""8-step pipeline derivation."""
+"""7-step pipeline derivation."""
 
 from __future__ import annotations
 
@@ -21,17 +21,16 @@ def _states(steps):
     return {step.key: step.state for step in steps}
 
 
-def test_pipeline_always_has_eight_ordered_steps(submitted_application):
+def test_pipeline_always_has_seven_ordered_steps(submitted_application):
     steps = build_pipeline(load_pipeline_objects(submitted_application))
-    assert len(steps) == 8
-    assert [step.number for step in steps] == list(range(1, 9))
+    assert len(steps) == 7
+    assert [step.number for step in steps] == list(range(1, 8))
     assert [step.key for step in steps] == [
         "verify",
         "approve",
         "agreement",
         "handover",
         "signed",
-        "plan",
         "invoices",
         "next_season",
     ]
@@ -43,7 +42,7 @@ def test_submitted_application_is_on_step_one(submitted_application):
     assert states["verify"] == "current"
     assert states["approve"] == "available"
     assert states["agreement"] == "locked"
-    assert pipeline_progress(steps) == (0, 8)
+    assert pipeline_progress(steps) == (0, 7)
     assert current_step(steps).key == "verify"
 
 
@@ -60,7 +59,7 @@ def test_approved_application_completes_steps_one_and_two(approved_application):
     assert states["approve"] == "done"
     done, total = pipeline_progress(steps)
     assert done >= 2
-    assert total == 8
+    assert total == 7
 
 
 def test_sent_agreement_completes_handover(approved_application):
@@ -77,32 +76,61 @@ def test_sent_agreement_completes_handover(approved_application):
     assert states["signed"] == "current"
 
 
-def test_signed_agreement_completes_step_five(approved_application):
+def test_signed_step_is_current_without_a_plan(approved_application):
+    """A sent agreement with no billing plan/month must keep step 5 ("signed")
+    current — plan setup is rendered on that same step, so the pipeline must
+    not lock the page that owns the missing data — while step 6 ("invoices")
+    stays locked (no BillingRecord exists yet)."""
+    from django.utils import timezone
+
+    agreement = approved_application.approved_member.agreements.get(is_current=True)
+    agreement.state = agreement.State.SENT
+    agreement.sent_at = timezone.now()
+    agreement.billing_plan = None
+    agreement.first_billing_month = ""
+    agreement.save(
+        update_fields=["state", "sent_at", "billing_plan", "first_billing_month"]
+    )
+
+    states = _states(build_pipeline(load_pipeline_objects(approved_application)))
+    assert states["handover"] == "done"
+    assert states["signed"] == "current"
+    assert states["invoices"] == "locked"
+
+
+def test_signed_agreement_completes_step_five_only_with_billing_setup(
+    approved_application, default_plan
+):
     from django.utils import timezone
 
     agreement = approved_application.approved_member.agreements.get(is_current=True)
     agreement.state = agreement.State.SIGNED
     agreement.sent_at = timezone.now()
     agreement.signed_at = timezone.now()
-    agreement.save(update_fields=["state", "sent_at", "signed_at"])
+    agreement.billing_plan = None
+    agreement.first_billing_month = ""
+    agreement.save(
+        update_fields=[
+            "state",
+            "sent_at",
+            "signed_at",
+            "billing_plan",
+            "first_billing_month",
+        ]
+    )
 
     states = _states(build_pipeline(load_pipeline_objects(approved_application)))
-    assert states["signed"] == "done"
+    assert states["signed"] != "done", (
+        "a signed agreement without the plan+month it was supposed to realise "
+        "is malformed imported data — step 5 must not report done"
+    )
 
-
-def test_plan_step_needs_both_plan_and_first_month(approved_application, default_plan):
-    agreement = approved_application.approved_member.agreements.get(is_current=True)
     agreement.billing_plan = default_plan
-    agreement.first_billing_month = ""
+    agreement.first_billing_month = "2026-09"
     agreement.save(update_fields=["billing_plan", "first_billing_month"])
 
     states = _states(build_pipeline(load_pipeline_objects(approved_application)))
-    assert states["plan"] != "done", "a plan without a first month is not finished"
-
-    agreement.first_billing_month = "2026-09"
-    agreement.save(update_fields=["first_billing_month"])
-    states = _states(build_pipeline(load_pipeline_objects(approved_application)))
-    assert states["plan"] == "done"
+    assert states["signed"] == "done"
 
 
 def test_invoices_step_is_done_only_when_every_invoice_is_pushed(
