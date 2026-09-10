@@ -91,7 +91,19 @@ In `_billing_change_route`, the "invoices pushed to Invoice Ninja" and
 are reachable only from direct-DB fixtures. Harmless, but they read as live
 guards when they are not.
 
-### 2.4 Deferred, lower value
+### 2.4 A void agreement's billing plan is still editable
+
+`set_billing_setup` refuses SIGNED, SUPERSEDED and DISCONTINUED — but not
+VOID. So staff can rewrite the billing plan of a cancelled agreement, and the
+POST genuinely succeeds. `_billing_is_locked` mirrors the service faithfully,
+so the Hub offers the control on both step 5 and step 6.
+
+Pre-existing domain permissiveness, not introduced here, and now pinned as
+intended behaviour by `test_step_five_controls_match_the_services_own_state_guards`.
+If it is not intended, the fix belongs in `set_billing_setup`, and the Hub
+will follow automatically.
+
+### 2.5 Deferred, lower value
 
 - Nightly sweeps have no explicit batch-size cap.
 - `member_kit_size_shorts` is a dead field (kit size collapsed to one value).
