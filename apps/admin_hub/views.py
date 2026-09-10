@@ -51,7 +51,13 @@ def _plan_preview(agreement, record):
         else agreement.first_billing_month
     )
     schedule: list[tuple[datetime.date, Decimal]] = []
-    if plan is not None:
+    # A blank month is NOT a preview-able state, even though
+    # derive_installment_schedule will happily fall back to the plan's own
+    # first_installment_month and the season start year. Signing refuses a
+    # blank month (P15), so rendering a concrete grid of dates directly above
+    # the warning that the month is still missing shows staff invented
+    # deadlines for a transition that cannot happen.
+    if plan is not None and first_billing_month:
         total_amount = (
             record.final_amount if record is not None else plan.annual_amount
         )
@@ -226,6 +232,22 @@ def _step_urls(application, objects) -> dict[str, str]:
     return urls
 
 
+def _step_is_actionable(steps, key: str) -> bool:
+    """Whether one pipeline step's own transition can be performed right now.
+
+    Distinct from ``_step_is_done``: a step is actionable while its guard
+    would accept the POST, and stops being actionable the moment it succeeds.
+    ``build_pipeline`` already derives this — step "signed" is available
+    exactly for ``GENERATED`` and ``SENT``, which is ``mark_agreement_signed``'s
+    own state guard — so reading it here keeps the Hub from offering a button
+    the endpoint refuses, without restating the state set."""
+    from apps.admin_hub.pipeline import AVAILABLE, CURRENT
+
+    return any(
+        step.key == key and step.state in (CURRENT, AVAILABLE) for step in steps
+    )
+
+
 def _step_is_done(steps, key: str) -> bool:
     """Whether one pipeline step is complete, by key.
 
@@ -392,6 +414,11 @@ def agreement_view(request, pk: int):
             # plan + first month, so step 5 cannot complete before step 6 —
             # and pipeline.build_pipeline already decides when that holds.
             "has_billing_plan": _step_is_done(steps, "plan"),
+            # mark_agreement_signed refuses any state but GENERATED/SENT, and
+            # raises a raw English ValueError the admin has no Latvian mapping
+            # for. The artifact clause used to mask that by accident on the
+            # already-signed page; dropping it exposed the real gap.
+            "can_mark_signed": _step_is_actionable(steps, "signed"),
             # Step 6's controls, surfaced here because signing needs them.
             # Editable only while the plan is still an intent on the
             # agreement; once locked, the BillingRecord owns it and step 6

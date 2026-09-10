@@ -12,9 +12,15 @@ from django.utils import timezone
 pytestmark = [pytest.mark.django_db, pytest.mark.admin_view]
 
 
-def _signed_button_tag(body: str) -> str:
-    """Return the exact ``<button ...>`` opening tag for
-    ``mark_agreement_signed``.
+def _signed_button_tags(body: str) -> list[str]:
+    """Return EVERY ``<button ...>`` opening tag for ``mark_agreement_signed``.
+
+    The page renders two — one in the step-5 card foot, one in the sticky
+    action bar — each carrying its own copy of the disable condition. An
+    earlier version of this helper returned the first match only, so the
+    action-bar copy was asserted by nothing at all: re-adding a stale clause
+    to it alone kept the whole file green. Returning both and asserting over
+    all of them is what keeps the two in sync.
 
     A fixed-size substring window keyed off the position of the ``value``
     attribute is fragile: in the template, ``disabled`` renders *after*
@@ -24,11 +30,13 @@ def _signed_button_tag(body: str) -> str:
     instead of an arbitrary character window that happens to overlap by
     coincidence.
     """
-    match = re.search(
+    tags = re.findall(
         r'<button[^>]*value="mark_agreement_signed"[^>]*>', body, re.DOTALL
     )
-    assert match is not None, "mark_agreement_signed button must be present"
-    return match.group(0)
+    assert len(tags) == 2, (
+        f"expected the card-foot and action-bar buttons, found {len(tags)}"
+    )
+    return tags
 
 
 @pytest.fixture
@@ -92,8 +100,8 @@ def test_mark_signed_is_enabled_without_an_uploaded_artifact(
     client.force_login(reviewer)
     url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
     body = client.get(url).content.decode()
-    tag = _signed_button_tag(body)
-    assert "disabled" not in tag
+    tags = _signed_button_tags(body)
+    assert all("disabled" not in tag for tag in tags)
     # The upload is still offered — demoted, not removed.
     assert 'name="signed_artifact"' in body
     assert "neobligāti" in body
@@ -119,8 +127,8 @@ def test_mark_signed_is_disabled_without_a_billing_plan(
     url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
     body = client.get(url).content.decode()
     assert "Vispirms norādiet maksas plānu" in body
-    tag = _signed_button_tag(body)
-    assert "disabled" in tag
+    tags = _signed_button_tags(body)
+    assert all("disabled" in tag for tag in tags)
 
 
 def test_mark_signed_is_disabled_with_artifact_but_no_billing_plan(
@@ -156,8 +164,8 @@ def test_mark_signed_is_disabled_with_artifact_but_no_billing_plan(
     client.force_login(reviewer)
     url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
     body = client.get(url).content.decode()
-    tag = _signed_button_tag(body)
-    assert "disabled" in tag
+    tags = _signed_button_tags(body)
+    assert all("disabled" in tag for tag in tags)
 
 
 def test_mark_signed_is_enabled_with_a_plan_and_an_artifact(
@@ -181,8 +189,8 @@ def test_mark_signed_is_enabled_with_a_plan_and_an_artifact(
     client.force_login(reviewer)
     url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
     body = client.get(url).content.decode()
-    tag = _signed_button_tag(body)
-    assert "disabled" not in tag
+    tags = _signed_button_tags(body)
+    assert all("disabled" not in tag for tag in tags)
 
 
 def test_page_shows_the_lifecycle_timeline(
@@ -248,12 +256,13 @@ def test_agreement_page_offers_the_plan_form_before_signing(
     assert 'name="first_billing_month"' in body
     assert 'value="set_billing_setup"' in body
     # Posting to the existing admin endpoint, not to a Hub-owned route.
-    assert (
-        reverse(
-            "admin:registrations_registrationapplication_review-action",
-            args=[application_with_agreement.pk],
-        )
-        in body
+    # Read off THIS form: the agreement page has five other forms already
+    # posting to that URL, so a whole-body substring check would hold even
+    # if the plan form posted somewhere else entirely.
+    action, _payload = _plan_form(body)
+    assert action == reverse(
+        "admin:registrations_registrationapplication_review-action",
+        args=[application_with_agreement.pk],
     )
     # The consequence of the current selection is visible before signing.
     assert "Aprēķinātais grafiks" in body
@@ -286,7 +295,15 @@ def test_agreement_page_shows_the_plan_read_only_once_signed(
     assert 'value="set_billing_setup"' not in body
     # ...but the plan itself is still on the page, as a value.
     assert plan_name in body
-    assert reverse("admin_hub:billing", args=[application_with_agreement.pk]) in body
+    # The step-6 pointer, matched as an actual anchor carrying that label —
+    # the bare URL is on every render of this page (step rail, action bar,
+    # and the mark-signed form's hidden `next`), so a substring check would
+    # survive deleting the link this test is named for.
+    billing_url = reverse("admin_hub:billing", args=[application_with_agreement.pk])
+    assert re.search(
+        rf'<a[^>]*href="{re.escape(billing_url)}"[^>]*>[^<]*Mainīt 6\. solī',
+        body,
+    ), "the read-only plan must point at step 6, which owns reassignment"
 
 
 def _plan_form(body: str) -> tuple[str, dict[str, str]]:
@@ -338,6 +355,7 @@ def test_plan_then_sign_completes_without_leaving_the_agreement_page(
     form stops reaching the real endpoint — not merely if the endpoint itself
     regresses."""
     from apps.agreements.models import Agreement
+    from apps.billing.services import derive_first_billing_month
     from apps.billing.models import BillingRecord, MembershipPlan
 
     member = application_with_agreement.approved_member
@@ -358,8 +376,12 @@ def test_plan_then_sign_completes_without_leaving_the_agreement_page(
     plan = MembershipPlan.objects.get(pk=int(payload[
         next(k for k, v in payload.items() if v.isdigit())
     ]))
+    # Derived, never a literal: set_billing_setup refuses a month below
+    # derive_first_billing_month(plan), which moves with today's date and the
+    # plan's cutoff day. A hardcoded "2026-09" passes today and starts failing
+    # on 2026-09-21.
     payload[next(k for k, v in payload.items() if v == "")] = (
-        f"{plan.season.split('/')[0]}-09"
+        derive_first_billing_month(plan)
     )
     payload["next"] = hub_url
 
@@ -383,3 +405,93 @@ def test_plan_then_sign_completes_without_leaving_the_agreement_page(
     )
     # Signing materialised the record, so step 7 is now reachable.
     assert BillingRecord.objects.filter(member=member).exists()
+
+
+@pytest.mark.parametrize(
+    ("state", "plan_editable", "sign_offered"),
+    [
+        ("generated", True, True),
+        ("sent", True, True),
+        ("signed", False, False),
+        ("superseded", False, False),
+        ("discontinued", False, False),
+        ("void", True, False),
+    ],
+)
+def test_step_five_controls_match_the_services_own_state_guards(
+    client, reviewer, application_with_agreement, state, plan_editable, sign_offered
+):
+    """Every agreement state, against both endpoints' real guards.
+
+    Two separate state sets meet on this card and neither is the other:
+
+    * ``set_billing_setup`` refuses SIGNED / SUPERSEDED / DISCONTINUED, so the
+      plan is editable in the other three — VOID included, which the domain
+      does permit.
+    * ``mark_agreement_signed`` accepts only GENERATED and SENT, so the sign
+      button is offered in two states, not four.
+
+    Both were previously covered for SIGNED alone. That let a real regression
+    through: with the signed-artifact clause dropped from the disable
+    condition, the sign button rendered enabled on an already-signed
+    agreement, and pressing it surfaced the raw English "cannot mark signed
+    from state signed" in a Latvian UI. It also left ``_billing_is_locked``'s
+    three-state tuple unpinned — narrowing it to ``(SIGNED,)`` broke nothing.
+    """
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = state
+    agreement.sent_at = timezone.now()
+    if state == "signed":
+        agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "sent_at", "signed_at"])
+    assert agreement.billing_plan_id and agreement.first_billing_month, (
+        "the plan must be set, so the plan is never what disables the button"
+    )
+
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+
+    assert ('name="billing_plan"' in body) is plan_editable
+    # The read-only rendering is the alternative, not an empty card.
+    if not plan_editable:
+        assert agreement.billing_plan.name in body
+    for tag in _signed_button_tags(body):
+        assert ("disabled" in tag) is not sign_offered
+
+
+def test_no_schedule_is_shown_while_the_first_billing_month_is_blank(
+    client, reviewer, application_with_agreement
+):
+    """A plan without a month must not render a grid of concrete deadlines.
+
+    ``derive_installment_schedule`` falls back to the plan's own
+    ``first_installment_month`` and the season start year when the month is
+    blank, so the card would otherwise show real-looking dates immediately
+    above the warning saying the month is still required — for a signing that
+    P15 refuses outright. Neither page tested this branch: only the
+    no-plan-at-all case was covered."""
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SENT
+    agreement.sent_at = timezone.now()
+    agreement.first_billing_month = ""
+    agreement.save(update_fields=["state", "sent_at", "first_billing_month"])
+    assert agreement.billing_plan_id, "the plan stays set; only the month is blank"
+
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+
+    assert "Aprēķinātais grafiks" not in body
+    assert "schedrow" not in body
+    # The hint takes its place, so this is not an empty card.
+    assert "Izvēlieties plānu un pirmo mēnesi" in body
+    # ...and signing is still refused, for the month rather than the plan.
+    for tag in _signed_button_tags(body):
+        assert "disabled" in tag

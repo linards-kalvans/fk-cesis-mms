@@ -231,7 +231,7 @@
             <input type="hidden" name="next" value="{% url 'admin_hub:billing' application.pk %}">
             <button type="submit" name="action" value="mark_agreement_signed"
                     class="btn btn-red"
-                    {% if not has_billing_plan %}disabled{% endif %}>
+                    {% if not has_billing_plan or not can_mark_signed %}disabled{% endif %}>
               Atzīmēt kā parakstītu →
             </button>
           </form>
@@ -309,7 +309,7 @@
          on paper and files the scan later is not blocked here. {% endcomment %}
       <button type="submit" form="mark-signed-form" name="action" value="mark_agreement_signed"
               class="btn btn-red"
-              {% if not has_billing_plan %}disabled{% endif %}>
+              {% if not has_billing_plan or not can_mark_signed %}disabled{% endif %}>
         Atzīmēt kā parakstītu →
       </button>
     </div>
