@@ -454,26 +454,6 @@ def billing_view(request, pk: int):
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
     record = objects.billing_record
-    # Uses objects.invoices — already prefetched/materialised by
-    # load_pipeline_objects for this same record — instead of two fresh
-    # .exists() queries against rows already in memory.
-    (
-        billing_change_url,
-        billing_change_blocked_reason,
-        billing_recreate_offer,
-    ) = _billing_change_route(
-        application,
-        agreement,
-        objects.member,
-        record,
-        objects.invoices,
-        objects.mismatched_record,
-    )
-
-    # Preview the schedule from whatever is selected now, so the reviewer sees
-    # the consequence before saving. Shared with the agreement page's step-5
-    # plan block - see _plan_preview.
-    plan, first_billing_month, schedule = _plan_preview(agreement, record)
 
     return render(
         request,
@@ -485,13 +465,6 @@ def billing_view(request, pk: int):
             "agreement": agreement,
             "record": record,
             "step_urls": _step_urls(application, objects),
-            # Which endpoint owns the plan right now - see _billing_change_route.
-            "billing_change_url": billing_change_url,
-            "billing_change_blocked_reason": billing_change_blocked_reason,
-            # Signed agreement, no matched record, member active: neither
-            # plan endpoint applies, but recreate_current_billing would
-            # succeed - offer it instead of just refusing.
-            "billing_recreate_offer": billing_recreate_offer,
             # The template must not compare against a domain enum literal.
             "record_confirmed": (
                 record is not None
@@ -500,13 +473,6 @@ def billing_view(request, pk: int):
             "invoices": objects.invoices,
             "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
             "next_season_record": objects.next_season_record,
-            "schedule": schedule,
-            # The read-only display once billing_change_blocked_reason is
-            # set (DEFECT 2) — record's own plan/month when a record
-            # exists, else the agreement's intent (same row the schedule
-            # preview above already reads).
-            "plan": plan,
-            "first_billing_month": first_billing_month,
             "steps": steps,
             "steps_done": done,
             "steps_total": total,

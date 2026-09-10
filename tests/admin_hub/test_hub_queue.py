@@ -38,7 +38,7 @@ def test_queue_shows_pipeline_progress_and_next_action(
 ):
     client.force_login(reviewer)
     body = client.get(reverse("admin_hub:queue")).content.decode()
-    assert "0/8" in body
+    assert "0/7" in body
     assert "Datu pārbaude" in body
 
 

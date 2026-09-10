@@ -31,100 +31,6 @@
       <section class="card">
         <div class="card__head">
           <span class="card__step">6</span>
-          <h2 class="anton">Maksas plāns</h2>
-        </div>
-{% comment %} Posts to whichever endpoint owns the plan at this point in the
-   pipeline: set_billing_setup before signing, billing_billingrecord_reassign
-   after, since the record then IS the billing. Both take the same two field
-   names. See _billing_change_route. {% endcomment %}
-        <form id="plan-form" method="post" action="{{ billing_change_url }}">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.path }}">
-          <div class="card__body stack">
-            {% if billing_change_blocked_reason %}
-              {% comment %} The confirmed-record case is a normal state once
-                 invoices are about to be issued, not an anomaly — neutral
-                 callout, informational icon. The other reasons (record
-                 missing, invoices pushed/sent) are genuine constraints and
-                 keep the warning treatment. {% endcomment %}
-              <div class="callout {% if not record_confirmed %}callout--warn{% endif %}">
-                <span class="callout__icon">{% if record_confirmed %}&#8505;{% else %}&#9888;{% endif %}</span>
-                <span>{{ billing_change_blocked_reason }}</span>
-              </div>
-            {% endif %}
-            <div class="form-grid">
-              <div class="f f--full">
-                <label {% if not billing_change_blocked_reason %}for="billing_plan"{% endif %}>Plāns</label>
-                {% if billing_change_blocked_reason %}
-                  {% comment %} Read-only once the plan cannot actually be
-                     changed here — an editable-looking select with a
-                     disabled submit button invites an edit that cannot
-                     happen. {% endcomment %}
-                  <div><strong>{{ plan.name|default:"—" }}</strong>{% if plan %} — {{ plan.annual_amount }} {{ plan.currency }}, {{ plan.installment_count }} daļas{% endif %}</div>
-                {% else %}
-                  <select name="billing_plan" id="billing_plan">
-                    {% for option in active_plans %}
-                      <option value="{{ option.pk }}" {% if agreement.billing_plan_id == option.pk %}selected{% endif %}>
-                        {{ option.name }} — {{ option.annual_amount }} {{ option.currency }}, {{ option.installment_count }} daļas
-                      </option>
-                    {% endfor %}
-                  </select>
-                {% endif %}
-                <span class="f-hint">Summas tiek fiksētas ierakstā — vēlākas plāna izmaiņas neietekmē jau izveidotos rēķinus.</span>
-              </div>
-              <div class="f">
-                <label {% if not billing_change_blocked_reason %}for="first_billing_month"{% endif %}>Pirmais rēķina mēnesis</label>
-                {% if billing_change_blocked_reason %}
-                  <div><strong>{{ first_billing_month|default:"—" }}</strong></div>
-                {% else %}
-                  <input type="month" name="first_billing_month" id="first_billing_month"
-                         value="{{ agreement.first_billing_month }}">
-                {% endif %}
-                <span class="f-hint">Formāts GGGG-MM</span>
-              </div>
-            </div>
-
-            {% include "admin_hub/_schedule_preview.html" %}
-          </div>
-          <div class="card__foot">
-            {% if record %}
-              <span class="hint">Kopā <strong style="color:var(--fk-blue)">{{ record.final_amount }} €</strong> · bāze {{ record.base_amount }} € · atlaide {{ record.discount_amount }} €</span>
-            {% endif %}
-            <span class="card__spacer"></span>
-            <button type="submit" name="action" value="set_billing_setup"
-                    class="btn btn-primary"
-                    {% if billing_change_blocked_reason %}disabled{% endif %}>Saglabāt plānu →</button>
-          </div>
-        </form>
-
-        {% if billing_recreate_offer %}
-          {% comment %} Signed agreement, no matched record, member active:
-             neither plan endpoint above can work, so this is a distinct
-             form (nested forms are invalid HTML) offering the domain's own
-             remedy — recreate_current_billing. The checkbox is the operator
-             deliberately asserting a fact about Invoice Ninja, not a
-             formality to auto-tick. {% endcomment %}
-          <div class="card__body stack" style="padding-top:0">
-            <form method="post" action="{{ review_action_url }}">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.path }}">
-              <label class="row" style="gap:8px;font-weight:600">
-                <input type="checkbox" name="external_invoice_confirmed_absent"
-                       id="external_invoice_confirmed_absent" required>
-                Es apstiprinu, ka Invoice Ninja nav atbilstoša rēķina.
-              </label>
-              <div class="row" style="justify-content:flex-end">
-                <button type="submit" name="action" value="recreate_current_billing"
-                        class="btn btn-secondary">Atjaunot norēķinu ierakstu →</button>
-              </div>
-            </form>
-          </div>
-        {% endif %}
-      </section>
-
-      <section class="card">
-        <div class="card__head">
-          <span class="card__step">7</span>
           <h2 class="anton">Rēķini</h2>
           <span class="badge badge--sm badge--neutral" style="margin-left:auto">Invoice Ninja</span>
         </div>
@@ -190,7 +96,7 @@
 
       <section class="card {% if not record %}card--locked{% endif %}">
         <div class="card__head {% if not record %}card__head--locked{% endif %}">
-          <span class="card__step">8</span>
+          <span class="card__step">7</span>
           <h2 class="anton">Nākamā sezona</h2>
           {% if next_season_record %}
             <span class="badge badge--sm badge--submitted" style="margin-left:auto">Izveidots — {{ next_season_record.season }}</span>
@@ -205,7 +111,7 @@
                 <label for="next_year_plan">Nākamās sezonas plāns</label>
                 <select name="billing_plan" id="next_year_plan">
                   <option value="">— Izvēlieties plānu —</option>
-                  {% for plan in active_plans %}
+                  {% for plan in next_season_active_plans %}
                     <option value="{{ plan.pk }}">{{ plan.name }} — {{ plan.season }}</option>
                   {% endfor %}
                 </select>
@@ -222,7 +128,7 @@
             </p>
           </div>
           <div class="card__foot">
-            <span class="hint">Solis 8 no 8</span>
+            <span class="hint">Solis 7 no 7</span>
             <span class="card__spacer"></span>
             <button type="submit" name="action" value="create_next_season_billing"
                     class="btn btn-primary" {% if not record or next_season_record %}disabled{% endif %}>
@@ -263,11 +169,6 @@
       {% endif %}
       <span class="actionbar__spacer"></span>
       <a class="btn btn-secondary" href="{% url 'admin_hub:agreement' application.pk %}">← Līgums</a>
-      {% comment %} Submits the step-6 plan form via its id: the plan selects stay in
-         their card while the save stays on screen. {% endcomment %}
-      <button type="submit" form="plan-form" name="action" value="set_billing_setup"
-              class="btn btn-red"
-              {% if billing_change_blocked_reason %}disabled{% endif %}>Saglabāt plānu →</button>
     </div>
   </div>
 {% endblock %}
