@@ -462,14 +462,15 @@ P16-A (Signed-agreement upload + secure serving, LAN acceptance complete — sig
 
 ### Admin Hub delivered — staff-facing UI (2026-09-08)
 `apps/admin_hub` (`/hub/`) is complete: five staff-only pages over existing
-domain state, wired end-to-end (queue → cockpit → agreement → plan/invoices →
+domain state, wired end-to-end (queue → cockpit → agreement → invoices →
 club-wide outstanding invoices), every mutation still POSTing to the pre-existing
 Django admin action endpoints.
 - **Pieteikumu rinda** (`/hub/pieteikumi/`) — the review queue, tabbed by status.
 - **Izskatīšana** (`/hub/pieteikumi/<pk>/`) — the per-application review cockpit (field-by-field check-off against OCR/derived values).
-- **Līgums** (`/hub/pieteikumi/<pk>/ligums/`) — agreement lifecycle actions (generate, mark sent, sign, void) plus a derived history timeline.
-- **Maksas plāns un rēķini** (`/hub/pieteikumi/<pk>/maksajumi/`) — per-application billing plan setup, installment schedule preview, invoice push.
+- **Līgums** (`/hub/pieteikumi/<pk>/ligums/`) — agreement lifecycle actions (generate, mark sent, sign, void) plus a derived history timeline. Billing plan + first-billing-month selection and the installment schedule preview live in the step-5 signing card (`set_billing_setup` on the existing review-action endpoint); signing is gated on the saved plan/month.
+- **Maksas plāns un rēķini** (`/hub/pieteikumi/<pk>/maksajumi/`) — step 6 invoices and step 7 next-season billing only (plan setup moved to signing step 5); confirm/push forms unchanged.
 - **Neapmaksātie rēķini** (`/hub/rekini/`) — club-wide outstanding-invoice review across all members (tabs: unpaid, overdue, partially paid, sync errors, not-yet-issued, all). Each row's overdue flag (`is_overdue`) is computed once in `apps/admin_hub/invoices.invoice_totals` and read verbatim by the template, the `kaveti` tab filter, and `overdue_count` — never re-derived from the due date alone, so a fully paid invoice with an old due date is never shown as "kavēts".
+- Plan: `docs/superpowers/plans/2026-09-10-admin-hub-plan-before-signing.md`. Spec: `docs/superpowers/specs/2026-09-10-admin-hub-plan-before-signing-design.md`. The pipeline is now seven steps (verify, approve, agreement, handover, signed, invoices, next_season); the former "plan" step no longer exists.
 - Plan: `docs/superpowers/plans/2026-09-07-admin-hub-ui.md`. Spec: `docs/superpowers/specs/2026-09-07-admin-hub-ui-design.md`.
 - Follow-ups explicitly deferred, tracked here so they are not lost:
   - **Nightly-sweep batch caps.** `sync_billing_payments()` and `send_due_invoices()` (in `apps/billing`) iterate unbounded querysets with no batch-size cap; processing backlogs go undetected until billing review.
