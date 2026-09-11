@@ -29,13 +29,24 @@ class RenderedMemberExport:
     sensitive: bool
 
 
-def build_template_member_queryset(template: MemberExportTemplate) -> QuerySet:
+def build_template_member_queryset(
+    template: MemberExportTemplate,
+    *,
+    agreement_states: list[str] | None = None,
+    group_ids: list[int] | None = None,
+) -> QuerySet:
     """Build the filtered Member queryset for a template.
 
     Selects/prefetches the relations the readers need (guardian, parent
     account, training group, current agreements only). When a filter is set
     the corresponding EXISTS subquery narrows by ``is_current=True`` (no
     historical agreements). Empty filter sets leave the queryset unrestricted.
+
+    The keyword-only ``agreement_states`` / ``group_ids`` arguments are
+    temporary effective-filter overrides for the Hub runner (2026-09-11);
+    the sentinels resolve independently per predicate:
+    ``None`` keeps the template's stored value, an explicit (possibly empty)
+    list replaces it — an empty list removes that predicate entirely.
     """
     qs = Member.objects.all()
     qs = qs.select_related(
@@ -51,7 +62,10 @@ def build_template_member_queryset(template: MemberExportTemplate) -> QuerySet:
     )
     qs = qs.prefetch_related(agreement_prefetch)
 
-    states = list(template.agreement_status_filters or [])
+    if agreement_states is None:
+        states = list(template.agreement_status_filters or [])
+    else:
+        states = list(agreement_states)
     if states:
         # OR semantics: ANY state matches. Membership is restricted to the
         # current agreement's state. Member must appear once even if multiple
@@ -62,15 +76,24 @@ def build_template_member_queryset(template: MemberExportTemplate) -> QuerySet:
             agreements__state__in=states,
         )
 
-    group_ids = list(template.training_groups.values_list("pk", flat=True))
-    if group_ids:
-        qs = qs.filter(training_group_id__in=group_ids)
+    if group_ids is None:
+        effective_group_ids = list(
+            template.training_groups.values_list("pk", flat=True)
+        )
+    else:
+        effective_group_ids = list(group_ids)
+    if effective_group_ids:
+        qs = qs.filter(training_group_id__in=effective_group_ids)
 
     return qs.distinct()
 
 
 def render_member_export(
-    template: MemberExportTemplate, fmt: str
+    template: MemberExportTemplate,
+    fmt: str,
+    *,
+    agreement_states: list[str] | None = None,
+    group_ids: list[int] | None = None,
 ) -> RenderedMemberExport:
     """Render the export in ``csv`` or ``xlsx`` form.
 
@@ -78,6 +101,9 @@ def render_member_export(
     column keys are read in stored order; ``Member`` rows are read via the
     pure readers in ``apps.members.exports.COLUMN_REGISTRY`` and passed raw
     to the core writers (which apply the format guard exactly once per cell).
+
+    ``agreement_states`` / ``group_ids`` follow the same sentinel semantics
+    as :func:`build_template_member_queryset` and are forwarded unchanged.
     """
     if fmt not in {"csv", "xlsx"}:
         raise ValueError("invalid format")
@@ -86,7 +112,9 @@ def render_member_export(
     for key in column_keys:
         if key not in COLUMN_REGISTRY:
             raise ValueError("invalid column key")
-    qs = build_template_member_queryset(template)
+    qs = build_template_member_queryset(
+        template, agreement_states=agreement_states, group_ids=group_ids
+    )
 
     rows: list[list[Any]] = []
     for member in qs:

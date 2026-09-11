@@ -542,3 +542,191 @@ def invoices_view(request):
             "payment_badge_classes": invoice_queries.PAYMENT_BADGE_CLASSES,
         },
     )
+
+
+@staff_member_required
+def exports_view(request):
+    """Run-only member export runner (``/hub/eksporti/``, 2026-09-11).
+
+    One staff-only endpoint over the shared P17 machinery: GET renders the
+    template chooser and a selected template's stored filters; POST parses
+    ``HubMemberExportRunForm`` and dispatches preview (never audited) versus
+    download (exactly one ``MEMBER_EXPORT_RUN`` event with structural-only
+    effective-filter metadata). Everything below the form boundary — the
+    query, the columns, the writers — is P17 canonical: the Hub passes its
+    temporary effective filters as explicit keyword overrides and renders
+    preview cells through the same pure readers the download uses, so the
+    two can never disagree. The Hub creates, edits, defaults, or persists
+    nothing here — no template mutation, no stored output, no jobs.
+    """
+    from django.conf import settings as django_settings
+    from django.core.exceptions import ValidationError
+    from django.http import Http404
+    from django.shortcuts import get_object_or_404
+    from django.urls import reverse
+
+    from apps.admin_hub.forms import HubMemberExportRunForm
+    from apps.agreements.models import Agreement
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+    from apps.members.export_templates import (
+        build_template_member_queryset,
+        render_member_export,
+    )
+    from apps.members.exports import COLUMN_REGISTRY, SENSITIVE_KEYS
+    from apps.members.models import MemberExportTemplate, TrainingGroup
+
+    def _annotate(template: MemberExportTemplate) -> MemberExportTemplate:
+        """Presentation metadata computed once per template in Python — the
+        template must not derive sensitivity or column labels itself."""
+        keys = list(template.column_keys or [])
+        template.column_count = len(keys)
+        template.has_sensitive = any(key in SENSITIVE_KEYS for key in keys)
+        template.column_labels = [
+            COLUMN_REGISTRY[key].label for key in keys if key in COLUMN_REGISTRY
+        ]
+        return template
+
+    def _resolve_selected(raw_pk: object) -> MemberExportTemplate | None:
+        """Best-effort template resolution for re-rendering (chooser page +
+        form errors keep the runner visible). Annotated when found — every
+        render path must carry the same presentation metadata, an invalid
+        POST included. Never 404s here — the strict contract (404 on unknown
+        id) runs only for a validated form."""
+        try:
+            pk = int(str(raw_pk))
+        except (TypeError, ValueError):
+            return None
+        selected: MemberExportTemplate | None = (
+            MemberExportTemplate.objects.filter(pk=pk).first()
+        )
+        return _annotate(selected) if selected is not None else None
+
+    templates = [_annotate(t) for t in MemberExportTemplate.objects.all()]
+    context: dict[str, object] = {
+        "hub_section": "exports",
+        "templates": templates,
+        "all_groups": list(TrainingGroup.objects.order_by("name", "pk")),
+        "agreement_state_options": Agreement.State.choices,
+        "repair_url": reverse(
+            "admin:members_memberexporttemplate_changelist"
+        ),
+        "selected_template": None,
+        "selected_agreement_states": [],
+        "selected_group_ids": [],
+        "fmt": "xlsx",
+        "form": None,
+        "template_error": "",
+        "preview": None,
+    }
+
+    def _render_page() -> object:
+        return render(request, "admin_hub/exports.html", context)
+
+    if request.method == "POST":
+        form = HubMemberExportRunForm(request.POST)
+        context["form"] = form
+        context["selected_template"] = _resolve_selected(
+            form.data.get("template_id")
+        )
+        # Carry the submitted selections back into the controls so an
+        # invalid POST never silently resets staff work.
+        context["selected_agreement_states"] = list(
+            form.data.getlist("agreement_states")
+        )
+        context["selected_group_ids"] = [
+            int(v) for v in form.data.getlist("group_ids") if str(v).isdigit()
+        ]
+        raw_fmt = form.data.get("fmt") or ""
+        context["fmt"] = raw_fmt if raw_fmt in {"xlsx", "csv"} else "xlsx"
+        if not form.is_valid():
+            # Errors only: no P17 query, no output, no audit.
+            return _render_page()
+
+        selected = _annotate(
+            get_object_or_404(
+                MemberExportTemplate, pk=form.cleaned_data["template_id"]
+            )
+        )
+        context["selected_template"] = selected
+        states: list[str] = list(form.cleaned_data["agreement_states"])
+        group_ids: list[int] = form.effective_group_ids
+        fmt: str = form.cleaned_data["fmt"]
+        context["selected_agreement_states"] = states
+        context["selected_group_ids"] = group_ids
+        context["fmt"] = fmt
+
+        try:
+            selected.full_clean()
+        except ValidationError:
+            # Persisted-invalid template (validation bypass elsewhere): the
+            # Hub refuses to run it and repairs only via Django admin.
+            context["template_error"] = (
+                "Šablons ir nederīgs — labojiet kolonnas un statusus "
+                "pilnajā administrācijā."
+            )
+            return _render_page()
+
+        if form.cleaned_data["action"] == "preview":
+            qs = build_template_member_queryset(
+                selected, agreement_states=states, group_ids=group_ids
+            )
+            limit = int(django_settings.EXPORT_PREVIEW_ROW_LIMIT)
+            keys = list(selected.column_keys or [])
+            # Exact total count, capped rows — same queryset, same effective
+            # filters the download would use. Readers ride the P17
+            # select_related/prefetch; the loop below must stay query-free.
+            context["preview"] = {
+                "count": qs.count(),
+                "limit": limit,
+                "headers": [COLUMN_REGISTRY[k].label for k in keys],
+                "rows": [
+                    [COLUMN_REGISTRY[k].reader(member) for k in keys]
+                    for member in qs[:limit]
+                ],
+            }
+            return _render_page()
+
+        rendered = render_member_export(
+            selected, fmt, agreement_states=states, group_ids=group_ids
+        )
+        record_audit_event(
+            action=str(AuditEvent.Action.MEMBER_EXPORT_RUN),
+            actor=request.user,
+            request=request,
+            target_type="member_export_template",
+            target_id=str(selected.pk),
+            target_repr="Member export template",
+            metadata={
+                "template_id": selected.pk,
+                "column_keys": list(selected.column_keys or []),
+                "agreement_status_filters": states,
+                # Deterministic ascending pks: the form carries (name, pk)
+                # display order, which a rename could silently reshuffle.
+                "training_group_ids": sorted(group_ids),
+                "row_count": rendered.row_count,
+                "format": fmt,
+                "sensitive": rendered.sensitive,
+            },
+        )
+        return rendered.response
+
+    raw = request.GET.get("template")
+    if raw is not None:
+        selected = _resolve_selected(raw)
+        if raw.isdigit() and selected is not None:
+            # Annotated inside _resolve_selected — the only strict-id path.
+            context["selected_template"] = selected
+            context["selected_agreement_states"] = [
+                s
+                for s in (selected.agreement_status_filters or [])
+                if isinstance(s, str)
+            ]
+            context["selected_group_ids"] = list(
+                selected.training_groups.values_list("pk", flat=True)
+            )
+        else:
+            # Non-integer or unknown pk — same 404 contract as the admin run
+            # page for a missing template.
+            raise Http404("Šablons nav atrasts.")
+    return _render_page()

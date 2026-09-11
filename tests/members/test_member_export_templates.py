@@ -8,6 +8,7 @@ Every test describes the desired API of code that does not exist yet
 import csv
 import datetime
 import io
+from types import SimpleNamespace
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -746,3 +747,118 @@ def test_member_export_run_form_xlsx_initial():
 
     form = MemberExportRunForm()
     assert form.initial["fmt"] == "xlsx"
+
+
+# ---------------------------------------------------------------------------
+# Hub runner (2026-09-11) — keyword-only effective-filter overrides on the
+# P17 service boundary: None keeps the stored template filters, an explicit
+# empty list removes that predicate, a non-empty list replaces it. Semantics
+# are independent per predicate. Existing no-keyword behaviour is regression
+# pinned below.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def override_dataset(db, guardian, training_group_a, training_group_b):
+    """Template storing [signed] + group A, plus members covering every
+    predicate combination so each override case is observable."""
+    from apps.members.models import MemberExportTemplate
+
+    template = MemberExportTemplate.objects.create(
+        name="Override template",
+        column_keys=["member_full_name"],
+        agreement_status_filters=["signed"],
+    )
+    template.training_groups.add(training_group_a)
+    return SimpleNamespace(
+        template=template,
+        group_a=training_group_a,
+        group_b=training_group_b,
+        state_only=_member_with_agreement(
+            guardian, group=None, state="signed", full_name="Override StateOnly"
+        ),
+        group_only=_member_with_agreement(
+            guardian, group=training_group_a, state="generated", full_name="Override GroupOnly"
+        ),
+        both_match=_member_with_agreement(
+            guardian, group=training_group_a, state="signed", full_name="Override Both"
+        ),
+        neither=_member_with_agreement(
+            guardian, group=None, state="generated", full_name="Override Neither"
+        ),
+        replacement=_member_with_agreement(
+            guardian, group=training_group_b, state="sent", full_name="Override Replacement"
+        ),
+    )
+
+
+def test_queryset_none_uses_stored_template_filters(override_dataset):
+    from apps.members.export_templates import build_template_member_queryset
+
+    qs = build_template_member_queryset(override_dataset.template)
+    assert list(qs) == [override_dataset.both_match]
+
+
+def test_queryset_explicit_empty_filters_remove_predicates(override_dataset):
+    from apps.members.export_templates import build_template_member_queryset
+
+    d = override_dataset
+    qs = build_template_member_queryset(d.template, agreement_states=[], group_ids=[])
+    assert set(qs) == {
+        d.state_only,
+        d.group_only,
+        d.both_match,
+        d.neither,
+        d.replacement,
+    }
+
+
+def test_queryset_effective_filters_replace_template_filters(override_dataset):
+    from apps.agreements.models import Agreement
+    from apps.members.export_templates import build_template_member_queryset
+
+    d = override_dataset
+    qs = build_template_member_queryset(
+        d.template,
+        agreement_states=[Agreement.State.SENT],
+        group_ids=[d.group_b.pk],
+    )
+    assert list(qs) == [d.replacement]
+
+
+def test_queryset_sentinels_are_independent_per_predicate(override_dataset):
+    """Clearing only the states predicate must not clear the stored group
+    predicate (and vice versa): the sentinels resolve per argument."""
+    from apps.members.export_templates import build_template_member_queryset
+
+    d = override_dataset
+    assert set(
+        build_template_member_queryset(d.template, agreement_states=[], group_ids=None)
+    ) == {d.group_only, d.both_match}
+    assert set(
+        build_template_member_queryset(d.template, agreement_states=None, group_ids=[])
+    ) == {d.state_only, d.both_match}
+
+
+def test_render_effective_filters_uses_same_rows_as_queryset(override_dataset):
+    from apps.members.export_templates import (
+        build_template_member_queryset,
+        render_member_export,
+    )
+
+    d = override_dataset
+    rendered = render_member_export(
+        d.template, "csv", agreement_states=[], group_ids=[]
+    )
+    assert rendered.row_count == build_template_member_queryset(
+        d.template, agreement_states=[], group_ids=[]
+    ).count()
+    assert rendered.row_count == 5
+
+
+def test_render_without_keywords_remains_stored_filter_driven(override_dataset):
+    """P17 admin callers pass no new keywords — behaviour must not change."""
+    from apps.members.export_templates import render_member_export
+
+    rendered = render_member_export(override_dataset.template, "csv")
+    assert rendered.row_count == 1

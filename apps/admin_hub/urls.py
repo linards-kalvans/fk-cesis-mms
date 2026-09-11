@@ -11,4 +11,5 @@ urlpatterns = [
     path("pieteikumi/<int:pk>/ligums/", views.agreement_view, name="agreement"),
     path("pieteikumi/<int:pk>/maksajumi/", views.billing_view, name="billing"),
     path("rekini/", views.invoices_view, name="invoices"),
+    path("eksporti/", views.exports_view, name="exports"),
 ]

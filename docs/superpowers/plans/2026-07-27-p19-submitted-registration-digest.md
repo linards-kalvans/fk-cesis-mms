@@ -41,7 +41,7 @@ uv run python manage.py migrate  # apply migration cleanly
 uv run python manage.py shell -c "
 from django.template.loader import render_to_string
 r = render_to_string('emails/registrations/submission_digest.txt', {
-    'entries': [{'child': 'Jānis', 'guardian': 'Māra', 'submitted_at': '2026-07-27 10:30', 'status': 'Iesniegts', 'admin_url': 'http://localhost/admin/registrations/registrationapplication/1/change/'}]
+    'entries': [{'child': 'Jānis', 'guardian': 'Māra', 'submitted_at': '2026-07-27 10:30', 'status': 'Iesniegts', 'admin_url': 'http://localhost/hub/pieteikumi/1/'}]
 })
 assert 'Jānis' in r
 assert 'Māra' in r

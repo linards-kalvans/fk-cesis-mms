@@ -24,6 +24,7 @@ def _hub_urls(application):
     return [
         reverse("admin_hub:queue"),
         reverse("admin_hub:invoices"),
+        reverse("admin_hub:exports"),
         reverse("admin_hub:cockpit", args=[application.pk]),
         reverse("admin_hub:agreement", args=[application.pk]),
         reverse("admin_hub:billing", args=[application.pk]),

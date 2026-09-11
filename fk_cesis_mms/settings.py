@@ -227,6 +227,26 @@ AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "730"))
 # Local-time hour for the nightly audit prune (offset from billing 3/4).
 AUDIT_PRUNE_HOUR = int(os.environ.get("AUDIT_PRUNE_HOUR", "2"))
 
+
+def _parse_export_preview_row_limit(value: str | None) -> int:
+    """Parse EXPORT_PREVIEW_ROW_LIMIT with exact fallback to 20.
+
+    Returns 20 for any value that is not a positive integer (missing,
+    empty, whitespace-only, non-numeric, zero, negative). Never raises —
+    application startup must not break on a malformed env value.
+    """
+    try:
+        parsed = int(value.strip())  # type: ignore[union-attr]
+    except (AttributeError, TypeError, ValueError):
+        return 20
+    return parsed if parsed > 0 else 20
+
+
+# Admin Hub member-export preview row cap (2026-09-11 runner).
+EXPORT_PREVIEW_ROW_LIMIT = _parse_export_preview_row_limit(
+    os.environ.get("EXPORT_PREVIEW_ROW_LIMIT", "20")
+)
+
 # Analytics (P10). Disabled by default; enable browser/server channels separately.
 ANALYTICS_PROVIDER = os.environ.get("ANALYTICS_PROVIDER") or "stub"
 ANALYTICS_BROWSER_ENABLED = os.environ.get("ANALYTICS_BROWSER_ENABLED", "false").lower() in {"1", "true", "yes"}
