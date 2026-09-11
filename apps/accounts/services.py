@@ -321,6 +321,31 @@ def verify_one_time_code(email: str, code: str) -> ParentAccount:
     return cast(ParentAccount, account)
 
 
+def is_one_time_code_valid(email: str, code: str) -> bool:
+    """Read-only check: is *code* an active one-time code for *email*?
+
+    Mirrors ``verify_one_time_code`` lookup semantics (case-insensitive
+    email, matching code hash, unused, unexpired) but performs NO writes:
+    it never marks the code used, never creates an account, and never
+    mutates the session.  Consumption stays owned by the verification
+    form POST.
+    """
+    record = (
+        EmailVerificationCode.objects.filter(
+            email__iexact=email,
+            code_hash=_hash_token(code),
+            used_at__isnull=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    if record is None:
+        return False
+
+    return not record.is_expired
+
+
 @transaction.atomic
 def change_parent_email(account: ParentAccount, new_email: str) -> ParentAccount:
     """Change a parent's verified email (admin-initiated).

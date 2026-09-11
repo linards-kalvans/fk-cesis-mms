@@ -4,7 +4,7 @@ mutations POST to the existing Django admin action endpoints."""
 from __future__ import annotations
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
 from apps.admin_hub import queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
@@ -246,6 +246,14 @@ def _step_is_actionable(steps, key: str) -> bool:
     return any(
         step.key == key and step.state in (CURRENT, AVAILABLE) for step in steps
     )
+
+
+def hub_index_view(request):
+    """/hub/ entry point: permanent redirect to the queue.
+
+    No auth gate here on purpose — the queue view owns its staff-only
+    authorization — and query parameters are deliberately dropped."""
+    return redirect("admin_hub:queue", permanent=True)
 
 
 @staff_member_required

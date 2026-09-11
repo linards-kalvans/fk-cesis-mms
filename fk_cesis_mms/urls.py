@@ -16,4 +16,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("apps.accounts.urls")),
     path("register/verify/", accounts_views.verify_one_time_code_view, name="register-verify"),
+    path(
+        "register/verify/check/",
+        accounts_views.verify_one_time_code_check_view,
+        name="register-verify-check",
+    ),
 ]

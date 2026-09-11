@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 
 import pytest
-from django.urls import reverse
+from django.urls import resolve, reverse
 
 pytestmark = [pytest.mark.django_db, pytest.mark.admin_view]
 
@@ -209,3 +209,30 @@ def test_queue_procesa_keeps_a_member_with_signed_agreement_history(
 
     assert name in procesa_body, "current agreement is unsigned; must stay in Procesa"
     assert name not in parakstiti_body
+
+
+# --- Hub index (/hub/) --------------------------------------------------------
+# Contract: /hub/ is a permanent 301 redirect to the named queue route. It
+# carries no authorization behavior of its own — the queue view owns its
+# staff-only gate — and it deliberately drops incoming query parameters.
+
+
+def test_hub_index_resolves_to_named_route():
+    assert reverse("admin_hub:index") == "/hub/"
+    assert resolve("/hub/").url_name == "index"
+
+
+def test_hub_index_permanently_redirects_anonymous_client_to_queue(client):
+    # follow=False is explicit: the index itself must hand back the 301, and
+    # the Location must be the queue URL verbatim — NOT a login redirect,
+    # which would mean the index grew its own auth gate.
+    response = client.get(reverse("admin_hub:index"), follow=False)
+    assert response.status_code == 301
+    assert response["Location"] == reverse("admin_hub:queue")
+
+
+def test_hub_index_drops_query_parameters(client):
+    response = client.get("/hub/", {"tab": "procesa"}, follow=False)
+    assert response.status_code == 301
+    assert response["Location"] == reverse("admin_hub:queue")
+    assert "?" not in response["Location"]

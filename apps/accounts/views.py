@@ -6,12 +6,13 @@ from django.urls import reverse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST, require_http_methods
 from django.conf import settings
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 
 from apps.accounts.forms import MagicLinkRequestForm
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import (
     consume_magic_link,
+    is_one_time_code_valid,
     issue_magic_link,
     issue_magic_link_for_email,
     send_magic_link,
@@ -137,4 +138,25 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
         request,
         "registrations/verify_code.html",
         {"pending_email": pending},
+    )
+
+
+@require_POST
+def verify_one_time_code_check_view(request: HttpRequest) -> HttpResponse:
+    """POST /register/verify/check/ — read-only JSON preflight of a one-time code.
+
+    Answers ``{"valid": true}`` when the session's pending email has an
+    active, matching, unused code; the identical generic failure payload
+    otherwise.  Never consumes the code, never mutates the session, and
+    exposes no account or OTP lifecycle detail — the regular verification
+    form POST remains the only consumer.
+    """
+    pending = request.session.get("pending_verification_email")
+    code = request.POST.get("code", "").strip()
+
+    if pending and code and is_one_time_code_valid(pending, code):
+        return JsonResponse({"valid": True})
+
+    return JsonResponse(
+        {"valid": False, "error": "Nederīgs vai noilgušs kods."}
     )
