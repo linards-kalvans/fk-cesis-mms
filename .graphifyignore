@@ -1,0 +1,81 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTest
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+*.log
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+*.sqlite3.bak
+/media
+/staticfiles
+uploads/
+private-uploads/
+.worktrees/
+.superpowers/
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local-only tiny-IDP validation inputs and evidence (real PII, never commit)
+/tmp/
+
+# Playwright MCP debug snapshots
+.playwright-mcp/
+
+
+node_modules/
+
+# Graphify — don't watch own output (avoids inotify self-trigger loop)
+graphify-out/

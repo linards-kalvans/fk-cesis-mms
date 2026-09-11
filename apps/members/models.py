@@ -1,8 +1,12 @@
-"""Member-domain models: Guardian, TrainingGroup, Member, KitSizeOption."""
+"""Member-domain models: Guardian, TrainingGroup, Member, KitSizeOption,
+MemberExportTemplate (P17)."""
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
+
+from apps.core.models import TimeStampedModel
 
 
 _KIT_SIZE_ORDER = {
@@ -149,3 +153,48 @@ class Member(models.Model):
 
     def __str__(self):
         return self.full_name or str(self.pk)
+
+
+class MemberExportTemplate(TimeStampedModel):
+    """A saved, configurable member-export configuration.
+
+    Staff selects a list of column keys (from
+    :data:`apps.members.exports.COLUMN_REGISTRY`), optionally narrows by
+    agreement state(s) and/or training group(s), then runs the export — which
+    streams a CSV/XLSX attachment straight from the admin run page. Templates
+    are configuration only: the export itself never persists to disk.
+    """
+
+    name = models.CharField(max_length=128)
+    column_keys = models.JSONField()
+    agreement_status_filters = models.JSONField(default=list, blank=True)
+    training_groups = models.ManyToManyField(
+        TrainingGroup,
+        blank=True,
+        related_name="export_templates",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="member_export_templates_created",
+    )
+
+    class Meta:
+        ordering = ("name", "pk")
+
+    def __str__(self) -> str:
+        name = self.name
+        return str(name)
+
+    def clean(self):
+        super().clean()
+        # Local import keeps models.py ↔ exports.py acyclic.
+        from apps.members.exports import (
+            validate_agreement_status_filters,
+            validate_column_keys,
+        )
+
+        validate_column_keys(self.column_keys)
+        validate_agreement_status_filters(self.agreement_status_filters)

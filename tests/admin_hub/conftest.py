@@ -1,11 +1,39 @@
 """Shared fixtures for P11 family admin hub tests.
 
-Re-exports fixtures from tests/registrations/conftest.py that are not
-automatically visible outside that directory.
+This is a hand-maintained duplicate of the fixtures in
+tests/registrations/conftest.py, not a re-export — pytest does not make one
+directory's conftest fixtures visible to another, so the ones this directory
+needs are copied here instead.
+
+The two copies deliberately disagree on one point: ``submit_payload``'s
+``member_birth_date`` is a real ``datetime.date`` here but an ISO string
+(``"2025-01-01"``) in tests/registrations/conftest.py. That is intentional,
+not drift — this directory's tests read the application's in-memory
+``member_birth_date`` after calling ``create_or_update_draft`` directly (which
+assigns the payload value straight to the model field with no form-cleaning
+step), so it must already be a ``date``.
+
+Do not "helpfully" re-sync the two copies. Re-syncing this directory's copy to
+a string breaks it loudly (a ``str`` where a ``date`` is expected). Syncing
+the other direction (a real ``date`` into tests/registrations/conftest.py) is
+NOT safe because "those tests POST through a form that cleans it" — that is
+false for the fixture itself: tests/registrations/conftest.py's own
+``submitted_application`` fixture calls
+``create_or_update_draft(data=submit_payload, ...)`` directly, the identical
+no-form-cleaning path this directory uses. The real reason re-syncing that
+direction happens not to break anything today is narrower: nothing in
+tests/registrations asserts ``member_birth_date``'s type or value at all.
+Exactly one test file there consumes the ``submit_payload`` fixture by name
+(``test_parent_edit_permissions.py``, via real ``client.post()`` calls), and
+both of its uses override ``member_birth_date`` to a literal string before
+sending it — so even that one consumer never reads the fixture's own value.
+That makes tests/registrations indifferent to the type, not protected from it
+by form-cleaning.
 """
 
 from __future__ import annotations
 
+import datetime
 from decimal import Decimal
 
 import pytest
@@ -67,7 +95,11 @@ def submit_payload(kit_sizes, parent_account):
         "guardian_declared_address": "Riga, Brivibas 1",
         "member_full_name": "Hub Test Child",
         "member_personal_id": "010125-67890",
-        "member_birth_date": "2025-01-01",
+        # A real date, not an ISO string: create_or_update_draft assigns this
+        # straight to the model's DateField with no form-cleaning step (that
+        # only happens when the real view calls it with form.cleaned_data),
+        # so a str here would leave `member_birth_date` a str in-memory too.
+        "member_birth_date": datetime.date(2025, 1, 1),
         "member_same_address_as_guardian": True,
         "member_kit_size_shirt": shirt_pk,
         "preferred_agreement_signing": "paper",
@@ -79,7 +111,10 @@ def draft_application(parent_account):
     from apps.registrations.services import create_or_update_draft
 
     return create_or_update_draft(
-        data={"guardian_email": parent_account.email},
+        data={
+            "guardian_email": parent_account.email,
+            "member_full_name": "Melnraksta Bērns",
+        },
         files={},
         verified_account=parent_account,
     )
@@ -144,6 +179,22 @@ def reviewer(db):
     from django.contrib.auth.models import User
 
     return User.objects.create_user(username="hub_reviewer", is_staff=True)
+
+
+@pytest.fixture
+def acting_reviewer(db):
+    """A reviewer who can actually POST the review actions.
+
+    The plain ``reviewer`` above is ``is_staff`` only, which is all the Hub's
+    own views require — but every endpoint they drive additionally requires
+    ``has_change_permission``, so that account sees the whole pipeline and
+    gets 403 on every action. Tests that exercise a real transition need this
+    one; tests that only assert rendering do not."""
+    from django.contrib.auth.models import User
+
+    return User.objects.create_superuser(
+        username="hub_acting_reviewer", email="", password="x"
+    )
 
 
 @pytest.fixture

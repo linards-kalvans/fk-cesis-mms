@@ -70,6 +70,54 @@ def test_admin_registered():
     assert admin.site.is_registered(MembershipPlan)
 
 
+def test_billing_record_delete_permission_denied(active_plan, guardian, staff_client):
+    """BillingRecord direct deletion is denied in the Django admin: the
+    delete URL 403s and the ModelAdmin denies delete permission for any
+    request user (superuser included)."""
+    from django.contrib.admin.sites import AdminSite
+    from django.contrib.auth.models import User
+    from django.test import RequestFactory
+    from django.urls import reverse
+
+    from apps.billing.admin import BillingRecordAdmin
+    from apps.billing.models import BillingRecord
+    from apps.members.models import Member
+
+    member = Member.objects.create(full_name="Delete Test", guardian=guardian)
+    rec = BillingRecord.objects.create(
+        member=member,
+        plan=active_plan,
+        season=active_plan.season,
+        base_amount=active_plan.annual_amount,
+        final_amount=active_plan.annual_amount,
+        status=BillingRecord.Status.CONFIRMED,
+    )
+
+    # A real ModelAdmin request: has_delete_permission is False for any
+    # authenticated staff user (superuser included).
+    admin_obj = BillingRecordAdmin(BillingRecord, AdminSite())
+    factory = RequestFactory()
+    staff_user = User.objects.get(username="staff")
+    request = factory.get("/")
+    request.user = staff_user
+    assert admin_obj.has_delete_permission(request, rec) is False
+    assert admin_obj.has_delete_permission(request, None) is False
+    superuser = User.objects.create_superuser(
+        username="super_delete_test", email="s@example.test", password="x"
+    )
+    request_super = factory.get("/")
+    request_super.user = superuser
+    assert admin_obj.has_delete_permission(request_super, rec) is False
+
+    # The admin delete URL is not reachable (PermissionDenied → 403).
+    url = reverse("admin:billing_billingrecord_delete", args=[rec.pk])
+    resp = staff_client.get(url, raise_request_exception=False)
+    assert resp.status_code == 403
+
+    # The record still exists (nothing was deleted).
+    assert BillingRecord.objects.filter(pk=rec.pk).exists()
+
+
 def test_membership_plan_admin_shows_schedule_fields(active_plan, staff_client):
     from django.urls import reverse
 

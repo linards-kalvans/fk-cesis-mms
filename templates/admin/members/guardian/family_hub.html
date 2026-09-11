@@ -189,6 +189,25 @@
     <p>Līgums vēl nav sagatavots.</p>
   {% endif %}
 
+  {# Parakstītie dokumenti (P16-A) — separate from the DocuSeal list above. #}
+  {% if child.signed_artifact_links %}
+  <h3>Parakstītie dokumenti</h3>
+  {% for link in child.signed_artifact_links %}
+    <div class="module">
+      <p>
+        <strong>{{ link.state_label }}</strong>
+        — <em>{{ link.signing_path_label }}</em>
+      </p>
+      <p>Status nav pieejams</p>
+      <p>
+        <a class="button" href="{{ link.download_url }}?disposition=attachment">
+          Lejupielādēt parakstīto līgumu
+        </a>
+      </p>
+    </div>
+  {% endfor %}
+  {% endif %}
+
   {# Dalība #}
   <h3>Dalība</h3>
   <p>{% include "admin/members/guardian/_lane_status.html" with status=child.membership_status %}</p>

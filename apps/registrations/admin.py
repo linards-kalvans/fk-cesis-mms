@@ -15,6 +15,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.agreements.document_proxy import build_agreement_document_response
 from apps.agreements.models import Agreement
+from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.integrations import agreement_platform
 from apps.agreements.services import (
     discontinue_agreement,
@@ -27,10 +28,16 @@ from apps.agreements.services import (
     set_signing_path,
     start_material_amendment,
     sync_application_signing_path_to_agreement,
+    upload_signed_artifact,
     void_agreement,
 )
 from apps.billing.models import MembershipPlan
-from apps.billing.services import DiscontinuationInvoiceError, PaidInvoiceSelected
+from apps.billing.services import (
+    DiscontinuationInvoiceError,
+    PaidInvoiceSelected,
+    recreate_missing_billing_record,
+    renew_member_billing,
+)
 from apps.core.admin_links import admin_link
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
@@ -40,6 +47,7 @@ from apps.integrations.tasks import (
     enqueue_sync_agreement_submission,
 )
 from apps.members.models import TrainingGroup
+from apps.members.models import Member
 from apps.members.services import assign_training_group
 from apps.registrations.exports import application_columns, application_row
 from apps.registrations.models import (
@@ -47,6 +55,7 @@ from apps.registrations.models import (
     RegistrationSubmissionDigestSettings,
 )
 from apps.registrations.services import (
+    update_reviewed_fields,
     approve_application,
     reject_application,
     request_application_fix,
@@ -116,6 +125,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 name="registrations_registrationapplication_review-action",
             ),
             path(
+                "<int:object_id>/edit-fields/",
+                self.admin_site.admin_view(self.edit_fields_view),
+                name="registrations_registrationapplication_edit-fields",
+            ),
+            path(
                 "<int:object_id>/approve/",
                 self.admin_site.admin_view(self.approve_view),
                 name="registrations_registrationapplication_approve",
@@ -124,6 +138,16 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "<int:object_id>/agreement/<int:agreement_id>/docuseal-document/",
                 self.admin_site.admin_view(self.docuseal_document_view),
                 name="registrations_registrationapplication_docuseal_document",
+            ),
+            path(
+                "<int:object_id>/agreement/<int:agreement_id>/signed-artifact/upload/",
+                self.admin_site.admin_view(self.signed_artifact_upload_view),
+                name="registrations_registrationapplication_signed_artifact_upload",
+            ),
+            path(
+                "<int:object_id>/agreement/<int:agreement_id>/signed-artifact/",
+                self.admin_site.admin_view(self.signed_artifact_view),
+                name="registrations_registrationapplication_signed_artifact",
             ),
         ]
         return custom + super().get_urls()
@@ -136,13 +160,20 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     def _changelist_redirect(self):
         return redirect("admin:registrations_registrationapplication_changelist")
 
-    def _after_review_redirect(self, request, object_id):
-        """Honor a validated `next` (set by the changelist quick-action buttons so
-        a list-triggered action returns to the list), else the change page."""
-        nxt = request.GET.get("next") or request.POST.get("next", "")
+    def _validated_next(self, request) -> str:
+        """Return a `next` that is safe to redirect to, else ""."""
+        nxt: str = request.GET.get("next") or request.POST.get("next", "")
         if nxt and url_has_allowed_host_and_scheme(
             nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()
         ):
+            return nxt
+        return ""
+
+    def _after_review_redirect(self, request, object_id):
+        """Honor a validated `next` (set by the changelist quick-action buttons so
+        a list-triggered action returns to the list), else the change page."""
+        nxt = self._validated_next(request)
+        if nxt:
             return redirect(nxt)
         return self._change_redirect(object_id)
 
@@ -162,7 +193,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         * ``AgreementPlatformError`` — provider failure surfaced as a
           fixed Latvian copy (never the raw provider exception text).
 
-        Both paths redirect to the application's change page (the staff
+        Both error paths honour a validated `next` and otherwise redirect
+        to the application's change page (the staff
         surface where the agreement actions already live).
         """
         if not self.has_change_permission(request):
@@ -185,7 +217,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "DocuSeal sūtījums vēl nav izveidots.",
                 level=messages.ERROR,
             )
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         try:
             return build_agreement_document_response(
                 agreement, disposition=disposition
@@ -198,7 +230,68 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 "Radās kļūda saziņā ar DocuSeal.",
                 level=messages.ERROR,
             )
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
+
+    def signed_artifact_upload_view(self, request, object_id, agreement_id):
+        """Sole upload surface for a signed PDF/.edoc artifact (P16-A).
+
+        Authorization chain: ``has_change_permission`` on the application,
+        then the agreement must belong to the application's approved member
+        (foreign -> deterministic 404). POST-only; non-POST redirects to the
+        change page. Service ``ValueError`` maps to a Latvian admin message;
+        success shows a Latvian confirmation. Every return honours a
+        validated ``next`` (Task 6's Hub agreement page posts here and
+        expects to land back on itself), falling back to the change page
+        exactly as before when no ``next`` is supplied — same contract as
+        ``_after_review_redirect``.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        if request.method != "POST":
+            return self._after_review_redirect(request, object_id)
+        agreement = get_object_or_404(
+            Agreement,
+            pk=agreement_id,
+            member_id=application.approved_member_id,
+        )
+        file_upload = request.FILES.get("signed_artifact")
+        if file_upload is None:
+            self.message_user(
+                request,
+                "Lūdzu izvēlieties parakstītā līguma failu.",
+                level=messages.ERROR,
+            )
+            return self._after_review_redirect(request, object_id)
+        try:
+            upload_signed_artifact(agreement, file_upload, request.user)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._after_review_redirect(request, object_id)
+        self.message_user(request, "Parakstītais līgums augšupielādēts.")
+        return self._after_review_redirect(request, object_id)
+
+    def signed_artifact_view(self, request, object_id, agreement_id):
+        """Stream a source-member signed artifact through the shared proxy.
+
+        Same ownership chain as the upload view. Default disposition is
+        ``attachment``; ``inline`` is allowed for staff PDF previews; any
+        other value (or blank/missing artifact) is a 404.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        agreement = get_object_or_404(
+            Agreement,
+            pk=agreement_id,
+            member_id=application.approved_member_id,
+        )
+        disposition = request.GET.get("disposition", "attachment")
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
+        return build_signed_artifact_response(
+            agreement, disposition=disposition
+        )
 
     def review_action_view(self, request, object_id):
         """Port of admin_review_detail's POST dispatch (every action except approve)."""
@@ -225,8 +318,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Labojuma ziņojums ir obligāts.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "reject":
             message = request.POST.get("review_message", "").strip()
@@ -236,7 +329,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Noraidīšanas ziņojums ir obligāts.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            nxt = self._validated_next(request)
+            if nxt:
+                return redirect(nxt)
             return self._changelist_redirect()
 
         elif action == "assign_training_group":
@@ -355,32 +451,32 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             new_path = request.POST.get("signing_path", "").strip()
             if new_path not in {value for value, _label in Agreement.SigningPath.choices}:
                 self.message_user(
                     request, "Nezināms parakstīšanas veids.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             set_signing_path(agreement, new_path, request.user)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "void_agreement":
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             reason = request.POST.get("void_reason", "").strip()
             void_agreement(agreement, request.user, reason)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "regenerate_agreement":
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 regenerate_agreement(
                     application.approved_member,
@@ -394,8 +490,8 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 else:
                     latvian = msg
                 self.message_user(request, latvian, level=messages.ERROR)
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "retry_docuseal":
             if agreement is None:
@@ -503,7 +599,153 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 return self._change_redirect(object_id)
             return self._change_redirect(object_id)
 
+        elif action == "create_next_season_billing":
+            if not self._signed_active_agreement(request, application, agreement):
+                return self._after_review_redirect(request, object_id)
+            if agreement.billing_plan_id is None:
+                self.message_user(
+                    request, "Līgumam nav norēķinu plāna.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            raw_plan = request.POST.get("billing_plan", "").strip()
+            if not raw_plan:
+                self.message_user(
+                    request, "Lūdzu izvēlieties norēķinu plānu.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            try:
+                plan = MembershipPlan.objects.filter(
+                    pk=int(raw_plan), is_active=True
+                ).first()
+            except (ValueError, TypeError):
+                plan = None
+            if plan is None:
+                self.message_user(
+                    request, "Nezināms norēķinu plāns.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            if plan.season == agreement.billing_plan.season:
+                self.message_user(
+                    request,
+                    "Nākamās sezonas plānam jāatšķiras no līguma sezonas.",
+                    level=messages.ERROR,
+                )
+                return self._after_review_redirect(request, object_id)
+            first_billing_month = request.POST.get("first_billing_month", "").strip()
+            if not first_billing_month:
+                self.message_user(
+                    request, "Pirmais rēķina mēnesis ir obligāts.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
+            try:
+                record = renew_member_billing(
+                    application.approved_member,
+                    plan,
+                    first_billing_month=first_billing_month,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                raw = str(exc)
+                if "first billing month must use YYYY-MM" in raw:
+                    latvian = "Pirmajam mēnesim jābūt formātā GGGG-MM."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
+            if record is None:
+                self.message_user(
+                    request,
+                    "Norēķinu ieraksts šai sezonai jau eksistē.",
+                    level=messages.INFO,
+                )
+                return self._after_review_redirect(request, object_id)
+            self.message_user(request, "Izveidots nākamās sezonas norēķinu ieraksts.")
+            return self._after_review_redirect(request, object_id)
+
+        elif action == "recreate_current_billing":
+            if not self._signed_active_agreement(request, application, agreement):
+                return self._after_review_redirect(request, object_id)
+            confirmed = bool(request.POST.get("external_invoice_confirmed_absent"))
+            try:
+                recreate_missing_billing_record(
+                    application.approved_member,
+                    agreement,
+                    external_invoice_confirmed_absent=confirmed,
+                    actor=request.user,
+                )
+            except ValueError as exc:
+                raw = str(exc)
+                if "confirmation" in raw:
+                    latvian = (
+                        "Jāapstiprina, ka Invoice Ninja nav atbilstoša rēķina."
+                    )
+                elif raw == "billing record already exists for season":
+                    latvian = "Norēķinu ieraksts šai sezonai jau eksistē."
+                elif raw == "billing plan required":
+                    latvian = "Līgumam nav norēķinu plāna."
+                else:
+                    latvian = raw
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
+            self.message_user(request, "Atjaunots trūkstošais norēķinu ieraksts.")
+            return self._after_review_redirect(request, object_id)
+
         return self._change_redirect(object_id)
+
+    def _signed_active_agreement(self, request, application, agreement) -> bool:
+        """Shared guard for the signed-only billing actions: an approved
+        member with a current SIGNED agreement and an active (not
+        discontinued) status. Messages + redirects on failure."""
+        if (
+            application.approved_member_id is None
+            or agreement is None
+            or agreement.state != Agreement.State.SIGNED
+            or application.approved_member.status != Member.Status.ACTIVE
+        ):
+            self.message_user(
+                request,
+                "Darbība pieejama tikai parakstītam līgumam ar aktīvu dalību.",
+                level=messages.ERROR,
+            )
+            return False
+        return True
+
+    def edit_fields_view(self, request, object_id):
+        """Apply a reviewer's in-place corrections from the Admin Hub cockpit.
+
+        Lives on the admin rather than in ``apps.admin_hub`` so it inherits
+        ``has_change_permission`` like every other mutation the Hub drives —
+        the Hub's own views only require ``is_staff``. POST-only, because
+        Django does not CSRF-protect GET and this writes personal data.
+
+        The whitelist, the validation, the Member mirroring and the audit
+        event all live in ``update_reviewed_fields``; this view only
+        translates the result into a message and a redirect.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        application = get_object_or_404(RegistrationApplication, pk=object_id)
+        if request.method != "POST":
+            return self._after_review_redirect(request, object_id)
+        try:
+            changed, phone_discard_reason = update_reviewed_fields(
+                application, data=request.POST, actor=request.user
+            )
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return self._after_review_redirect(request, object_id)
+        # An attempted "phone" edit that update_reviewed_fields could not
+        # write anywhere gets its own message — without it, this case reads
+        # exactly like submitting an unchanged value.
+        if phone_discard_reason:
+            self.message_user(request, phone_discard_reason, level=messages.WARNING)
+        if changed:
+            self.message_user(
+                request, f"Saglabāti {len(changed)} lauki."
+            )
+        elif not phone_discard_reason:
+            self.message_user(request, "Izmaiņu nebija.", level=messages.INFO)
+        return self._after_review_redirect(request, object_id)
 
     def approve_view(self, request, object_id):
         """Confirm-then-commit approval (port of the views.py approve branch)."""
@@ -537,7 +779,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Nezināma treniņu grupa.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
         try:
             approve_application(
                 application, request.user, training_group=selected_group
@@ -551,9 +793,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             else:
                 latvian = "Pieteikumu nevarēja apstiprināt."
             self.message_user(request, latvian, level=messages.ERROR)
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
         self.message_user(request, "Pieteikums apstiprināts.")
-        return self._change_redirect(object_id)
+        return self._after_review_redirect(request, object_id)
 
     def get_queryset(self, request):
         # guardian_contact_email (list_display) traverses parent_account, and

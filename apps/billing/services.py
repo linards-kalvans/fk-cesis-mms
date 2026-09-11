@@ -428,6 +428,21 @@ def create_draft_billing_for_member(member, agreement):
     """Idempotently create a draft BillingRecord for the season of the plan
     the member is on.
 
+    Public wrapper around ``_create_draft_billing_for_member``; returns the
+    record (existing or new), or None when no plan can be resolved. Never
+    raises on missing config — signing must not break.
+    """
+    record, _created = _create_draft_billing_for_member(member, agreement)
+    return record
+
+
+def _create_draft_billing_for_member(member, agreement):
+    """Shared creation path: returns ``(record, created)`` where ``created``
+    is True only when this call actually created the row (False when an
+    existing record for the season was returned). All callers that need to
+    distinguish creation (e.g. the recreate service's audit) use this tuple;
+    the public ``create_draft_billing_for_member`` contract is preserved.
+
     P14 — fixed tier engine + guardian-row lock:
       - tier rank is computed under ``Guardian.select_for_update()`` so
         concurrent sibling signings cannot claim the same rank;
@@ -454,9 +469,6 @@ def create_draft_billing_for_member(member, agreement):
     Legacy fallback: ``agreement=None`` is intentionally full-price (rank 0)
     even when the member happens to have signed agreements, preserving the
     pre-P14 backfill/signal behaviour for that calling pattern.
-
-    Returns the record (existing or new), or None when no plan can be resolved.
-    Never raises on missing config — signing must not break.
     """
     from apps.billing.models import BillingRecord, MembershipPlan
     from apps.members.models import Guardian
@@ -472,7 +484,7 @@ def create_draft_billing_for_member(member, agreement):
         logger.warning(
             "No active MembershipPlan; skipping billing draft for member %s", member.pk
         )
-        return None
+        return None, False
 
     with transaction.atomic():
         if member.guardian_id is not None:
@@ -480,7 +492,7 @@ def create_draft_billing_for_member(member, agreement):
 
         existing = BillingRecord.objects.filter(member=member, season=plan.season).first()
         if existing is not None:
-            return existing
+            return existing, False
 
         scheduled_count: int | None = None
         if agreement is None:
@@ -534,7 +546,7 @@ def create_draft_billing_for_member(member, agreement):
         if application is not None and application.preferred_payment_mode:
             payment_mode = application.preferred_payment_mode
 
-        return BillingRecord.objects.create(
+        record = BillingRecord.objects.create(
             member=member,
             plan=plan,
             agreement=agreement,
@@ -549,6 +561,7 @@ def create_draft_billing_for_member(member, agreement):
             first_billing_month=first_billing_month,
             scheduled_installment_count=scheduled_count,
         )
+        return record, True
 
 
 def recompute_billing_record(record) -> None:
@@ -732,6 +745,71 @@ def renew_member_billing(
     return record
 
 
+def recreate_missing_billing_record(
+    member,
+    agreement,
+    *,
+    external_invoice_confirmed_absent: bool,
+    actor=None,
+):
+    """Recreate a missing current-season BillingRecord from its signed
+    agreement, after staff explicitly confirms no matching Invoice Ninja
+    invoice exists.
+
+    Guards (all raise ``ValueError`` before any write):
+      - ``external_invoice_confirmed_absent`` must be True (the checkbox is
+        the staff confirmation; there is NO Invoice Ninja lookup here);
+      - the agreement must be signed and belong to the member;
+      - the agreement must carry a billing plan;
+      - no record for the agreement plan's season may already exist.
+
+    On success the record is created through the exact existing draft
+    calculation + guardian-row lock (``_create_draft_billing_for_member``)
+    and linked to the same agreement, with the agreement's plan + first
+    billing month snapshotted. Exactly one redacted AuditEvent
+    ``billing_record_recreated`` (metadata: plan_id + season) is emitted on
+    real creation only — a concurrent caller that finds the row already
+    created never audits a record this request did not create.
+    """
+    from apps.agreements.models import Agreement
+    from apps.billing.models import BillingRecord
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+
+    if not external_invoice_confirmed_absent:
+        raise ValueError("external invoice confirmation required")
+    if (
+        agreement is None
+        or agreement.state != Agreement.State.SIGNED
+        or agreement.member_id != member.pk
+    ):
+        raise ValueError("signed agreement required")
+    if agreement.billing_plan_id is None:
+        raise ValueError("billing plan required")
+    if BillingRecord.objects.filter(
+        member=member, season=agreement.billing_plan.season
+    ).exists():
+        raise ValueError("billing record already exists for season")
+
+    with transaction.atomic():
+        record, created = _create_draft_billing_for_member(member, agreement)
+        if record is None:
+            raise ValueError("no billing plan could be resolved")
+        if not created:
+            raise ValueError("billing record already exists for season")
+
+    record_audit_event(
+        action=str(AuditEvent.Action.BILLING_RECORD_RECREATED),
+        actor=actor,
+        target=record,
+        metadata={
+            "plan_id": agreement.billing_plan_id,
+            "season": agreement.billing_plan.season,
+        },
+    )
+    return record
+
+
 def reassign_draft_billing_record(
     record,
     plan,
@@ -760,6 +838,14 @@ def reassign_draft_billing_record(
     — explicit staff replacement is a deliberate P15 transformation. A
     blank ``first_billing_month`` keeps the legacy full-annual / NULL-count
     path. The audit event carries the new scheduled count when set.
+
+    When ``record.agreement`` is set, its ``billing_plan`` /
+    ``first_billing_month`` are updated in the same transaction to match the
+    record's new values — after a staff reassignment the agreement's billing
+    intent has genuinely changed, and leaving it stale desyncs
+    ``load_pipeline_objects``' record-to-agreement matching (by season).
+    ``agreement`` is nullable (``on_delete=SET_NULL``); a record with none is
+    reassigned with no agreement write.
     """
     from apps.billing.models import BillingRecord
     from apps.core.audit import record_audit_event
@@ -800,37 +886,57 @@ def reassign_draft_billing_record(
     old_plan_id = record.plan_id
     old_month = record.first_billing_month
 
-    record.invoices.all().delete()
-    percent = record.sibling_discount_percent_applied
-    # P15: a non-blank month always lands on the partial base + saved
-    # count, even when the prior record was a legacy NULL-count row.
-    # Blank input preserves the legacy full-annual / NULL-count path.
-    if new_count is not None:
-        record.base_amount = partial_base_amount(plan, new_count)
-    else:
-        record.base_amount = _money(plan.annual_amount)
-    record.plan = plan
-    record.season = plan.season
-    record.first_billing_month = normalized_month or first_billing_month
-    record.scheduled_installment_count = new_count
-    record.discount_amount = _money(record.base_amount * percent / Decimal("100"))
-    record.final_amount = (
-        record.manual_amount_override
-        if record.manual_amount_override is not None
-        else _money(record.base_amount - record.discount_amount)
-    )
-    record.save(
-        update_fields=[
-            "plan",
-            "season",
-            "first_billing_month",
-            "scheduled_installment_count",
-            "base_amount",
-            "discount_amount",
-            "final_amount",
-            "updated_at",
-        ]
-    )
+    with transaction.atomic():
+        record.invoices.all().delete()
+        percent = record.sibling_discount_percent_applied
+        # P15: a non-blank month always lands on the partial base + saved
+        # count, even when the prior record was a legacy NULL-count row.
+        # Blank input preserves the legacy full-annual / NULL-count path.
+        if new_count is not None:
+            record.base_amount = partial_base_amount(plan, new_count)
+        else:
+            record.base_amount = _money(plan.annual_amount)
+        record.plan = plan
+        record.season = plan.season
+        record.first_billing_month = normalized_month or first_billing_month
+        record.scheduled_installment_count = new_count
+        record.discount_amount = _money(record.base_amount * percent / Decimal("100"))
+        record.final_amount = (
+            record.manual_amount_override
+            if record.manual_amount_override is not None
+            else _money(record.base_amount - record.discount_amount)
+        )
+        record.save(
+            update_fields=[
+                "plan",
+                "season",
+                "first_billing_month",
+                "scheduled_installment_count",
+                "base_amount",
+                "discount_amount",
+                "final_amount",
+                "updated_at",
+            ]
+        )
+
+        # Keep the Agreement's billing intent in sync with the record that
+        # now materialises it. load_pipeline_objects (apps/admin_hub/pipeline.py)
+        # identifies the current BillingRecord by comparing record.season
+        # against agreement.billing_plan.season; leaving the agreement
+        # unsynced after a cross-season reassignment made it misclassify
+        # this very record as next_season_record (or drop it), which routed
+        # the Hub back to set_billing_setup — which refuses a signed
+        # agreement, reproducing the exact error this change exists to
+        # eliminate. ``agreement`` is nullable (SET_NULL): a record with no
+        # agreement has nothing to sync and must still reassign cleanly.
+        if record.agreement_id is not None:
+            agreement = record.agreement
+            agreement.billing_plan = plan
+            agreement.first_billing_month = record.first_billing_month
+            agreement.save(
+                update_fields=["billing_plan", "first_billing_month", "updated_at"]
+            )
+
     audit_metadata = {
         "old_plan_id": old_plan_id,
         "new_plan_id": plan.pk,

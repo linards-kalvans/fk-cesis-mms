@@ -26,6 +26,7 @@ from typing import Literal
 
 from django.http import Http404, StreamingHttpResponse
 from django.http.response import content_disposition_header
+from django.utils.text import slugify
 
 from apps.agreements.models import Agreement
 from apps.integrations import agreement_platform
@@ -33,6 +34,36 @@ from apps.integrations import agreement_platform
 
 _FALLBACK_FILENAME = "līgums.pdf"
 _FALLBACK_CONTENT_TYPE = "application/pdf"
+
+def download_filename(agreement: Agreement) -> str:
+    """``<member-name>-<sign-type>-<number>.pdf`` for one agreement.
+
+    The provider's own stream filename is an opaque
+    ``agreement-<external id>.pdf``, which tells a reviewer holding a folder
+    of downloads nothing about whose agreement it is. Each part is slugified
+    with ``allow_unicode=True`` so a Latvian name survives: the header goes
+    out through ``content_disposition_header``, which percent-encodes
+    non-ASCII into the RFC 6266 ``filename*`` form, so diacritics are safe
+    here (see this module's response docstring).
+
+    A missing part is dropped rather than rendered as an empty segment - a
+    freshly generated agreement has no number yet - and an agreement with no
+    usable part at all falls back to the generic name.
+    """
+    parts = (
+        agreement.member.full_name if agreement.member_id else "",
+        agreement.signing_path or "",
+        agreement.agreement_number or "",
+    )
+    slugs = [
+        slug
+        for slug in (slugify(part, allow_unicode=True) for part in parts)
+        if slug
+    ]
+    if not slugs:
+        return _FALLBACK_FILENAME
+    return "-".join(slugs) + ".pdf"
+
 
 _Disposition = Literal["inline", "attachment"]
 _ALLOWED_DISPOSITIONS = ("inline", "attachment")
@@ -71,7 +102,8 @@ def build_agreement_document_response(
         raise Http404
 
     stream = agreement_platform.stream_submission_document(agreement.external_id)
-    filename = stream.filename or _FALLBACK_FILENAME
+    # Our own descriptive name, not the provider's agreement-<external id>.pdf.
+    filename = download_filename(agreement)
     content_type = stream.content_type or _FALLBACK_CONTENT_TYPE
 
     response = StreamingHttpResponse(stream.chunks, content_type=content_type)

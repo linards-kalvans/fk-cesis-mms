@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import cast
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -739,3 +741,101 @@ def _render_and_send_agreement_email(
         recipient_list=[guardian.email],
         fail_silently=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# P16-A signed-artifact upload / replace
+# ---------------------------------------------------------------------------
+
+_MSG_ARTIFACT_UNSUPPORTED = (
+    "Neatbalstītais faila formāts. Pieņemti tikai PDF vai .edoc faili."
+)
+_MSG_ARTIFACT_OVERSIZED = "Faila izmērs pārsniedz atļauto robežu."
+_MSG_ARTIFACT_MIME = "PDF failam jābūt ar 'application/pdf' tipu."
+
+_ARTIFACT_UPDATE_FIELDS = (
+    "signed_artifact",
+    "signed_artifact_original_filename",
+    "signed_artifact_content_type",
+    "signed_artifact_file_size",
+    "signed_artifact_uploaded_at",
+    "signed_artifact_updated_at",
+    "updated_at",
+)
+
+
+def upload_signed_artifact(
+    agreement: Agreement,
+    file_upload: UploadedFile,
+    actor,
+) -> Agreement:
+    """Store or replace Agreement's one private signed artifact.
+
+    Replacement order:
+    1. Validate candidate file (suffix, size, PDF MIME where reliable).
+    2. Save new file + update the six Agreement artifact fields (atomic).
+    3. Record exactly one ``SIGNED_ARTIFACT_UPLOADED`` audit event with only
+       ``{"agreement_id", "operation"}`` in metadata.
+    4. Delete the old private storage object only via ``on_commit`` — it
+       never runs if the DB save fails.
+
+    Raises ``ValueError`` with a Latvian message on validation failure (old
+    artifact preserved). If the persistence step fails after the new storage
+    write, the old DB fields + storage object survive and the newly written
+    storage object is best-effort removed. Never touches agreement state,
+    billing, DocuSeal reservations, integrations, jobs, or tasks.
+    """
+    filename = Path(file_upload.name or "").name or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".pdf", ".edoc"}:
+        raise ValueError(_MSG_ARTIFACT_UNSUPPORTED)
+    size = int(getattr(file_upload, "size", 0) or 0)
+    content_type = str(getattr(file_upload, "content_type", "") or "").strip()
+    if suffix == ".pdf":
+        if content_type and not content_type.startswith("application/pdf"):
+            raise ValueError(_MSG_ARTIFACT_MIME)
+        stored_content_type = content_type
+    else:
+        # .edoc has no assigned MIME type; the browser's value is never
+        # trusted and never stored.
+        stored_content_type = ""
+
+    old_name = agreement.signed_artifact.name
+    operation = "replaced" if old_name else "uploaded"
+    if size > settings.SIGNED_ARTIFACT_MAX_BYTES:
+        raise ValueError(_MSG_ARTIFACT_OVERSIZED)
+    now = timezone.now()
+
+    with transaction.atomic():
+        agreement.signed_artifact.save(filename, file_upload, save=False)
+        agreement.signed_artifact_original_filename = filename
+        agreement.signed_artifact_content_type = stored_content_type
+        agreement.signed_artifact_file_size = size
+        agreement.signed_artifact_uploaded_at = (
+            agreement.signed_artifact_uploaded_at or now
+        )
+        agreement.signed_artifact_updated_at = now
+        try:
+            agreement.save(update_fields=_ARTIFACT_UPDATE_FIELDS)
+            record_audit_event(
+                action=str(AuditEvent.Action.SIGNED_ARTIFACT_UPLOADED),
+                actor=actor,
+                target=agreement,
+                metadata={"agreement_id": agreement.pk, "operation": operation},
+            )
+        except Exception:
+            # Best-effort remove the freshly written storage object; the old
+            # DB fields (and old storage object) are untouched by the
+            # rolled-back atomic block.
+            new_name = agreement.signed_artifact.name
+            try:
+                if new_name:
+                    agreement.signed_artifact.storage.delete(new_name)
+            except Exception:
+                pass
+            raise
+        if old_name:
+            transaction.on_commit(
+                lambda: agreement.signed_artifact.storage.delete(old_name)
+            )
+    return agreement

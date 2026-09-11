@@ -11,6 +11,7 @@ from apps.agreements.document_proxy import build_agreement_document_response
 from apps.agreements.messages import get_agreement_error_message
 from apps.agreements.models import Agreement
 from apps.agreements.presentation import build_agreement_document_links
+from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.core.admin_badges import status_badge
 from apps.core.admin_links import admin_link, admin_links
 from apps.integrations import agreement_platform
@@ -122,6 +123,11 @@ class AgreementAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.docuseal_document_view),
                 name="agreements_agreement_docuseal_document",
             ),
+            path(
+                "<int:object_id>/signed-artifact/",
+                self.admin_site.admin_view(self.signed_artifact_view),
+                name="agreements_agreement_signed_artifact",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -184,6 +190,33 @@ class AgreementAdmin(admin.ModelAdmin):
             extra_context["document_links"] = build_agreement_document_links(
                 [agreement], url_builder=_url_builder
             )
+        # P16-A: only when a signed artifact exists — the change template
+        # renders the panel conditionally, never a raw storage URL.
+        if agreement is not None and agreement.signed_artifact:
+            extra_context["signed_artifact_url"] = str(
+                reverse(
+                    "admin:agreements_agreement_signed_artifact",
+                    args=[agreement.pk],
+                )
+            )
         return super().change_view(
             request, object_id, form_url, extra_context
+        )
+
+    def signed_artifact_view(self, request, object_id):
+        """Stream the signed PDF/.edoc artifact through the shared proxy.
+
+        Staff with view permission only. Default disposition is ``inline``
+        (the change page embeds the PDF in an iframe);
+        ``?disposition=attachment`` forces a download. Missing agreement,
+        blank artifact, and invalid disposition values are 404.
+        """
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        disposition = request.GET.get("disposition", "inline")
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
+        agreement = get_object_or_404(Agreement, pk=object_id)
+        return build_signed_artifact_response(
+            agreement, disposition=disposition
         )

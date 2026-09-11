@@ -161,6 +161,49 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
   </details>
   {% endif %}
 
+  {% if agreement.state == "signed" and original.approved_member.status == "active" %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Izveidot nākamās sezonas norēķinus</summary>
+    <p class="help">Izveido vienu melnraksta norēķinu ierakstu nākamajai sezonai
+      esošā parakstītā līguma ietvaros; līgumu un vēsturiskos rēķinus nemaina.</p>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="next_season_billing_plan">Norēķinu plāns:</label>
+        <select name="billing_plan" id="next_season_billing_plan" required>
+          <option value="">— Izvēlieties —</option>
+          {% for plan in next_season_membership_plans %}
+          <option value="{{ plan.pk }}">{{ plan.name }} — {{ plan.season }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="next_season_first_billing_month">Pirmais rēķina mēnesis:</label>
+        <input type="month" name="first_billing_month" id="next_season_first_billing_month" required>
+      </div>
+      <button type="submit" name="action" value="create_next_season_billing" class="default">Izveidot nākamās sezonas norēķinus</button>
+    </form>
+  </details>
+
+  {% if current_season_billing_missing %}
+  <details class="mms-review-actions__disclosure">
+    <summary>Atjaunot trūkstošu norēķinu ierakstu</summary>
+    <p class="help">Atjauno šīs sezonas norēķinu ierakstu no parakstītā līguma.
+      Pirms atjaunošanas pārliecinieties, ka Invoice Ninja nav atbilstoša rēķina.</p>
+    <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+      {% csrf_token %}
+      <div class="form-row">
+        <label class="checkbox" for="external_invoice_confirmed_absent">
+          <input type="checkbox" name="external_invoice_confirmed_absent" id="external_invoice_confirmed_absent" required>
+          Es apstiprinu, ka Invoice Ninja nav atbilstoša rēķina.
+        </label>
+      </div>
+      <button type="submit" name="action" value="recreate_current_billing" class="default">Atjaunot ierakstu</button>
+    </form>
+  </details>
+  {% endif %}
+  {% endif %}
+
   {% if agreement.state != "void" %}
   <details class="mms-review-actions__disclosure">
     <summary>Anulēt līguma dokumentu</summary>

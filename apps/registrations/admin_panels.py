@@ -5,6 +5,7 @@ Hosts the document-preview classification and per-kind panel builder
 which assembles the full panels + agreement + training-group context.
 """
 
+from django.db.models import F
 from django.urls import reverse
 
 from apps.agreements.messages import get_agreement_error_message
@@ -12,7 +13,13 @@ from apps.agreements.models import Agreement
 from apps.agreements.presentation import build_agreement_document_links
 from apps.core.admin_links import admin_link, admin_links
 from apps.agreements.services import get_current_agreement
-from apps.billing.models import BillingAdjustment, BillingInvoice, MembershipPlan, PaymentStatus
+from apps.billing.models import (
+    BillingAdjustment,
+    BillingInvoice,
+    BillingRecord,
+    MembershipPlan,
+    PaymentStatus,
+)
 from apps.members.models import Member
 from apps.documents.models import Document
 from apps.documents.ocr import decrypt_json
@@ -187,6 +194,21 @@ def build_review_context(
                 history_agreements, url_builder=_url_builder
             )
 
+    # P16-A: every Agreement of the source member — current + history
+    # (generated, sent, signed, void, superseded, discontinued) — newest
+    # first, including rows without an artifact so staff can upload or
+    # replace on any lifecycle state. Sensitive artifact coordinates are
+    # never rendered: the template builds same-origin proxy URLs only.
+    signed_artifact_agreements: list[Agreement] = []
+    if member is not None:
+        signed_artifact_agreements = list(
+            Agreement.objects.filter(member=member).order_by(
+                F("signed_artifact_updated_at").desc(nulls_last=True),
+                "-generated_at",
+                "-pk",
+            )
+        )
+
     discontinuation_invoice_candidates = []
     billing_adjustments = []
     discontinued_billing_invoices = []
@@ -216,6 +238,28 @@ def build_review_context(
                 ).order_by("-created_at")
             )
 
+    # Signed-only next-season billing: active plans whose season differs from
+    # the current signed agreement's plan season (the current plan is the
+    # agreement's locked billing history, never a renewal target). Plus the
+    # recreate signal: the current agreement plan season has no record.
+    next_season_membership_plans: list = []
+    current_season_billing_missing = False
+    if (
+        agreement is not None
+        and agreement.state == Agreement.State.SIGNED
+        and member is not None
+        and member.status == Member.Status.ACTIVE
+        and agreement.billing_plan_id is not None
+    ):
+        next_season_membership_plans = list(
+            MembershipPlan.objects.filter(is_active=True)
+            .exclude(season=agreement.billing_plan.season)
+            .order_by("season", "name")
+        )
+        current_season_billing_missing = not BillingRecord.objects.filter(
+            member=member, season=agreement.billing_plan.season
+        ).exists()
+
     return {
         "related_links": related_links,
         "guardian_panel": guardian_panel,
@@ -227,12 +271,15 @@ def build_review_context(
         "agreement_error_message": agreement_error_message,
         "agreement_lifecycle_events": agreement_lifecycle_events,
         "document_links": document_links,
+        "signed_artifact_agreements": signed_artifact_agreements,
         "discontinuation_invoice_candidates": discontinuation_invoice_candidates,
         "discontinued_billing_invoices": discontinued_billing_invoices,
         "billing_adjustments": billing_adjustments,
         "membership_plans": list(
             MembershipPlan.objects.filter(is_active=True).order_by("season", "name")
         ),
+        "next_season_membership_plans": next_season_membership_plans,
+        "current_season_billing_missing": current_season_billing_missing,
     }
 
 

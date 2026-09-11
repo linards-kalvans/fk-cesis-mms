@@ -1,0 +1,113 @@
+{% extends "admin_hub/base_hub.html" %}
+{% load hub_tags %}
+
+{% block hub_title %}FK Cēsis Admin — Neapmaksātie rēķini{% endblock %}
+
+{% block hub_content %}
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Neapmaksātie rēķini</h1>
+      <p class="page-sub">Dati no Invoice Ninja sinhronizācijas. Kavējums rēķināts pret šodienas datumu.</p>
+    </div>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat stat--alert">
+      <div class="stat__icon">&euro;</div>
+      <div><div class="stat__value">{{ totals.outstanding }}</div><div class="stat__label">Atlikums kopā (EUR)</div></div>
+    </div>
+    <div class="stat stat--warn">
+      <div class="stat__icon">&#9200;</div>
+      <div><div class="stat__value">{{ totals.overdue_count }}</div><div class="stat__label">Kavēti rēķini</div></div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon">&#129534;</div>
+      <div><div class="stat__value">{{ totals.count }}</div><div class="stat__label">Rēķini skatā</div></div>
+    </div>
+    <div class="stat stat--ok">
+      <div class="stat__icon">&#10003;</div>
+      <div><div class="stat__value">{{ totals.paid_total }}</div><div class="stat__label">Apmaksāts (EUR)</div></div>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    {% for slug, label in tabs.items %}
+      <a href="?tab={{ slug }}" class="{% if slug == tab %}is-active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  <div class="tablecard">
+    <div class="tablewrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Biedrs</th><th>Sezona</th><th>Daļa</th><th>Termiņš</th>
+            <th class="num">Summa</th><th class="num">Apmaksāts</th><th class="num">Atlikums</th>
+            <th>Maksājums</th><th>IN statuss</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for invoice in rows %}
+            <tr class="{% if invoice.is_overdue %}is-overdue{% endif %}">
+              <td>
+                <div class="cellstack">
+                  <strong>{{ invoice.billing_record.member.full_name }}</strong>
+                  <span>
+                    {{ invoice.billing_record.member.guardian.display_name|default:"—" }}
+                    {% if invoice.billing_record.member.training_group %}· {{ invoice.billing_record.member.training_group.name }}{% endif %}
+                  </span>
+                </div>
+              </td>
+              <td>{{ invoice.billing_record.season }}</td>
+              <td>{{ invoice.sequence }}</td>
+              <td>
+                {% if invoice.is_overdue %}
+                  <span class="badge badge--sm badge--overdue">{{ invoice.due_date|date:"d.m.Y" }}</span>
+                {% else %}
+                  {{ invoice.due_date|date:"d.m.Y" }}
+                {% endif %}
+              </td>
+              <td class="num">{{ invoice.amount }} €</td>
+              <td class="num">{{ invoice.paid_to_date }} €</td>
+              <td class="num">{{ invoice.balance|default:invoice.amount }} €</td>
+              <td><span class="badge badge--sm {{ payment_badge_classes|get_item:invoice.payment_status|default:"badge--unpaid" }}">{{ invoice.get_payment_status_display|default:"Nav apmaksāts" }}</span></td>
+              <td>
+                {% if invoice.external_error_code %}
+                  <span class="badge badge--sm badge--rejected">{{ invoice.external_error_code }}</span>
+                {% elif invoice.external_invoice_id %}
+                  <span class="badge badge--sm badge--approved">{{ invoice.external_status|default:"izrakstīts" }}</span>
+                {% else %}
+                  <span class="badge badge--sm badge--neutral">Nav izrakstīts</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9" class="muted" style="text-align:center;padding:22px">Šajā skatā nav rēķinu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pager">
+      {% if page_obj.has_previous %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.previous_page_number }}">&lsaquo;</a>
+      {% else %}
+        <span>&lsaquo;</span>
+      {% endif %}
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <span class="is-active">{{ num }}</span>
+        {% else %}
+          <a href="?tab={{ tab }}&amp;page={{ num }}">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?tab={{ tab }}&amp;page={{ page_obj.next_page_number }}">&rsaquo;</a>
+      {% else %}
+        <span>&rsaquo;</span>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

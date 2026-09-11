@@ -1,0 +1,14 @@
+{% comment %}Expects `steps` (list of PipelineStep). The rail is a status
+display, not navigation - each item renders as a <span>, and the page's own
+buttons move the reviewer between steps.{% endcomment %}
+<div class="steprail">
+  <div class="steprail__inner">
+    {% for step in steps %}
+      {% if step.state == "done" %}{% with cls="step step--done" %}{% include "admin_hub/_step_rail_item.html" %}{% endwith %}
+      {% elif step.state == "current" %}{% with cls="step step--current" %}{% include "admin_hub/_step_rail_item.html" %}{% endwith %}
+      {% elif step.state == "available" %}{% with cls="step" %}{% include "admin_hub/_step_rail_item.html" %}{% endwith %}
+      {% else %}{% with cls="step step--locked" %}{% include "admin_hub/_step_rail_item.html" %}{% endwith %}
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>

@@ -25,6 +25,10 @@ class AuditEvent(models.Model):
         APPLICATION_APPROVED = "application_approved", "Application approved"
         APPLICATION_REJECTED = "application_rejected", "Application rejected"
         APPLICATION_FIX_REQUESTED = "application_fix_requested", "Application fix requested"
+        APPLICATION_DATA_EDITED = (
+            "application_data_edited",
+            "Application data edited by staff",
+        )
         TRAINING_GROUP_ASSIGNED = "training_group_assigned", "Training group assigned"
         TRAINING_GROUP_CLEARED = "training_group_cleared", "Training group cleared"
         DOCUMENT_PREVIEWED = "document_previewed", "Document previewed"
@@ -58,9 +62,22 @@ class AuditEvent(models.Model):
             "billing_record_reassigned",
             "Billing record reassigned",
         )
+        BILLING_RECORD_RECREATED = (
+            "billing_record_recreated",
+            "Billing record recreated",
+        )
         BILLING_RECORD_AMOUNT_OVERRIDDEN = (
             "billing_record_amount_overridden",
             "Billing record amount overridden",
+        )
+        MEMBER_EXPORT_TEMPLATE_MUTATED = (
+            "member_export_template_mutated",
+            "Member export template mutated",
+        )
+        MEMBER_EXPORT_RUN = "member_export_run", "Member export run"
+        SIGNED_ARTIFACT_UPLOADED = (
+            "signed_artifact_uploaded",
+            "Parakstītā līguma augšupielāde",
         )
 
     actor = models.ForeignKey(

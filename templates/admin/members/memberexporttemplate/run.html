@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+
+  {% if non_field_error %}
+    <p class="errornote">
+      {{ non_field_error }}
+    </p>
+  {% endif %}
+
+  <form method="post" action="">
+    {% csrf_token %}
+    {% if run_form.errors %}
+      <ul class="errorlist">
+        {% for field, errors in run_form.errors.items %}
+          {% for error in errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        {% endfor %}
+      </ul>
+    {% endif %}
+    <fieldset class="module aligned">
+      {% for field in run_form %}
+        <div class="form-row">
+          {{ field.errors }}
+          <label>{{ field.label }}</label>
+          {{ field }}
+        </div>
+      {% endfor %}
+    </fieldset>
+    <div class="submit-row">
+      <button type="submit" class="button default">Lejupielādēt</button>
+      <a href="{% url 'admin:members_memberexporttemplate_changelist' %}" class="button">Atcelt</a>
+    </div>
+  </form>
+{% endblock %}

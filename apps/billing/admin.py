@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -26,6 +27,9 @@ from apps.core.models import AuditEvent
 
 @admin.register(MembershipPlan)
 class MembershipPlanAdmin(admin.ModelAdmin):
+    # external_product_id is an integration cache consumed by the Invoice
+    # Ninja push job — never staff-editable in the admin form.
+    exclude = ("external_product_id",)
     list_display = (
         "name", "season", "annual_amount",
         "installment_count", "first_installment_month", "payment_due_day",
@@ -170,6 +174,12 @@ class BillingRecordAdmin(admin.ModelAdmin):
         # admin (all fields are readonly; the add form would crash on obj.member).
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        # Billing records are immutable billing history: direct deletion is
+        # unavailable (object delete URL 403s, changelist bulk-delete action
+        # disappears) for every user, superuser included.
+        return False
+
     def get_queryset(self, request):
         # select_related: the guardian_link/agreement_link columns touch these per row.
         return super().get_queryset(request).select_related(
@@ -223,6 +233,11 @@ class BillingRecordAdmin(admin.ModelAdmin):
                 name="billing_billingrecord_confirm",
             ),
             path(
+                "<int:object_id>/push/",
+                self.admin_site.admin_view(self.push_view),
+                name="billing_billingrecord_push",
+            ),
+            path(
                 "<int:object_id>/reassign/",
                 self.admin_site.admin_view(self.reassign_view),
                 name="billing_billingrecord_reassign",
@@ -248,11 +263,69 @@ class BillingRecordAdmin(admin.ModelAdmin):
             self.message_user(request, "Ieraksts jau ir apstiprināts.", level=messages.INFO)
         return self._safe_redirect(request, object_id)
 
+    def push_view(self, request, object_id):
+        """Issue one record's invoices. Same work as the bulk action, but
+        addressable per record so the Admin Hub can offer it inline and come
+        back via `next`. No new domain logic: it enqueues the same job and
+        records the same audit event.
+
+        The Hub's one-click action adds one explicit opt-in: a POST carrying
+        the literal value ``confirm_and_push=1`` also confirms a DRAFT record
+        (audited as BILLING_RECORD_CONFIRMED) before enqueueing. Ordinary
+        direct requests keep the confirmed-only refusal below."""
+        from apps.integrations.tasks import enqueue_push_billing_record
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        get_object_or_404(BillingRecord, pk=object_id)
+        # Mirrors confirm_view: GET is not CSRF-protected by Django, so
+        # without this guard a bare GET (an <img> tag, a link prefetch) could
+        # trigger a real invoice push for any staff session with no token
+        # and no confirmation click.
+        if request.method != "POST":
+            return self._safe_redirect(request, object_id)
+        confirm_and_push = request.POST.get("confirm_and_push") == "1"
+        # Re-read under a row lock so a concurrent confirm/push cannot slip
+        # between the status check and the enqueue. The confirmation (and its
+        # audit) commits before the worker can observe the job.
+        with transaction.atomic():
+            record = BillingRecord.objects.select_for_update().get(pk=object_id)
+            if record.status == BillingRecord.Status.DRAFT:
+                if not confirm_and_push:
+                    self.message_user(
+                        request,
+                        "Vispirms apstipriniet maksājumu ierakstu.",
+                        level=messages.ERROR,
+                    )
+                    return self._safe_redirect(request, object_id)
+                record.status = BillingRecord.Status.CONFIRMED
+                record.save(update_fields=["status", "updated_at"])
+                record_audit_event(
+                    action=str(AuditEvent.Action.BILLING_RECORD_CONFIRMED),
+                    actor=request.user, request=request, target=record,
+                )
+            if record.external_status == "synced":
+                self.message_user(request, "Rēķini jau ir izrakstīti.")
+                return self._safe_redirect(request, object_id)
+            enqueue_push_billing_record(record.pk)
+            record_audit_event(
+                action=str(AuditEvent.Action.BILLING_PUSH_TRIGGERED),
+                actor=request.user,
+                request=request,
+                target=record,
+            )
+        self.message_user(request, "Rēķinu izrakstīšana sākta.")
+        return self._safe_redirect(request, object_id)
+
     def reassign_view(self, request, object_id):
         """Two-step reassignment of a draft BillingRecord to a new plan + first
         billing month. GET renders a confirmation form; POST commits through
         the service. The service is the source of truth for guards (DRAFT
-        only, no pushed/sent invoices)."""
+        only, no pushed/sent invoices). On success, returns via
+        ``_safe_redirect`` (same open-redirect-safe ``next`` handling as
+        ``confirm_view``/``push_view``) rather than a hardcoded destination,
+        so the Admin Hub's plan-form post — which carries a hidden ``next``
+        back to the Hub page it came from — actually returns there."""
         if not self.has_change_permission(request):
             raise PermissionDenied
         record = get_object_or_404(BillingRecord, pk=object_id)
@@ -285,9 +358,7 @@ class BillingRecordAdmin(admin.ModelAdmin):
                             actor=request.user,
                         )
                         self.message_user(request, "Norēķinu ieraksts pārpiešķirts.")
-                        return redirect(
-                            "admin:billing_billingrecord_change", object_id
-                        )
+                        return self._safe_redirect(request, object_id)
                     except ValueError as exc:
                         raw = str(exc)
                         if raw == "next year plan required":

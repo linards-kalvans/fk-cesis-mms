@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FK Cēsis Admin — Pieteikumu rinda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="../../static/img/fk-cesis-logo.png" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija</div>
+      </div>
+    </div>
+    <nav class="hub-nav">
+      <a href="01-pieteikumu-rinda.html" class="is-active">Pieteikumi <span class="nav-count">7</span></a>
+      <a href="05-rekini-neapmaksatie.html">Rēķini <span class="nav-count">12</span></a>
+      <a href="#">Biedri</a>
+      <a href="#">Līgumi</a>
+      <a href="#">Plāni</a>
+      <a href="#">Atskaites</a>
+    </nav>
+    <div class="hub-header__right">
+      <div class="hub-search">
+        <span>🔍</span>
+        <input type="text" placeholder="Meklēt biedru, vecāku, personas kodu…">
+      </div>
+      <div class="user-pill">
+        <span class="user-avatar">LK</span>
+        <span>Linards K.</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="hub-page">
+
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Pieteikumu rinda</h1>
+      <p class="page-sub">Jaunākie iesniegtie pieteikumi augšā. Sarkanā svītra — iesniegts pirms vairāk nekā 3 dienām.</p>
+    </div>
+    <div class="row">
+      <button class="btn btn-secondary">⬇ Eksportēt CSV</button>
+      <button class="btn btn-secondary">⚙ Skats</button>
+    </div>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat stat--alert">
+      <div class="stat__icon">📋</div>
+      <div>
+        <div class="stat__value">7</div>
+        <div class="stat__label">Jāizskata</div>
+      </div>
+    </div>
+    <div class="stat stat--warn">
+      <div class="stat__icon">⏳</div>
+      <div>
+        <div class="stat__value">2</div>
+        <div class="stat__label">Gaida ilgāk par 3 dienām</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat__icon">✍</div>
+      <div>
+        <div class="stat__value">4</div>
+        <div class="stat__label">Gaida parakstītu līgumu</div>
+      </div>
+    </div>
+    <div class="stat stat--ok">
+      <div class="stat__icon">🧾</div>
+      <div>
+        <div class="stat__value">3</div>
+        <div class="stat__label">Jāizraksta rēķini</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="#" class="is-active">Jāizskata <span class="tab-count">7</span></a>
+    <a href="#">Jālabo <span class="tab-count">2</span></a>
+    <a href="#">Procesā <span class="tab-count">9</span></a>
+    <a href="#">Pabeigti <span class="tab-count">148</span></a>
+    <a href="#">Noraidīti <span class="tab-count">3</span></a>
+    <a href="#">Visi</a>
+  </nav>
+
+  <div class="toolbar" style="margin-bottom:16px">
+    <div class="field-inline">
+      <label for="sort">Kārtot</label>
+      <select id="sort">
+        <option>Jaunākie iesniegtie</option>
+        <option>Vecākie iesniegtie</option>
+        <option>Bērna vārds A→Z</option>
+        <option>Procesa solis</option>
+      </select>
+    </div>
+    <div class="field-inline">
+      <label for="grp">Grupa</label>
+      <select id="grp">
+        <option>Visas grupas</option>
+        <option>U-9 zēni</option>
+        <option>U-11 zēni</option>
+        <option>U-13 meitenes</option>
+        <option>Nav piešķirta</option>
+      </select>
+    </div>
+    <div class="field-inline">
+      <label for="doc">Dokumenti</label>
+      <select id="doc">
+        <option>Visi</option>
+        <option>Nepilnīgi</option>
+        <option>Pilnīgi</option>
+      </select>
+    </div>
+    <div class="toolbar__spacer"></div>
+    <span class="muted" style="font-weight:600">Rāda 1–7 no 7</span>
+  </div>
+
+  <div class="queue">
+
+    <!-- newest, submitted, not approved -->
+    <article class="qrow qrow--new">
+      <div class="qperson">
+        <div class="qavatar">EB</div>
+        <div>
+          <h2 class="qname anton">Emīls Bērziņš</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>14.03.2016</strong> · 9 g.</span>
+            <span>Vecāks: <strong>Anna Bērziņa</strong></span>
+            <span>U-9 zēni</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--submitted"><span class="badge__dot"></span> Iesniegts</span>
+        <div class="pipe__next">pirms 2 h</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--current"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">0/8</span>
+        </div>
+        <div class="pipe__next">Nākamais: <strong>Datu pārbaude</strong></div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-red" href="02-kabine-parbaude.html">Izskatīt →</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow qrow--new">
+      <div class="qperson">
+        <div class="qavatar">LK</div>
+        <div>
+          <h2 class="qname anton">Laura Kalniņa</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>02.11.2014</strong> · 10 g.</span>
+            <span>Vecāks: <strong>Ilze Kalniņa</strong></span>
+            <span>Nav piešķirta</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--submitted"><span class="badge__dot"></span> Iesniegts</span>
+        <div class="pipe__next">pirms 5 h</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot docdot--missing" title="Portrets nav augšupielādēts">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--current"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">0/8</span>
+        </div>
+        <div class="pipe__next">Nākamais: <strong>Datu pārbaude</strong> · portrets iztrūkst</div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-red" href="02-kabine-parbaude.html">Izskatīt →</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow qrow--aging">
+      <div class="qperson">
+        <div class="qavatar">RO</div>
+        <div>
+          <h2 class="qname anton">Roberts Ozols</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>21.07.2013</strong> · 12 g.</span>
+            <span>Vecāks: <strong>Jānis Ozols</strong></span>
+            <span>U-13 zēni</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--submitted"><span class="badge__dot"></span> Iesniegts</span>
+        <div class="pipe__next" style="color:var(--fk-red);font-weight:700">pirms 4 dienām</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--current"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">0/8</span>
+        </div>
+        <div class="pipe__next">Nākamais: <strong>Datu pārbaude</strong></div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-red" href="02-kabine-parbaude.html">Izskatīt →</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow qrow--done">
+      <div class="qperson">
+        <div class="qavatar">MZ</div>
+        <div>
+          <h2 class="qname anton">Marta Zariņa</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>09.05.2015</strong> · 10 g.</span>
+            <span>Vecāks: <strong>Elīna Zariņa</strong></span>
+            <span>U-11 meitenes</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--approved"><span class="badge__dot"></span> Apstiprināts</span>
+        <div class="pipe__next">Līgums nosūtīts 04.09.</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--done"></span><span class="pipe__seg pipe__seg--done"></span>
+            <span class="pipe__seg pipe__seg--done"></span><span class="pipe__seg pipe__seg--done"></span>
+            <span class="pipe__seg pipe__seg--current"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">4/8</span>
+        </div>
+        <div class="pipe__next">Nākamais: <strong>Augšupielādēt parakstīto</strong></div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-secondary btn-sm" href="03-ligums.html">Atzīmēt parakstītu</a>
+        <a class="btn btn-primary" href="03-ligums.html">Turpināt →</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow qrow--fix">
+      <div class="qperson">
+        <div class="qavatar">KL</div>
+        <div>
+          <h2 class="qname anton">Kārlis Liepa</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>30.01.2017</strong> · 8 g.</span>
+            <span>Vecāks: <strong>Dace Liepa</strong></span>
+            <span>U-9 zēni</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--fix"><span class="badge__dot"></span> Jālabo</span>
+        <div class="pipe__next">Nosūtīts vecākam 05.09.</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot docdot--missing" title="Vecāka ID nesalasāms">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--current"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">0/8</span>
+        </div>
+        <div class="pipe__next">Gaida vecāka labojumu: <strong>ID foto nesalasāms</strong></div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-secondary" href="02-kabine-parbaude.html">Skatīt →</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow qrow--done">
+      <div class="qperson">
+        <div class="qavatar">GS</div>
+        <div>
+          <h2 class="qname anton">Gustavs Siliņš</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>17.08.2012</strong> · 13 g.</span>
+            <span>Vecāks: <strong>Māris Siliņš</strong></span>
+            <span>U-13 zēni</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--approved"><span class="badge__dot"></span> Parakstīts</span>
+        <div class="pipe__next">Parakstīts 03.09.</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot" title="Bērna ID">B</span>
+          <span class="docdot" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg pipe__seg--done"></span><span class="pipe__seg pipe__seg--done"></span>
+            <span class="pipe__seg pipe__seg--done"></span><span class="pipe__seg pipe__seg--done"></span>
+            <span class="pipe__seg pipe__seg--done"></span><span class="pipe__seg pipe__seg--done"></span>
+            <span class="pipe__seg pipe__seg--current"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">6/8</span>
+        </div>
+        <div class="pipe__next">Nākamais: <strong>Izrakstīt rēķinus</strong></div>
+      </div>
+      <div class="qactions">
+        <a class="btn btn-primary" href="04-plans-rekini.html">Izrakstīt rēķinus</a>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+    <article class="qrow">
+      <div class="qperson">
+        <div class="qavatar">AV</div>
+        <div>
+          <h2 class="qname anton">Alise Vītola</h2>
+          <div class="qmeta">
+            <span>Dz. <strong>11.02.2016</strong> · 9 g.</span>
+            <span>Vecāks: <strong>Anna Bērziņa</strong> · 2. bērns</span>
+            <span>U-9 meitenes</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <span class="cell-label">Statuss</span>
+        <span class="badge badge--draft"><span class="badge__dot"></span> Melnraksts</span>
+        <div class="pipe__next">Sākts 06.09.</div>
+      </div>
+      <div class="qdocs">
+        <span class="cell-label">Dokumenti</span>
+        <div class="docdots">
+          <span class="docdot" title="Vecāka ID">V</span>
+          <span class="docdot docdot--missing" title="Bērna ID">B</span>
+          <span class="docdot docdot--missing" title="Portrets">P</span>
+        </div>
+      </div>
+      <div class="progress-wrap">
+        <span class="cell-label">Process</span>
+        <div class="pipe">
+          <div class="pipe__segs">
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+            <span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span><span class="pipe__seg"></span>
+          </div>
+          <span class="pipe__count">0/8</span>
+        </div>
+        <div class="pipe__next">Vecāks vēl aizpilda — nav iesniegts</div>
+      </div>
+      <div class="qactions">
+        <button class="btn btn-ghost">Nav darbību</button>
+        <button class="kebab" title="Vairāk">⋯</button>
+      </div>
+    </article>
+
+  </div>
+
+  <div class="pager">
+    <span>‹</span>
+    <span class="is-active">1</span>
+    <a href="#">2</a>
+    <a href="#">3</a>
+    <a href="#">›</a>
+  </div>
+
+</main>
+</body>
+</html>

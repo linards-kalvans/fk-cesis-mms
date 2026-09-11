@@ -9,6 +9,7 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from apps.accounts.models import ParentAccount
 from apps.agreements.models import Agreement
@@ -22,6 +23,11 @@ from apps.integrations.ocr import OCR_SUPPORTED_KINDS
 from apps.integrations.tasks import enqueue_ocr_job
 from apps.members.models import KitSizeOption, Member, TrainingGroup
 from apps.members.services import resolve_guardian_for_account
+from apps.registrations.validators import (
+    PERSONAL_ID_FORMAT_MESSAGE,
+    is_valid_personal_id,
+)
+from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
     RegistrationApplication,
@@ -860,3 +866,240 @@ def _render_and_send_notification(
         recipient_list=[application.guardian_contact_email],
         fail_silently=False,
     )
+
+# ---------------------------------------------------------------------------
+# Staff inline edit (Admin Hub cockpit)
+# ---------------------------------------------------------------------------
+
+# Fields a reviewer may correct in place. The parent's e-mail is deliberately
+# absent: a non-null ``parent_account`` IS the proof the address is reachable
+# (the one-time-code flow is what sets it), so silently rewriting it would
+# invalidate the "Sistēma apstiprinājusi" claim the cockpit makes about it.
+# Changing a verified e-mail has its own admin-initiated service.
+EDITABLE_APPLICATION_FIELDS = (
+    "member_full_name",
+    "member_personal_id",
+    "member_birth_date",
+    "member_actual_address",
+)
+# "phone" is whitelisted here for the read-side comparison and because the
+# cockpit groups it in the "Vecāks" (guardian) section — but it is not a
+# Guardian column. Guardian.phone (apps/members/models.py) is a read-only
+# @property proxying ParentAccount.phone: the phone number is contact
+# information, not the verification anchor (a non-null parent_account is),
+# so it has no setter. A correction is therefore written through to
+# application.parent_account.phone, never assigned onto the Guardian row.
+# guardian.parent_account and application.parent_account are two
+# independently-nullable FKs that nothing enforces agree, so the write is
+# refused (not guessed) whenever they disagree — see update_reviewed_fields.
+EDITABLE_GUARDIAN_FIELDS = (
+    "first_name",
+    "family_name",
+    "personal_id",
+    "phone",
+    "address",
+)
+
+# Approval COPIES the child's data onto a Member row, and agreement generation
+# reads the Member - not the application. So a correction made after approval
+# has to reach both, or regenerating the agreement would rebuild it from the
+# stale snapshot and the fix would appear to do nothing. These are the fields
+# that exist on both sides; the guardian's live on the shared Guardian row and
+# so need no copying, and member_actual_address exists only on the application.
+_MEMBER_MIRRORED_FIELDS = {
+    "member_full_name": "full_name",
+    "member_personal_id": "personal_id",
+    "member_birth_date": "birth_date",
+}
+
+_PERSONAL_ID_FIELDS = {"member_personal_id", "personal_id"}
+
+# Guardian-field name (as used in EDITABLE_GUARDIAN_FIELDS) -> the
+# RegistrationApplicationForm field name it corresponds to. Lets the
+# required-ness of a guardian edit be derived from the same
+# submit_required_fields the parent-facing form already enforces, instead of
+# a second hand-maintained list that could drift from it.
+_GUARDIAN_FIELD_TO_FORM_NAME = {
+    "first_name": "guardian_first_name",
+    "family_name": "guardian_family_name",
+    "personal_id": "guardian_personal_id",
+    "phone": "guardian_phone",
+    "address": "guardian_declared_address",
+}
+
+# Fields that were mandatory at submission time (RegistrationApplicationForm
+# .submit_required_fields is the source of truth) and so must never be
+# silently blanked by an in-place correction — a blank member_full_name or
+# member_birth_date would mirror onto the Member and reach a regenerated
+# agreement verbatim (apps.integrations.docuseal reads it unformatted).
+# EDITABLE_APPLICATION_FIELDS already use the form's own field names verbatim;
+# EDITABLE_GUARDIAN_FIELDS are translated through the map above. As it
+# happens every field this endpoint whitelists turns out to be required at
+# submit time — nothing is *made* required here that registration itself
+# treats as optional, this set is derived, not asserted.
+_REQUIRED_EDITABLE_FIELDS = frozenset(
+    field
+    for field in EDITABLE_APPLICATION_FIELDS
+    if field in RegistrationApplicationForm.submit_required_fields
+) | frozenset(
+    field
+    for field, form_name in _GUARDIAN_FIELD_TO_FORM_NAME.items()
+    if form_name in RegistrationApplicationForm.submit_required_fields
+)
+
+_BLANK_REQUIRED_MESSAGE = "Šis lauks ir obligāts un nedrīkst būt tukšs."
+
+# Reviewer-facing reasons an attempted "phone" edit could not be written —
+# surfaced by edit_fields_view instead of the field silently no-op'ing and
+# reading, from the reviewer's side, exactly like an unchanged submission.
+_PHONE_NO_ACCOUNT_MESSAGE = (
+    "Tālruņa numuru nevarēja saglabāt — pieteikumam nav piesaistīts vecāka konts."
+)
+_PHONE_ACCOUNT_MISMATCH_MESSAGE = (
+    "Tālruņa numuru nevarēja saglabāt — vecāka un pieteikuma piesaistītie "
+    "konti nesakrīt. Labojiet ierakstu pilnajā administrācijā."
+)
+
+
+def _parse_edited_value(field: str, raw: str):
+    """Coerce one submitted value, raising ValueError with a Latvian message."""
+    value = (raw or "").strip()
+    if not value and field in _REQUIRED_EDITABLE_FIELDS:
+        raise ValueError(_BLANK_REQUIRED_MESSAGE)
+    if field in _PERSONAL_ID_FIELDS and not is_valid_personal_id(value):
+        raise ValueError(PERSONAL_ID_FORMAT_MESSAGE)
+    if field == "member_birth_date":
+        if not value:
+            return None
+        try:
+            parsed = parse_date(value)
+        except ValueError:
+            parsed = None
+        if parsed is None:
+            raise ValueError("Ievadiet dzimšanas datumu formātā GGGG-MM-DD.")
+        return parsed
+    return value
+
+
+def update_reviewed_fields(
+    application, *, data, actor
+) -> tuple[list[str], str | None]:
+    """Apply a reviewer's in-place corrections to one application.
+
+    Writes only whitelisted fields, only when the submitted value actually
+    differs, and mirrors the child's fields onto an approved Member so a
+    later agreement regeneration picks the correction up. A "phone"
+    correction writes through to ``application.parent_account.phone``
+    instead of the Guardian row (Guardian.phone has no setter).
+
+    "phone" is displayed to the reviewer via ``guardian.phone`` — a
+    read-only property proxying the *Guardian's own* ``parent_account`` —
+    but the write target is ``application.parent_account``. Those are two
+    independently-nullable FKs that nothing enforces agree, so an attempted
+    edit is discarded (nothing written, nowhere) rather than guessing,
+    whenever there is no linked ``application.parent_account`` or it
+    disagrees with ``guardian.parent_account``. A correction must never
+    land on an account the reviewer was not looking at.
+
+    Returns a 2-tuple: the names of the fields that changed (also all the
+    audit trail records — the values themselves are personal data and are
+    deliberately not logged), and, when an attempted "phone" edit was
+    discarded for one of the two reasons above, a reviewer-facing Latvian
+    message explaining why (``None`` otherwise). The message is not part of
+    the audit trail: nothing was written for it to describe.
+
+    Raises ``ValueError`` with a reviewer-facing Latvian message when a
+    submitted value fails validation, or when a field that was required at
+    submission time (see ``_REQUIRED_EDITABLE_FIELDS``) is submitted blank.
+    Nothing is written in that case.
+    """
+    guardian = application.guardian
+    account = application.parent_account
+
+    application_changes: dict[str, object] = {}
+    for field in EDITABLE_APPLICATION_FIELDS:
+        if field not in data:
+            continue
+        new_value = _parse_edited_value(field, data[field])
+        if new_value != getattr(application, field):
+            application_changes[field] = new_value
+
+    guardian_changes: dict[str, object] = {}
+    parent_account_changes: dict[str, object] = {}
+    phone_discard_reason: str | None = None
+    if guardian is not None:
+        for field in EDITABLE_GUARDIAN_FIELDS:
+            if field not in data:
+                continue
+            new_value = _parse_edited_value(field, data[field])
+            # "did this change" is decided against guardian.phone even for
+            # "phone" — that is what is actually displayed to the reviewer
+            # (see cockpit.html) — but see the docstring for why the write
+            # itself does not simply follow the same comparison.
+            if new_value == getattr(guardian, field):
+                continue
+            if field != "phone":
+                guardian_changes[field] = new_value
+                continue
+            if account is None:
+                phone_discard_reason = _PHONE_NO_ACCOUNT_MESSAGE
+            elif guardian.parent_account_id != account.id:
+                phone_discard_reason = _PHONE_ACCOUNT_MISMATCH_MESSAGE
+            else:
+                parent_account_changes["phone"] = new_value
+
+    if not application_changes and not guardian_changes and not parent_account_changes:
+        return [], phone_discard_reason
+
+    member = application.approved_member
+    member_changes: dict[str, object] = {}
+    if member is not None:
+        for source, target in _MEMBER_MIRRORED_FIELDS.items():
+            if source in application_changes:
+                member_changes[target] = application_changes[source]
+
+    with transaction.atomic():
+        if application_changes:
+            for field, value in application_changes.items():
+                setattr(application, field, value)
+            application.save(
+                update_fields=[*application_changes, "updated_at"]
+            )
+        if guardian_changes:
+            for field, value in guardian_changes.items():
+                setattr(guardian, field, value)
+            guardian.save(update_fields=list(guardian_changes))
+        if parent_account_changes:
+            for field, value in parent_account_changes.items():
+                setattr(account, field, value)
+            account.save(update_fields=[*parent_account_changes, "updated_at"])
+        if member_changes:
+            for field, value in member_changes.items():
+                setattr(member, field, value)
+            member.save(update_fields=list(member_changes))
+
+    changed = [
+        *sorted(application_changes),
+        *(f"guardian.{name}" for name in sorted(guardian_changes)),
+        # Named by destination, not by the whitelist key ("phone"), so the
+        # audit trail does not imply a Guardian column that does not exist.
+        *(f"parent_account.{name}" for name in sorted(parent_account_changes)),
+    ]
+    record_audit_event(
+        action=str(AuditEvent.Action.APPLICATION_DATA_EDITED),
+        actor=actor,
+        target=application,
+        # record_audit_event auto-fills target_repr from str(target) when the
+        # caller omits it, and RegistrationApplication.__str__ returns
+        # "{guardian_email} — {member_full_name}" — exactly the personal data
+        # this audit entry must not carry (see the docstring above). An
+        # explicit, non-PII target_repr is required here.
+        target_repr=f"pieteikums #{application.pk}",
+        metadata={
+            # Field NAMES only. The values are personal data.
+            "fields": changed,
+            "mirrored_to_member": sorted(member_changes),
+        },
+    )
+    return changed, phone_discard_reason
+

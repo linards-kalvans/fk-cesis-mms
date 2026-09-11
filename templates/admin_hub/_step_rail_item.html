@@ -1,0 +1,12 @@
+{% load hub_tags %}{% comment %}Expects `step`, `cls`, and optionally
+`step_urls` (step key -> url). A step whose page is not reachable yet renders
+as plain text, which is what an unreachable step should look like.
+{% endcomment %}{% with step_url=step_urls|get_item:step.key %}
+{% if step_url %}<a class="{{ cls }}" href="{{ step_url }}">{% else %}<span class="{{ cls }}">{% endif %}
+  <span class="step__num">{% if step.state == "done" %}&#10003;{% else %}{{ step.number }}{% endif %}</span>
+  <span class="step__txt">
+    <span class="step__name">{{ step.name }}</span>
+    <span class="step__meta">{{ step.meta|default:"—" }}</span>
+  </span>
+{% if step_url %}</a>{% else %}</span>{% endif %}
+{% endwith %}

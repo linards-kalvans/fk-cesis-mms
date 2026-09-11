@@ -242,3 +242,58 @@ class TestAdminReassignEmptyPlanGuard:
 
         draft_record.refresh_from_db()
         assert draft_record.plan_id == original_plan_id
+
+
+# ── F8: reassign_view honours `next` (IMPORTANT 2) ──────────────────────
+#
+# Mirrors the convention in
+# tests/admin_hub/test_signed_artifact_upload_next_redirect.py: a safe
+# `next` is used, no `next` keeps the existing destination, and an
+# off-site `next` is rejected by the same `_safe_redirect` guard
+# `confirm_view`/`push_view` already rely on.
+
+
+def _change_url(record):
+    return reverse("admin:billing_billingrecord_change", args=[record.pk])
+
+
+class TestAdminReassignNextRedirect:
+    def test_reassign_returns_to_a_safe_next(self, staff_client, draft_record):
+        new_plan = _make_plan(season="2027/2028", name="Next-Plan-Safe")
+        url = reverse("admin:billing_billingrecord_reassign", args=[draft_record.pk])
+        hub_url = "/hub/pieteikumi/1/maksajumi/"
+        response = staff_client.post(
+            f"{url}?next={hub_url}",
+            {"billing_plan": new_plan.pk, "first_billing_month": "2027-09"},
+        )
+        assert response.status_code == 302
+        assert response["Location"] == hub_url
+        draft_record.refresh_from_db()
+        assert draft_record.plan_id == new_plan.pk
+
+    def test_reassign_without_next_keeps_the_change_page(
+        self, staff_client, draft_record
+    ):
+        new_plan = _make_plan(season="2027/2028", name="Next-Plan-Default")
+        url = reverse("admin:billing_billingrecord_reassign", args=[draft_record.pk])
+        response = staff_client.post(
+            url,
+            {"billing_plan": new_plan.pk, "first_billing_month": "2027-09"},
+        )
+        assert response.status_code == 302
+        assert response["Location"] == _change_url(draft_record)
+        draft_record.refresh_from_db()
+        assert draft_record.plan_id == new_plan.pk
+
+    def test_reassign_rejects_an_offsite_next(self, staff_client, draft_record):
+        new_plan = _make_plan(season="2027/2028", name="Next-Plan-Offsite")
+        url = reverse("admin:billing_billingrecord_reassign", args=[draft_record.pk])
+        response = staff_client.post(
+            f"{url}?next=https://evil.example.com/",
+            {"billing_plan": new_plan.pk, "first_billing_month": "2027-09"},
+        )
+        assert response.status_code == 302
+        assert "evil.example.com" not in response["Location"]
+        assert response["Location"] == _change_url(draft_record)
+        draft_record.refresh_from_db()
+        assert draft_record.plan_id == new_plan.pk

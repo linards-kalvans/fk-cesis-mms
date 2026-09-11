@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "apps.integrations",
     "apps.addresses",
     "apps.analytics",
+    "apps.admin_hub",
     # Background-job runner (P3.5)
     "django_q",
 ]
@@ -245,6 +246,11 @@ DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
     "image/png",
     "image/webp",
     "application/pdf",
+)
+
+# P16-A signed PDF/.edoc maximum upload size (20 MiB by default).
+SIGNED_ARTIFACT_MAX_BYTES = int(
+    os.environ.get("SIGNED_ARTIFACT_MAX_BYTES", str(20 * 1024 * 1024))
 )
 
 # Surface uncaught view exceptions to stderr so production deployments

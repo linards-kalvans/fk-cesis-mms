@@ -63,3 +63,11 @@ def test_no_updated_at_field():
 
 def test_data_exported_action_exists():
     assert "data_exported" in set(AuditEvent.Action.values)
+
+
+def test_member_export_audit_actions_exist():
+    assert AuditEvent.Action.MEMBER_EXPORT_TEMPLATE_MUTATED == "member_export_template_mutated"
+    assert AuditEvent.Action.MEMBER_EXPORT_RUN == "member_export_run"
+    values = set(AuditEvent.Action.values)
+    assert "member_export_template_mutated" in values
+    assert "member_export_run" in values

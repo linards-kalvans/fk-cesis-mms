@@ -12,7 +12,13 @@ urlpatterns = [
     path("", include("apps.agreements.urls")),
     path("addresses/", include("apps.addresses.urls")),
     path("", include("apps.registrations.urls")),
+    path("hub/", include("apps.admin_hub.urls")),
     path("admin/", admin.site.urls),
     path("accounts/", include("apps.accounts.urls")),
     path("register/verify/", accounts_views.verify_one_time_code_view, name="register-verify"),
+    path(
+        "register/verify/check/",
+        accounts_views.verify_one_time_code_check_view,
+        name="register-verify-check",
+    ),
 ]

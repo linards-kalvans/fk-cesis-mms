@@ -1,0 +1,54 @@
+{% load static %}<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block hub_title %}FK Cēsis · Administrācija{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'admin_hub/hub.css' %}">
+</head>
+<body>
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="{% static 'img/fk-cesis-logo.png' %}" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija</div>
+      </div>
+    </div>
+    <nav class="hub-nav">
+      <a href="{% url 'admin_hub:queue' %}" class="{% if hub_section == 'queue' %}is-active{% endif %}">Pieteikumi</a>
+      <a href="{% url 'admin_hub:invoices' %}" class="{% if hub_section == 'invoices' %}is-active{% endif %}">Rēķini</a>
+      {% block hub_nav_extra %}{% endblock %}
+      <a href="{% url 'admin:index' %}">Django admin</a>
+    </nav>
+    <div class="hub-header__right">
+      <div class="user-pill">
+        <span class="user-avatar">{{ request.user.get_username|slice:":2"|upper }}</span>
+        <span>{{ request.user.get_username }}</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+{% block hub_steprail %}{% endblock %}
+
+<main class="hub-page {% block hub_page_class %}{% endblock %}">
+  {% if messages %}
+    {% for message in messages %}
+      <div class="callout {% if message.tags == 'error' %}callout--danger{% elif message.tags == 'warning' %}callout--warn{% endif %}" style="margin-bottom:16px">
+        <span class="callout__icon">i</span><span>{{ message }}</span>
+      </div>
+    {% endfor %}
+  {% endif %}
+  {% block hub_content %}{% endblock %}
+</main>
+
+{% block hub_actionbar %}{% endblock %}
+{% block hub_scripts %}{% endblock %}
+</body>
+</html>

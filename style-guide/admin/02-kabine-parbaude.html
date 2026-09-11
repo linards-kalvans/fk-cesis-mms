@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FK Cēsis Admin — Datu pārbaude</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="hub.css">
+</head>
+<body>
+
+<header class="hub-header">
+  <div class="hub-header__inner">
+    <div class="hub-brand">
+      <img src="../../static/img/fk-cesis-logo.png" alt="FK Cēsis">
+      <div>
+        <h1 class="hub-brand__title anton">FK Cēsis</h1>
+        <div class="hub-brand__sub">Administrācija</div>
+      </div>
+    </div>
+    <nav class="hub-nav">
+      <a href="01-pieteikumu-rinda.html" class="is-active">Pieteikumi <span class="nav-count">7</span></a>
+      <a href="05-rekini-neapmaksatie.html">Rēķini <span class="nav-count">12</span></a>
+      <a href="#">Biedri</a>
+      <a href="#">Līgumi</a>
+      <a href="#">Plāni</a>
+      <a href="#">Atskaites</a>
+    </nav>
+    <div class="hub-header__right">
+      <div class="hub-search">
+        <span>🔍</span>
+        <input type="text" placeholder="Meklēt biedru, vecāku, personas kodu…">
+      </div>
+      <div class="user-pill">
+        <span class="user-avatar">LK</span>
+        <span>Linards K.</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 8-step pipeline rail -->
+<div class="steprail">
+  <div class="steprail__inner">
+    <a class="step step--current">
+      <span class="step__num">1</span>
+      <span class="step__txt"><span class="step__name">Datu pārbaude</span><span class="step__meta">notiek</span></span>
+    </a>
+    <a class="step">
+      <span class="step__num">2</span>
+      <span class="step__txt"><span class="step__name">Apstiprināšana</span><span class="step__meta">pieejama</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">3</span>
+      <span class="step__txt"><span class="step__name">Līgums</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">4</span>
+      <span class="step__txt"><span class="step__name">Izsniegts</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">5</span>
+      <span class="step__txt"><span class="step__name">Parakstītais</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">6</span>
+      <span class="step__txt"><span class="step__name">Maksas plāns</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">7</span>
+      <span class="step__txt"><span class="step__name">Rēķini</span><span class="step__meta">—</span></span>
+    </a>
+    <a class="step step--locked">
+      <span class="step__num">8</span>
+      <span class="step__txt"><span class="step__name">Nākamā sezona</span><span class="step__meta">—</span></span>
+    </a>
+  </div>
+</div>
+
+<main class="hub-page hub-page--flush">
+
+  <div class="crumbs">
+    <a href="01-pieteikumu-rinda.html">← Pieteikumu rinda</a>
+    <span>/</span>
+    <span>Pieteikums #1284</span>
+  </div>
+
+  <div class="page-head" style="margin-bottom:16px">
+    <div>
+      <h1 class="page-title">Emīls Bērziņš</h1>
+      <p class="page-sub">
+        Pieteikums <strong>#1284</strong> · iesniegts <strong>07.09.2026 08:41</strong> (pirms 2 h) ·
+        vecāks <strong>Anna Bērziņa</strong> · <a href="#" style="color:var(--fk-red);font-weight:700">Ģimenes centrs →</a>
+      </p>
+    </div>
+    <div class="row">
+      <span class="badge badge--submitted"><span class="badge__dot"></span> Iesniegts</span>
+      <button class="btn btn-secondary btn-sm">Atvērt Django admin</button>
+      <button class="kebab">⋯</button>
+    </div>
+  </div>
+
+  <div class="cockpit">
+
+    <!-- ============================= LEFT: document viewer -->
+    <section class="viewer">
+      <div class="viewer__tabs">
+        <button class="viewer__tab is-active">🪪 Bērna ID</button>
+        <button class="viewer__tab">🪪 Vecāka ID</button>
+        <button class="viewer__tab">🖼 Portrets</button>
+      </div>
+
+      <div class="viewer__frame">
+        <div class="viewer__stage">
+          <!-- mock identity document; rotates/zooms via the toolbar below -->
+          <svg id="docSvg" class="viewer__doc" width="440" height="278" viewBox="0 0 440 278" role="img" aria-label="Personas apliecības attēls (paraugs)">
+            <defs>
+              <linearGradient id="idbg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f7f9ff"/><stop offset="1" stop-color="#e6ecfb"/>
+              </linearGradient>
+              <linearGradient id="idband" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#0f0851"/><stop offset="1" stop-color="#2a1b8f"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="440" height="278" rx="16" fill="url(#idbg)" stroke="#c3cbe6"/>
+            <rect x="0" y="0" width="440" height="44" rx="16" fill="url(#idband)"/>
+            <rect x="0" y="30" width="440" height="14" fill="url(#idband)"/>
+            <text x="18" y="21" fill="#fff" font-family="Inter,sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">LATVIJAS REPUBLIKA · REPUBLIC OF LATVIA</text>
+            <text x="18" y="38" fill="#ffd7d8" font-family="Inter,sans-serif" font-size="10.5" font-weight="700" letter-spacing="0.8">PERSONAS APLIECĪBA / IDENTITY CARD</text>
+
+            <!-- portrait -->
+            <rect x="18" y="60" width="104" height="132" rx="8" fill="#d6ddf1" stroke="#b9c3e0"/>
+            <circle cx="70" cy="106" r="25" fill="#aeb9d9"/>
+            <path d="M32 192c8-30 22-42 38-42s30 12 38 42z" fill="#aeb9d9"/>
+            <rect x="18" y="200" width="104" height="8" rx="4" fill="#cfd7ec"/>
+
+            <!-- fields -->
+            <g font-family="Inter,sans-serif">
+              <text x="140" y="72" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">UZVĀRDS / SURNAME</text>
+              <text x="140" y="90" font-size="17" fill="#151a3d" font-weight="700">BĒRZIŅŠ</text>
+
+              <text x="140" y="112" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">VĀRDS / GIVEN NAME</text>
+              <text x="140" y="130" font-size="17" fill="#151a3d" font-weight="700">EMĪLS</text>
+
+              <text x="140" y="152" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">PERSONAS KODS</text>
+              <text x="140" y="169" font-size="15" fill="#151a3d" font-weight="700">140316-99999</text>
+
+              <text x="290" y="152" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">DZIM. DATUMS</text>
+              <text x="290" y="169" font-size="15" fill="#151a3d" font-weight="700">14.03.2016</text>
+
+              <text x="140" y="191" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">DZIMUMS</text>
+              <text x="140" y="207" font-size="14" fill="#151a3d" font-weight="700">V / M</text>
+
+              <text x="230" y="191" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">DERĪGS LĪDZ</text>
+              <text x="230" y="207" font-size="14" fill="#151a3d" font-weight="700">02.02.2031</text>
+
+              <text x="140" y="230" font-size="8.5" fill="#7b83a3" font-weight="700" letter-spacing="0.7">DOKUMENTA NR.</text>
+              <text x="140" y="246" font-size="14" fill="#151a3d" font-weight="700">LV0248915</text>
+            </g>
+
+            <!-- MRZ -->
+            <rect x="0" y="252" width="440" height="26" fill="#eff2fa"/>
+            <text x="14" y="264" font-family="monospace" font-size="9.5" fill="#5b6488" letter-spacing="1.2">IDLVA0248915&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</text>
+            <text x="14" y="275" font-family="monospace" font-size="9.5" fill="#5b6488" letter-spacing="1.2">1603149V3102025LVA&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;2</text>
+            <text x="392" y="20" font-size="9" fill="#ffd7d8" font-family="Inter,sans-serif" font-weight="700">PARAUGS</text>
+          </svg>
+        </div>
+
+        <div class="viewer__bar">
+          <button class="vbtn" onclick="rot(-90)" title="Pagriezt pa kreisi (Shift+←)">↺ 90°</button>
+          <button class="vbtn" onclick="rot(90)" title="Pagriezt pa labi (Shift+→)">↻ 90°</button>
+          <button class="vbtn" onclick="zoom(-0.15)" title="Tālāk">−</button>
+          <span class="vbar__zoom" id="zoomLbl">100 %</span>
+          <button class="vbtn" onclick="zoom(0.15)" title="Tuvāk">+</button>
+          <button class="vbtn" onclick="reset()" title="Ietilpināt logā">⤢ Ietilpināt</button>
+          <span class="vbar__spacer"></span>
+          <button class="vbtn">↗ Jaunā cilnē</button>
+          <button class="vbtn vbtn--accent">⬇ Lejupielādēt</button>
+        </div>
+      </div>
+
+      <div class="viewer__meta">
+        <span>📄 <strong>emils-id-prieksa.jpg</strong></span>
+        <span>·</span><span>1,8 MB · 2480 × 1568</span>
+        <span>·</span><span>augšupielādēts 07.09.2026 08:39</span>
+        <span class="badge badge--sm badge--submitted">Aktīvs</span>
+      </div>
+
+      <details class="tray viewer__history">
+        <summary>🗂 Aizvietotie dokumenti (1)</summary>
+        <div class="tray__body">
+          <div class="filecard">
+            <div class="filecard__icon">JPG</div>
+            <div class="filecard__txt">
+              <strong>emils-id-v1.jpg</strong>
+              <span>0,4 MB · augšupielādēts 06.09.2026 21:12 · aizvietots ar jaunāku</span>
+            </div>
+            <button class="btn btn-secondary btn-sm">Skatīt</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="callout" style="margin-top:12px">
+        <span class="callout__icon">💡</span>
+        <span>Salīdzini dokumentu ar labajā pusē redzamajiem laukiem un atzīmē katru pārbaudīto lauku. Vecāks reģistrācijas laikā jau varēja labot automātiski nolasītos datus.</span>
+      </div>
+    </section>
+
+    <!-- ============================= RIGHT: field readout -->
+    <section>
+
+      <div class="checkbar">
+        <div>
+          <div class="checkbar__count" id="cbCount">5 / 10</div>
+          <div class="checkbar__label">pārbaudīti lauki · palīglīdzeklis</div>
+        </div>
+        <div class="checkbar__track"><span id="cbTrack" style="width:50%"></span></div>
+        <button class="btn btn-secondary btn-sm" onclick="checkAll()">✓ Apstiprināt visus</button>
+      </div>
+
+      <!-- child -->
+      <div class="fgroup">
+        <div class="fgroup__head">
+          <h3 class="anton">Bērns</h3>
+          <span class="badge badge--sm badge--neutral">pret bērna ID</span>
+        </div>
+        <div class="fgroup__list">
+          <div data-field="member_full_name" class="frow frow--checked">
+            <div class="frow__label">Vārds, uzvārds</div>
+            <div class="frow__value">
+              <div class="v">Emīls Bērziņš</div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="member_personal_id" class="frow frow--checked">
+            <div class="frow__label">Personas kods</div>
+            <div class="frow__value">
+              <div class="v">140316-99999</div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="member_birth_date" class="frow frow--checked">
+            <div class="frow__label">Dzimšanas datums</div>
+            <div class="frow__value">
+              <div class="v">14.03.2016 <span class="muted" style="font-weight:600;font-size:0.9rem">· 9 g. 5 mēn.</span></div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="member_actual_address" class="frow">
+            <div class="frow__label">Faktiskā adrese</div>
+            <div class="frow__value">
+              <div class="v">Rīgas iela 4–12, Cēsis, LV-4101</div>
+              <div class="sub">
+                <span class="src-badge src-badge--typed">no pārbaudīta konta</span>
+                <span>Atzīmēts "tā pati adrese kā vecākam"</span>
+              </div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- guardian -->
+      <div class="fgroup">
+        <div class="fgroup__head">
+          <h3 class="anton">Vecāks / likumiskais pārstāvis</h3>
+          <span class="badge badge--sm badge--neutral">pret vecāka ID</span>
+        </div>
+        <div class="fgroup__list">
+          <div data-field="guardian_name" class="frow frow--checked">
+            <div class="frow__label">Vārds, uzvārds</div>
+            <div class="frow__value">
+              <div class="v">Anna Bērziņa</div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="guardian_pid" class="frow">
+            <div class="frow__label">Personas kods</div>
+            <div class="frow__value">
+              <div class="v">210784-99999</div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="guardian_address" class="frow">
+            <div class="frow__label">Adrese</div>
+            <div class="frow__value">
+              <div class="v">Rīgas iela 4–12, Cēsis, LV-4101</div>
+              <div class="sub"><span class="src-badge src-badge--doc">no dokumenta</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="guardian_phone" class="frow">
+            <div class="frow__label">Tālrunis</div>
+            <div class="frow__value">
+              <div class="v">+371 2xx xx xxx</div>
+              <div class="sub"><span class="src-badge src-badge--edited">jāpārbauda</span></div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div data-field="guardian_email" data-default-checked="true" class="frow frow--checked">
+            <div class="frow__label">E-pasts</div>
+            <div class="frow__value">
+              <div class="v">anna.berzina@example.lv</div>
+              <div class="sub">
+                <span class="badge badge--sm badge--submitted">✓ Sistēma apstiprinājusi</span>
+                <span>Vienreizējais kods · nav jāpārbauda manuāli</span>
+              </div>
+            </div>
+            <button class="frow__check" onclick="tick(this)" title="Sistēmas apstiprināts — atzīmi var noņemt, ja ir iemesls">✓</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- kit + agreement prefs -->
+      <div class="fgroup">
+        <div class="fgroup__head">
+          <h3 class="anton">Ekipējums un izvēles</h3>
+          <span class="badge badge--sm badge--neutral">bez dokumenta</span>
+        </div>
+        <div class="fgroup__list">
+          <div data-field="member_kit_size_shirt" class="frow">
+            <div class="frow__label">Formas izmērs</div>
+            <div class="frow__value">
+              <div class="v">140 cm</div>
+              <div class="sub">Viens izmērs kreklam un šortiem</div>
+            </div>
+            <button class="frow__check" onclick="tick(this)">✓</button>
+          </div>
+          <div class="frow">
+            <div class="frow__label">Parakstīšanas veids</div>
+            <div class="frow__value">
+              <div class="v">Ar roku, papīra dokuments</div>
+              <div class="sub">Nosaka 3.–5. soli</div>
+            </div>
+            <span></span>
+          </div>
+          <div class="frow">
+            <div class="frow__label">Maksājuma veids</div>
+            <div class="frow__value">
+              <div class="v">Pa daļām</div>
+              <div class="sub">Nosaka 6. soļa priekšatlasi</div>
+            </div>
+            <span></span>
+          </div>
+          <div class="frow">
+            <div class="frow__label">Vairāku bērnu atlaide</div>
+            <div class="frow__value">
+              <div class="v">Atteicās — atbalsta klubu</div>
+              <div class="sub">2. bērns ģimenē: Alise Vītola (melnraksts)</div>
+            </div>
+            <span></span>
+          </div>
+          <div class="frow">
+            <div class="frow__label">Ieteikuma kods</div>
+            <div class="frow__value"><div class="v v--empty">Nav norādīts</div></div>
+            <span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fgroup">
+        <div class="fgroup__head">
+          <h3 class="anton">Piekrišanas</h3>
+        </div>
+        <div class="fgroup__list">
+          <div class="frow">
+            <div class="frow__label">Personas datu apstrāde</div>
+            <div class="frow__value">
+              <div class="v">Piekrita 07.09.2026 08:38</div>
+              <div class="sub">Versija <strong>v1-2026-05</strong></div>
+            </div>
+            <span class="badge badge--sm badge--submitted">✓</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- step 2 inline -->
+      <div class="card" style="margin-top:18px">
+        <div class="card__head">
+          <span class="card__step">2</span>
+          <h2 class="anton">Apstiprināšana</h2>
+        </div>
+        <div class="card__body">
+          <p class="hint" style="margin-bottom:14px">Apstiprinot tiek izveidots biedra ieraksts un vecāks saņem e-pastu. Treniņu grupu var piešķirt arī vēlāk. Lauku atzīmes ir tikai pārbaudes palīglīdzeklis — tās neietekmē apstiprināšanu.</p>
+          <div class="form-grid">
+            <div class="f">
+              <label for="tg">Treniņu grupa</label>
+              <select id="tg">
+                <option>U-9 zēni</option>
+                <option>U-11 zēni</option>
+                <option>— Piešķirsim vēlāk —</option>
+              </select>
+            </div>
+            <div class="f">
+              <label for="season">Sezona</label>
+              <select id="season"><option>2026/2027</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="card__foot">
+          <span class="hint">Solis 2 no 8</span>
+          <span class="card__spacer"></span>
+          <button class="btn btn-red">Apstiprināt pieteikumu →</button>
+        </div>
+      </div>
+
+      <details class="tray" style="margin-top:14px">
+        <summary>⚠ Riskantās darbības — noraidīšana, dzēšana</summary>
+        <div class="tray__body">
+          <div class="callout callout--danger" style="margin-bottom:12px">
+            <span class="callout__icon">⚠</span>
+            <span>Noraidīšana ir gala stāvoklis — vecāks nevar rediģēt noraidītu pieteikumu.</span>
+          </div>
+          <div class="f f--full">
+            <label for="rej">Noraidīšanas iemesls (redz vecāks)</label>
+            <textarea id="rej" placeholder="Piem. bērns neatbilst vecuma grupai…"></textarea>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn btn-danger-outline">Noraidīt pieteikumu</button>
+          </div>
+        </div>
+      </details>
+
+    </section>
+  </div>
+</main>
+
+<!-- sticky action bar -->
+<div class="actionbar">
+  <div class="actionbar__inner">
+    <span class="actionbar__note">
+      <strong id="abCount">5 / 10</strong> lauku atzīmēti
+    </span>
+    <span class="actionbar__note">·</span>
+    <span class="actionbar__note">Pieteikums #1284 · Emīls Bērziņš</span>
+    <span class="actionbar__spacer"></span>
+    <button class="btn btn-secondary">✎ Pieprasīt labojumu</button>
+    <button class="btn btn-danger-outline">Noraidīt</button>
+    <button class="btn btn-red">Apstiprināt →</button>
+  </div>
+</div>
+
+<script>
+  // Mock-up interactions only: viewer transform + field check-off progress.
+  let deg = 0, scale = 1;
+  const svg = document.getElementById('docSvg');
+  function apply() {
+    svg.style.transform = 'rotate(' + deg + 'deg) scale(' + scale + ')';
+    document.getElementById('zoomLbl').textContent = Math.round(scale * 100) + ' %';
+  }
+  function rot(d) { deg += d; apply(); }
+  function zoom(d) { scale = Math.min(3, Math.max(0.3, scale + d)); apply(); }
+  function reset() { deg = 0; scale = 1; apply(); }
+  document.addEventListener('keydown', function (e) {
+    if (!e.shiftKey) return;
+    if (e.key === 'ArrowLeft') rot(-90);
+    if (e.key === 'ArrowRight') rot(90);
+  });
+
+  // Check-off state persists per application in the reviewer's own browser.
+  // Field keys and booleans only - no field values, so no personal data is stored.
+  const APPLICATION_ID = '1284';
+  const STORE_KEY = 'fkc.hub.checks.' + APPLICATION_ID;
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function save(state) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    catch (e) { /* private window or blocked site data - stay in-memory */ }
+  }
+
+  function refresh() {
+    const rows = document.querySelectorAll('.frow[data-field]');
+    const done = document.querySelectorAll('.frow[data-field].frow--checked').length;
+    const txt = done + ' / ' + rows.length;
+    document.getElementById('cbCount').textContent = txt;
+    document.getElementById('abCount').textContent = txt;
+    document.getElementById('cbTrack').style.width = (done / rows.length * 100) + '%';
+  }
+  // Rows the system has already verified (e.g. the e-mail confirmed by
+  // one-time code) start checked. Storage therefore records an explicit
+  // boolean per field, never an absence - otherwise a deliberate untick of a
+  // default-checked row would silently revert on the next page load.
+  function isDefaultChecked(row) { return row.dataset.defaultChecked === 'true'; }
+
+  function tick(btn) {
+    const row = btn.closest('.frow');
+    const on = row.classList.toggle('frow--checked');
+    const state = load();
+    state[row.dataset.field] = on;
+    save(state);
+    refresh();
+  }
+  function checkAll() {
+    const state = load();
+    document.querySelectorAll('.frow[data-field]').forEach(function (row) {
+      row.classList.add('frow--checked');
+      state[row.dataset.field] = true;
+    });
+    save(state);
+    refresh();
+  }
+  function restore() {
+    const state = load();
+    if (Object.keys(state).length === 0) return;  // keep the mock-up's demo state
+    document.querySelectorAll('.frow[data-field]').forEach(function (row) {
+      const stored = state[row.dataset.field];
+      const on = stored === undefined ? isDefaultChecked(row) : stored === true;
+      row.classList.toggle('frow--checked', on);
+    });
+  }
+  restore();
+  refresh();
+</script>
+</body>
+</html>
