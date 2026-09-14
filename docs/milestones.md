@@ -131,6 +131,26 @@ Open items requiring attention:
 - Migrations: `core/0008`, `members/0012`. Verification: `2033 passed`, ruff clean, mypy clean (436 files; existing unchecked-function notes only), migration check clean; code review approved.
 - Spec: `docs/superpowers/specs/2026-08-26-p17-configurable-member-export-design.md`. Plan: `docs/superpowers/plans/2026-08-26-p17-configurable-member-export.md`.
 
+### Admin Hub Member export runner
+**Status:** DEV complete. No migration. No LAN/manual acceptance.
+
+**Context**
+P17 delivered the shared `MemberExportTemplate` machinery (admin CRUD, column registry, filter semantics, XLSX/CSV rendering, audit). This extension surfaces a staff-only Admin Hub runner (`/hub/eksporti/`) so staff can preview and download templates without navigating to Django admin.
+
+**Delivered**
+- New staff-only route `/hub/eksporti/` with top-nav `Eksporti` entry beside `Pieteikumi` and `Rēķini`.
+- Member-only, run-only adapter over the existing P17 `MemberExportTemplate` machinery. Template authoring/edit/delete/default/pin/reorder remain Django-admin-only.
+- Templates render in existing alphabetical `name, pk` order; no default template.
+- Staff can temporarily replace agreement-status and training-group filters for one preview/download. Empty input removes that predicate. Overrides never persist — P17 query/render services own filter semantics and output rendering.
+- Preview returns exact matching count plus first N rows, default `EXPORT_PREVIEW_ROW_LIMIT=20`. Malformed/missing/non-positive env values safely fall back to 20.
+- XLSX default, CSV optional. Direct in-memory response only: no retained file, provider, job, schedule, or email.
+- All active staff can run sensitive templates; sensitive marker present.
+- Only successful downloads produce an existing redacted `MEMBER_EXPORT_RUN` audit event with effective structural filters, count, and format. Previews do not audit; no values, PII, or template name are recorded.
+- Corrupted templates refuse preview/download and link to the Django-admin repair surface.
+- Verification evidence: focused Hub suite 47 passed after review fixes; full repository evidence `2427 passed`, ruff clean, mypy clean (483 source files), `makemigrations --check` no changes.
+- Code review approved after two minor fixes: invalid POST retains selected sensitive metadata; audit group IDs sorted numerically.
+- Design: `docs/superpowers/specs/2026-09-11-admin-hub-member-export-design.md`. Plan: `docs/superpowers/plans/2026-09-11-admin-hub-member-export.md`.
+
 ### P18 — Unfinished-application lifecycle
 **Status:** Planned.
 

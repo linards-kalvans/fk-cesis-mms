@@ -118,6 +118,9 @@ def build_review_context(
         application, str(Document.Kind.GUARDIAN_IDENTITY)
     )
     member_panel = build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
+    member_back_panel = build_doc_panel(
+        application, str(Document.Kind.MEMBER_IDENTITY_BACK)
+    )
     portrait_panel = build_doc_panel(
         application, str(Document.Kind.MEMBER_PORTRAIT)
     )
@@ -264,6 +267,7 @@ def build_review_context(
         "related_links": related_links,
         "guardian_panel": guardian_panel,
         "member_panel": member_panel,
+        "member_back_panel": member_back_panel,
         "portrait_panel": portrait_panel,
         "active_training_groups": active_training_groups,
         "current_inactive_group": current_inactive_group,

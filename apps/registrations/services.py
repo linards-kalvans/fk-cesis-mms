@@ -522,6 +522,12 @@ def create_or_update_draft(
     if member_doc is not None:
         _handle_document_upload(application, member_doc, "member_identity")
 
+    member_back_doc = files.get("member_identity_back_document")
+    if member_back_doc is not None:
+        _handle_document_upload(
+            application, member_back_doc, str(Document.Kind.MEMBER_IDENTITY_BACK)
+        )
+
     portrait_doc = files.get("member_portrait_document")
     if portrait_doc is not None:
         _handle_document_upload(application, portrait_doc, "member_portrait")

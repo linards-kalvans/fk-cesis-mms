@@ -19,6 +19,7 @@ class RegistrationApplicationForm(forms.Form):
             (
                 "guardian_identity_document",
                 "member_identity_document",
+                "member_identity_back_document",
                 "member_portrait_document",
             ),
         ),
@@ -92,7 +93,18 @@ class RegistrationApplicationForm(forms.Form):
     # Enforced at service layer, not here — rendered manually in template.
     personal_data_consent = forms.BooleanField(required=False, label="Piekrītu personas datu apstrādei")
     guardian_identity_document = forms.FileField(required=False, label="Vecāka personas dokuments")
-    member_identity_document = forms.FileField(required=False, label="Bērna personu apliecinošs dokuments")
+    member_identity_document = forms.FileField(
+        required=False,
+        label="Bērna personas dokuments — pase vai ID kartes priekšpuse",
+    )
+    member_identity_back_document = forms.FileField(
+        required=False,
+        label=(
+            "Bērna ID kartes aizmugure (nav obligāta, bet nepieciešama, ja "
+            "augšupielādēta bērna ID karte; nav vajadzīga pasei vai "
+            "dzimšanas apliecībai)"
+        ),
+    )
     member_portrait_document = forms.FileField(required=False, label="Bērna portrets")
 
     submit_required_fields = (
@@ -163,12 +175,19 @@ class RegistrationApplicationForm(forms.Form):
         self.fields["guardian_identity_document"].widget.attrs["data-progress-slot"] = "id_guardian_identity_document_progress"
         self.fields["member_identity_document"].widget.attrs["data-async-upload"] = "member_identity"
         self.fields["member_identity_document"].widget.attrs["data-progress-slot"] = "id_member_identity_document_progress"
+        self.fields["member_identity_back_document"].widget.attrs["data-async-upload"] = "member_identity_back"
+        self.fields["member_identity_back_document"].widget.attrs["data-progress-slot"] = "id_member_identity_back_document_progress"
         self.fields["member_portrait_document"].widget.attrs["data-async-upload"] = "member_portrait"
         self.fields["member_portrait_document"].widget.attrs["data-progress-slot"] = "id_member_portrait_document_progress"
 
         # P4 Slice D: canonical file inputs are visually hidden — the visible
         # tap surface is the <label for=...> rendered by document_card.html.
-        for _file_field in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+        for _file_field in (
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_identity_back_document",
+            "member_portrait_document",
+        ):
             existing = self.fields[_file_field].widget.attrs.get("class", "")
             classes = (existing + " fk-visually-hidden").strip()
             self.fields[_file_field].widget.attrs["class"] = classes

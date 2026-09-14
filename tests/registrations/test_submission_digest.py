@@ -3,7 +3,7 @@
 Covers public-contract behavior of ``apps.registrations.tasks.send_submitted_registration_digest``:
 - Selection: submitted_at set AND submission_digest_sent_at is None, regardless of current status.
 - Email: exactly one plain-text Latvian EmailMessage(to=[], bcc=[...]); serialized MIME has no Bcc: header.
-- Body content: child name, guardian display name, Riga-local submitted time, current Latvian status label, absolute admin change URL.
+- Body content: child name, guardian display name, Riga-local submitted time, current Latvian status label, absolute Admin Hub cockpit URL.
 - Body must NOT include guardian email, phone, personal IDs, addresses, documents, or review-message text.
 - Success: return delivered count, set included rows' submission_digest_sent_at, set singleton last_successful_at.
 - Empty pending: return 0, no email, no state advance on rows or singleton.
@@ -188,7 +188,7 @@ class TestDigestJobEmailPrivacy:
     def test_email_body_includes_required_fields_with_exact_time_and_url(
         self, parent_account, kit_sizes
     ):
-        """Body includes child name, guardian display name, exact Riga-local submitted time, status label, exact admin URL."""
+        """Body includes child name, guardian display name, exact Riga-local submitted time, status label, exact Hub cockpit URL."""
         from datetime import datetime, timezone
 
         from apps.registrations.tasks import send_submitted_registration_digest
@@ -220,10 +220,10 @@ class TestDigestJobEmailPrivacy:
         )
         # Current Latvian status label
         assert "Iesniegts" in body
-        # Exact absolute admin change URL
+        # Exact absolute Admin Hub cockpit URL (SITE_URL-based)
         expected_url = (
             "https://members.example.test"
-            + reverse("admin:registrations_registrationapplication_change", args=[app.pk])
+            + reverse("admin_hub:cockpit", args=[app.pk])
         )
         assert expected_url in body
 

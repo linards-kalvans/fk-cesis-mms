@@ -33,9 +33,7 @@ def _build_entries(locked_apps):
     site_url = settings.SITE_URL
     entries = []
     for app in locked_apps:
-        change_path = reverse(
-            "admin:registrations_registrationapplication_change", args=[app.pk]
-        )
+        change_path = reverse("admin_hub:cockpit", args=[app.pk])
         entries.append(
             {
                 "child": app.member_full_name,

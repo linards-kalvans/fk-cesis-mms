@@ -1,0 +1,143 @@
+{% extends "admin_hub/base_hub.html" %}
+{% comment %}Run-only member export runner. Every value below is view-prepared:
+sensitivity, column labels/counts, and preview cells come from the view (and
+the P17 registry), never derived in the template.{% endcomment %}
+
+{% block hub_title %}FK Cēsis Admin — Eksporti{% endblock %}
+
+{% block hub_content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Eksporti</h1>
+    <p class="page-sub">Izvēlieties šablonu, īslaicīgi pamainiet filtrus, priekšskatiet un lejupielādējiet biedru datus.</p>
+  </div>
+</div>
+
+{% if form and form.errors %}
+<div class="callout callout--danger export-errors" role="alert">
+  <span class="callout__icon">!</span>
+  <div>
+    {{ form.non_field_errors }}
+    {% for field in form %}
+    {% if field.errors %}
+    <p class="export-error-label">{{ field.label }}</p>
+    {{ field.errors }}
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if templates %}
+<div class="card export-chooser">
+  <div class="card__head">
+    <h2>Šabloni</h2>
+  </div>
+  <div class="export-template-list" data-export-template-list>
+    {% for tpl in templates %}
+    <a class="export-template-item{% if selected_template.pk == tpl.pk %} is-selected{% endif %}" href="?template={{ tpl.pk }}">
+      <span class="export-template-item__name">{{ tpl.name }}</span>
+      <span class="export-template-item__meta">{{ tpl.column_count }} kolonnas{% if tpl.has_sensitive %} · Sensitīvi dati{% endif %}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <p class="mb0">Nav sagatavotu šablonu.</p>
+  <p class="hint">Šablonus izveido un rediģē pilnajā administrācijā.</p>
+  <a class="btn btn-secondary" href="{{ repair_url }}">Pārvaldīt šablonus Django admin →</a>
+</div>
+{% endif %}
+
+{% if selected_template %}
+<div class="card export-runner">
+  <div class="card__head">
+    <h2>{{ selected_template.name }}</h2>
+    {% if selected_template.has_sensitive %}
+    <span class="export-sensitive-badge" data-export-sensitive>Sensitīvi dati</span>
+    {% endif %}
+  </div>
+  <p class="hint">{{ selected_template.column_count }} kolonnas: {{ selected_template.column_labels|join:", " }}</p>
+
+  {% if template_error %}
+  <div class="callout callout--danger" role="alert">
+    <span class="callout__icon">!</span>
+    <div>
+      <p class="mb0">{{ template_error }}</p>
+      <p class="mb0"><a class="btn btn-sm btn-secondary" href="{{ repair_url }}">Atvērt šablonu administrācijā →</a></p>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'admin_hub:exports' %}" class="export-form">
+    {% csrf_token %}
+    <input type="hidden" name="template_id" value="{{ selected_template.pk }}">
+    <div class="export-filters">
+      <div class="export-filter-group">
+        <span class="export-filter-label">Līguma statuss (vairāku izvēle)</span>
+        <select name="agreement_states" multiple size="5">
+          {% for value, label in agreement_state_options %}
+          <option value="{{ value }}"{% if value in selected_agreement_states %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <p class="hint">Tukša izvēle noņem šo filtru.</p>
+      </div>
+      <div class="export-filter-group">
+        <span class="export-filter-label">Treniņu grupa (vairāku izvēle)</span>
+        <select name="group_ids" multiple size="5">
+          {% for group in all_groups %}
+          <option value="{{ group.pk }}"{% if group.pk in selected_group_ids %} selected{% endif %}>{{ group.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="hint">Tukša izvēle noņem šo filtru.</p>
+      </div>
+      <div class="export-filter-group">
+        <span class="export-filter-label">Formāts</span>
+        <label class="export-radio"><input type="radio" name="fmt" value="xlsx"{% if fmt == "xlsx" %} checked{% endif %}> XLSX</label>
+        <label class="export-radio"><input type="radio" name="fmt" value="csv"{% if fmt == "csv" %} checked{% endif %}> CSV</label>
+      </div>
+    </div>
+    <div class="export-actions">
+      <button type="submit" class="btn btn-secondary" name="action" value="preview">Priekšskats</button>
+      <button type="submit" class="btn btn-primary" name="action" value="download">Lejupielādēt</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if preview is not None %}
+<div class="card export-preview" data-export-preview>
+  <div class="card__head">
+    <h3>Sakrit: {{ preview.count }} biedri</h3>
+  </div>
+  {% if preview.rows %}
+  <div class="export-table-wrap">
+    <table class="export-table" data-export-table>
+      <thead>
+        <tr>
+          {% for header in preview.headers %}
+          <th>{{ header }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview.rows %}
+        <tr>
+          {% for cell in row %}
+          <td>{{ cell|default:"—" }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if preview.count > preview.limit %}
+  <p class="hint">Rādīti pirmie {{ preview.limit }} no {{ preview.count }} rezultātiem.</p>
+  {% endif %}
+  {% else %}
+  <p class="hint">Nav biedru, kas atbilstu izvēlētajiem filtriem.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

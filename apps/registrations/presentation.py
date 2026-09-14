@@ -12,6 +12,7 @@ from apps.registrations.models import RegistrationApplication
 DOCUMENT_KIND_LABELS: dict[str, str] = {
     "guardian_identity": "Vecāka personu apliecinošs dokuments",
     "member_identity": "Bērna personu apliecinošs dokuments",
+    "member_identity_back": "Bērna ID kartes aizmugure",
     "member_portrait": "Bērna foto",
 }
 
@@ -19,6 +20,7 @@ DOCUMENT_KIND_LABELS: dict[str, str] = {
 DOCUMENT_FIELD_ID_MAP = {
     "guardian_identity": "id_guardian_identity_document",
     "member_identity": "id_member_identity_document",
+    "member_identity_back": "id_member_identity_back_document",
     "member_portrait": "id_member_portrait_document",
 }
 
@@ -35,6 +37,7 @@ SOURCE_LABEL_MAP = {
 _FIELD_TO_KIND: dict[str, str] = {
     "guardian_identity_document": "guardian_identity",
     "member_identity_document": "member_identity",
+    "member_identity_back_document": "member_identity_back",
     "member_portrait_document": "member_portrait",
 }
 

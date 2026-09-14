@@ -55,7 +55,7 @@ Staff responsible for reviewing registration applications have no proactive noti
 
 ### 3.6 Data minimisation in the email body
 
-**Decision:** The email template includes only: child name, guardian name, Riga submission datetime, current status display string, and the admin change-page URL.
+**Decision:** The email template includes only: child name, guardian name, Riga submission datetime, current status display string, and the Hub cockpit URL (`/hub/pieteikumi/<id>/`).
 
 **Why:** Names are necessary personal data for staff to identify the application. Staff already have admin access to full details, so the digest is a **notification**, not a replacement for the admin UI. Omitting contact details, PID, address, review content, and documents limits impact if a message is forwarded or retained in an inbox.
 

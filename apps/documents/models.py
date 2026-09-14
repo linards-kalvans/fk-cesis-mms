@@ -14,6 +14,7 @@ class Document(TimeStampedModel):
     class Kind(models.TextChoices):
         GUARDIAN_IDENTITY = "guardian_identity", "Guardian identity"
         MEMBER_IDENTITY = "member_identity", "Member identity"
+        MEMBER_IDENTITY_BACK = "member_identity_back", "Bērna ID kartes aizmugure"
         MEMBER_PORTRAIT = "member_portrait", "Member portrait"
 
     class OcrStatus(models.TextChoices):
