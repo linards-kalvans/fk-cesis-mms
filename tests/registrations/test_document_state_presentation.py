@@ -52,6 +52,14 @@ def _make_member_portrait_file(name="test_portrait.png"):
     )
 
 
+def _make_member_identity_back_file(name="test_member_back.png"):
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n",
+        content_type="image/png",
+    )
+
+
 def _login(client, account):
     """Issue magic link and GET verify to establish session."""
     raw = issue_magic_link(account)
@@ -728,7 +736,12 @@ class TestUploadSlotMarkup:
 
     def test_each_doc_card_has_one_canonical_hidden_input(self, draft_application, verified_client):
         html = self._workspace_html(draft_application, verified_client)
-        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+        for field_name in (
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_identity_back_document",
+            "member_portrait_document",
+        ):
             input_id = f"id_{field_name}"
             assert html.count(f'id="{input_id}"') == 1, (
                 f"{input_id} must render exactly once (no duplicates)."
@@ -742,7 +755,12 @@ class TestUploadSlotMarkup:
 
     def test_each_doc_card_has_file_label_pointing_at_canonical_input(self, draft_application, verified_client):
         html = self._workspace_html(draft_application, verified_client)
-        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+        for field_name in (
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_identity_back_document",
+            "member_portrait_document",
+        ):
             input_id = f"id_{field_name}"
             import re
             match = re.search(
@@ -757,7 +775,12 @@ class TestUploadSlotMarkup:
 
     def test_each_doc_card_has_camera_label_with_marker(self, draft_application, verified_client):
         html = self._workspace_html(draft_application, verified_client)
-        for field_name in ("guardian_identity_document", "member_identity_document", "member_portrait_document"):
+        for field_name in (
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_identity_back_document",
+            "member_portrait_document",
+        ):
             input_id = f"id_{field_name}"
             import re
             match = re.search(
@@ -772,8 +795,9 @@ class TestUploadSlotMarkup:
 
     def test_camera_label_wrapped_in_fk_camera_only(self, draft_application, verified_client):
         html = self._workspace_html(draft_application, verified_client)
-        assert html.count("fk-camera-only") >= 3, (
-            "Expected at least three .fk-camera-only wrappers (one per document slot)."
+        assert html.count("fk-camera-only") >= 4, (
+            "Expected at least four .fk-camera-only wrappers (one per document "
+            "slot, incl. the optional member ID-card back)."
         )
 
     def test_no_aizvietot_anchor_link(self, draft_application, verified_client):
@@ -790,15 +814,356 @@ class TestUploadSlotMarkup:
         # SVG icon. Icon must be aria-hidden so AT users don't hear it.
         html = self._workspace_html(draft_application, verified_client)
         import re
-        # Six labels total (3 doc kinds × 2 affordances each). Every label that
-        # contains one of these texts must have an aria-hidden SVG above the text.
+        # Eight labels total (4 doc kinds × 2 affordances each — incl. the
+        # optional member ID-card back). Every label that contains one of
+        # these texts must have an aria-hidden SVG above the text.
         for label_text in ("Augšupielādēt failu", "Uzņemt attēlu"):
             matches = re.findall(
                 rf'<label[^>]*>\s*<svg[^>]*aria-hidden="true"[^>]*>.*?</svg>\s*{label_text}',
                 html,
                 re.DOTALL,
             )
-            assert len(matches) == 3, (
-                f"Expected 3 {label_text!r} labels each preceded by an "
+            assert len(matches) == 4, (
+                f"Expected 4 {label_text!r} labels each preceded by an "
                 f"aria-hidden SVG icon; found {len(matches)}."
             )
+
+
+# ===========================================================================
+# 8. Member ID-card back upload — workspace card + direct form-save (2026-09-11)
+# ===========================================================================
+
+
+class TestMemberIdentityBackWorkspaceCard:
+    """Requirements 5–6: direct form-save persists a private Document of the
+    new kind with no OCR, and the parent workspace renders the back card with
+    its Latvian label, the uploaded filename, and the renamed front label.
+    """
+
+    BACK_CARD_LABEL = "Bērna ID kartes aizmugure"
+    FRONT_FORM_LABEL = (
+        "Bērna personas dokuments — pase vai ID kartes priekšpuse"
+    )
+
+    def _draft_with_back_document(self, email="backws@example.com"):
+        acct = ParentAccount.objects.create(
+            email=email,
+            phone="+37121000000",
+        )
+        app = create_or_update_draft(
+            data={
+                "guardian_email": email,
+                "guardian_first_name": "BackWS",
+                "guardian_family_name": "Parent",
+                "guardian_personal_id": "010101-21000",
+                "guardian_phone": "+37121000000",
+                "guardian_declared_address": "Riga 21",
+                "member_full_name": "BackWS Child",
+                "member_personal_id": "010125-21000",
+                "member_birth_date": "2025-01-01",
+                "member_actual_address": "Riga 21",
+                "member_same_address_as_guardian": True,
+                "preferred_agreement_signing": "paper",
+            },
+            files={
+                "member_identity_back_document": _make_member_identity_back_file(
+                    "member_back.png"
+                ),
+            },
+            verified_account=acct,
+        )
+        return acct, app
+
+    def test_direct_form_save_persists_back_document_without_ocr(self):
+        from unittest.mock import patch
+
+        from apps.documents.models import Document, DocumentExtraction
+
+        with patch("apps.registrations.services.enqueue_ocr_job") as enqueue:
+            _acct, app = self._draft_with_back_document()
+
+        back_doc = Document.objects.get(
+            application=app, kind=Document.Kind.MEMBER_IDENTITY_BACK
+        )
+        assert back_doc.original_filename == "member_back.png"
+        assert back_doc.deleted_at is None
+        assert back_doc.ocr_status == Document.OcrStatus.NOT_REQUESTED
+        assert not DocumentExtraction.objects.filter(document=back_doc).exists()
+        enqueue.assert_not_called()
+
+    def test_workspace_shows_back_card_label_and_uploaded_filename(self):
+        from apps.documents.models import Document, DocumentExtraction
+
+        acct, app = self._draft_with_back_document("backws2@example.com")
+        client = Client()
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        content = resp.content.decode()
+
+        # The back card renders with its Latvian kind label (not the raw key).
+        kind_spans = re.findall(
+            r'<span class="fk-document-card__kind">(.*?)</span>', content
+        )
+        assert self.BACK_CARD_LABEL in kind_spans, (
+            f"Workspace must show the back card label '{self.BACK_CARD_LABEL}', "
+            "not the raw kind key."
+        )
+        assert "member_identity_back" not in "".join(kind_spans)
+
+        # Uploaded filename visible on the card.
+        assert "member_back.png" in content
+
+        # Card order follows document order: front → back → portrait.
+        assert kind_spans.index(self.BACK_CARD_LABEL) == (
+            kind_spans.index("Bērna personu apliecinošs dokuments") + 1
+        ), "back card must come directly after the member front card"
+        assert kind_spans.index(self.BACK_CARD_LABEL) == (
+            kind_spans.index("Bērna foto") - 1
+        ), "back card must come directly before the portrait card"
+
+        # Canonical input rendered with the async-upload hook, inside the card.
+        match = re.search(
+            r'<input[^>]*id="id_member_identity_back_document"[^>]*>', content
+        )
+        assert match, "canonical back input must render in the workspace"
+        assert 'data-async-upload="member_identity_back"' in match.group(0)
+
+        # No OCR extraction was created for the back document.
+        back_doc = Document.objects.get(
+            application=app, kind=Document.Kind.MEMBER_IDENTITY_BACK
+        )
+        assert not DocumentExtraction.objects.filter(document=back_doc).exists()
+
+    def test_workspace_form_shows_renamed_front_form_label(self):
+        acct, app = self._draft_with_back_document("backws3@example.com")
+        client = Client()
+        _login(client, acct)
+
+        resp = client.get(f"/applications/{app.pk}/")
+
+        assert resp.status_code == 200
+        form = resp.context["form"]
+        assert (
+            form.fields["member_identity_document"].label
+            == self.FRONT_FORM_LABEL
+        ), (
+            "The workspace form must carry the renamed member identity front "
+            "label (requirement 6)."
+        )
+
+
+# ===========================================================================
+# 9. Back-card helper text directly below short title (2026-09-14)
+#
+# Approved requirement: the member_identity_back document card alone shows the
+# short title "Bērna ID kartes aizmugure" with the helper line
+# "Nav obligāta, bet nepieciešama, ja augšupielādēta bērna ID karte; nav
+# vajadzīga pasei vai dzimšanas apliecībai." immediately below the title, in
+# both the empty and uploaded card states. The helper must not render in the
+# guardian-front, child-front, or portrait cards. The form field label stays
+# unchanged.
+# ===========================================================================
+
+BACK_CARD_TITLE = "Bērna ID kartes aizmugure"
+BACK_CARD_HELPER = (
+    "Nav obligāta, bet nepieciešama, ja augšupielādēta bērna ID karte; "
+    "nav vajadzīga pasei vai dzimšanas apliecībai."
+)
+# NB: the form label keeps the long parenthesised variant — its tail ends
+# "...apliecībai)" (no trailing period), so it never matches BACK_CARD_HELPER
+# exactly.
+BACK_CARD_FORM_LABEL = (
+    "Bērna ID kartes aizmugure (nav obligāta, bet nepieciešama, ja "
+    "augšupielādēta bērna ID karte; nav vajadzīga pasei vai "
+    "dzimšanas apliecībai)"
+)
+GUARDIAN_CARD_TITLE = "Vecāka personu apliecinošs dokuments"
+MEMBER_FRONT_CARD_TITLE = "Bērna personu apliecinošs dokuments"
+PORTRAIT_CARD_TITLE = "Bērna foto"
+
+DOC_CARD_MARKER = '<div class="fk-document-card">'
+
+OTHER_CARD_TITLES = (
+    GUARDIAN_CARD_TITLE,
+    MEMBER_FRONT_CARD_TITLE,
+    PORTRAIT_CARD_TITLE,
+)
+
+
+def _draft_for_helper_tests(email, files=None):
+    """Verified parent + editable draft, optionally with attached documents."""
+    acct = ParentAccount.objects.create(
+        email=email,
+        phone="+37122000000",
+    )
+    app = create_or_update_draft(
+        data={
+            "guardian_email": email,
+            "guardian_first_name": "BackHelper",
+            "guardian_family_name": "Parent",
+            "guardian_personal_id": "010101-22000",
+            "guardian_phone": "+37122000000",
+            "guardian_declared_address": "Riga 22",
+            "member_full_name": "BackHelper Child",
+            "member_personal_id": "010125-22000",
+            "member_birth_date": "2025-01-01",
+            "member_actual_address": "Riga 22",
+            "member_same_address_as_guardian": True,
+            "preferred_agreement_signing": "paper",
+        },
+        files=files or {},
+        verified_account=acct,
+    )
+    return acct, app
+
+
+def _workspace_html_and_response(acct, app):
+    client = Client()
+    _login(client, acct)
+    resp = client.get(f"/applications/{app.pk}/")
+    assert resp.status_code == 200
+    return resp.content.decode(), resp
+
+
+def _card_fragment(html, title):
+    """Return the single .fk-document-card fragment whose kind-span title matches.
+
+    Splitting on the card marker guarantees each fragment covers exactly one
+    card (it ends where the next card starts; the last fragment bleeds into
+    the page tail, where the review-step summary renders the long form labels
+    as bare <span>s). Matching on `fk-document-card__kind">title</span>`
+    instead of a bare substring keeps the review-step long label from being
+    mistaken for a card title.
+    """
+    title_marker = f'fk-document-card__kind">{title}</span>'
+    fragments = [DOC_CARD_MARKER + part for part in html.split(DOC_CARD_MARKER)[1:]]
+    matches = [frag for frag in fragments if title_marker in frag]
+    assert len(matches) == 1, (
+        f"expected exactly one document card containing {title!r}, "
+        f"found {len(matches)}"
+    )
+    return matches[0]
+
+
+class TestBackCardHelperText:
+    """Child ID-back card: short title + exact helper line directly below it."""
+
+    def test_helper_below_short_title_empty_state(self):
+        acct, app = _draft_for_helper_tests("backhelper-empty@example.com")
+        html, _resp = _workspace_html_and_response(acct, app)
+
+        frag = _card_fragment(html, BACK_CARD_TITLE)
+
+        # Title is the short label inside the kind span (helper not merged in).
+        kind_spans = re.findall(
+            r'<span class="fk-document-card__kind">(.*?)</span>', html
+        )
+        assert BACK_CARD_TITLE in kind_spans, (
+            f"back card kind span must render the short title "
+            f"{BACK_CARD_TITLE!r}"
+        )
+        for span in kind_spans:
+            assert "Nav obligāta" not in span, (
+                "helper text must render below the title, not inside the "
+                "fk-document-card__kind span"
+            )
+
+        # Helper present in the back card, directly below the title and above
+        # the card body status line.
+        assert BACK_CARD_HELPER in frag, (
+            f"empty back card must show helper {BACK_CARD_HELPER!r}"
+        )
+        assert frag.index(BACK_CARD_TITLE) < frag.index(BACK_CARD_HELPER)
+        assert frag.index(BACK_CARD_HELPER) < frag.index(
+            "Dokuments nav augšupielādēts."
+        )
+
+    def test_helper_below_title_uploaded_state(self):
+        acct, app = _draft_for_helper_tests(
+            "backhelper-uploaded@example.com",
+            files={
+                "member_identity_back_document": _make_member_identity_back_file(
+                    "member_back.png"
+                ),
+            },
+        )
+        html, _resp = _workspace_html_and_response(acct, app)
+
+        frag = _card_fragment(html, BACK_CARD_TITLE)
+
+        assert BACK_CARD_HELPER in frag, (
+            f"uploaded back card must show helper {BACK_CARD_HELPER!r}"
+        )
+        assert frag.index(BACK_CARD_TITLE) < frag.index(BACK_CARD_HELPER)
+        # Below the title but above the body (filename + already-uploaded hint).
+        assert frag.index(BACK_CARD_HELPER) < frag.index("member_back.png")
+        assert frag.index(BACK_CARD_HELPER) < frag.index(
+            "Dokuments jau ir augšupielādēts."
+        )
+
+    def test_helper_rendered_exactly_once_per_page(self):
+        acct, app = _draft_for_helper_tests("backhelper-once@example.com")
+        html, _resp = _workspace_html_and_response(acct, app)
+
+        assert html.count(BACK_CARD_HELPER) == 1, (
+            "helper must render exactly once — inside the back card only"
+        )
+
+    def test_helper_only_in_back_card_empty_state(self):
+        acct, app = _draft_for_helper_tests(
+            "backhelper-none-empty@example.com"
+        )
+        html, _resp = _workspace_html_and_response(acct, app)
+
+        # Positive anchor: helper exists in the back card on this page.
+        assert BACK_CARD_HELPER in _card_fragment(html, BACK_CARD_TITLE)
+        # Negative: the other three cards never carry it.
+        for title in OTHER_CARD_TITLES:
+            other_frag = _card_fragment(html, title)
+            assert BACK_CARD_HELPER not in other_frag, (
+                f"helper must not render in the {title!r} card"
+            )
+
+    def test_helper_only_in_back_card_uploaded_state(self):
+        acct, app = _draft_for_helper_tests(
+            "backhelper-none-up@example.com",
+            files={
+                "guardian_identity_document": _make_guardian_identity_file(
+                    "helper_guardian.pdf"
+                ),
+                "member_identity_document": _make_member_identity_file(
+                    "helper_member.pdf"
+                ),
+                "member_identity_back_document": _make_member_identity_back_file(
+                    "helper_back.png"
+                ),
+                "member_portrait_document": _make_member_portrait_file(
+                    "helper_portrait.png"
+                ),
+            },
+        )
+        html, _resp = _workspace_html_and_response(acct, app)
+
+        assert BACK_CARD_HELPER in _card_fragment(html, BACK_CARD_TITLE)
+        for title in OTHER_CARD_TITLES:
+            other_frag = _card_fragment(html, title)
+            assert BACK_CARD_HELPER not in other_frag, (
+                f"helper must not render in the {title!r} card (uploaded state)"
+            )
+
+    def test_form_field_label_unchanged_and_card_helper_rendered(self):
+        acct, app = _draft_for_helper_tests("backhelper-label@example.com")
+        html, resp = _workspace_html_and_response(acct, app)
+
+        # The form field label keeps the existing long parenthesised text.
+        assert (
+            resp.context["form"].fields["member_identity_back_document"].label
+            == BACK_CARD_FORM_LABEL
+        ), "member_identity_back_document form label must stay unchanged"
+
+        # The helper line is still added to the card (this half is the new
+        # behaviour — fails until implemented).
+        assert BACK_CARD_HELPER in _card_fragment(html, BACK_CARD_TITLE)

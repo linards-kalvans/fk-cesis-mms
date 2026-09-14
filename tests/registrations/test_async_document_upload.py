@@ -328,6 +328,109 @@ def test_post_member_portrait_does_not_enqueue_ocr():
     assert enqueued == []
 
 
+class TestMemberIdentityBackAsyncUpload:
+    """member_identity_back is an accepted async upload kind with no OCR wiring
+    (2026-09-11 plan, Task 1 Step 2 / requirement 5).
+    """
+
+    def test_post_back_upload_creates_document_without_ocr(self):
+        account = ParentAccount.objects.create(
+            email="backasync@example.com", phone="+37120000020"
+        )
+        app = _make_application(account)
+        client = _verified_client(account)
+
+        enqueued: list[int] = []
+
+        def _spy(document_id: int) -> None:
+            enqueued.append(document_id)
+
+        upload = SimpleUploadedFile(
+            "back.png", _png_bytes(), content_type="image/png"
+        )
+        with patch(
+            "apps.registrations.views.enqueue_ocr_job",
+            side_effect=_spy,
+        ):
+            response = client.post(
+                reverse(
+                    "registrations:async-document-upload",
+                    kwargs={"application_id": app.id},
+                ),
+                data={"kind": "member_identity_back", "file": upload},
+            )
+
+        assert response.status_code == 201
+        payload = json.loads(response.content)
+        assert payload["kind"] == "member_identity_back"
+        assert payload["ocr_status"] == "not_requested"
+        assert isinstance(payload["document_id"], int)
+
+        doc = Document.objects.get(pk=payload["document_id"])
+        assert doc.application_id == app.id
+        assert doc.kind == Document.Kind.MEMBER_IDENTITY_BACK
+        assert doc.ocr_status == Document.OcrStatus.NOT_REQUESTED
+        assert doc.deleted_at is None
+        # OCR must never be requested for the back image.
+        assert enqueued == []
+
+    def test_post_back_replacement_soft_deletes_only_the_prior_back(self):
+        """Second back upload retires the first back — and nothing else."""
+        account = ParentAccount.objects.create(
+            email="backreplace@example.com", phone="+37120000021"
+        )
+        app = _make_application(account)
+        client = _verified_client(account)
+
+        # An unrelated active front document must survive untouched.
+        front = Document.objects.create(
+            application=app,
+            kind=Document.Kind.MEMBER_IDENTITY,
+            file=SimpleUploadedFile(
+                "front.png", _png_bytes(), content_type="image/png"
+            ),
+            original_filename="front.png",
+            content_type="image/png",
+            file_size=64 + 8,
+        )
+
+        def _post_back(name: str) -> int:
+            with patch("apps.registrations.views.enqueue_ocr_job"):
+                response = client.post(
+                    reverse(
+                        "registrations:async-document-upload",
+                        kwargs={"application_id": app.id},
+                    ),
+                    data={
+                        "kind": "member_identity_back",
+                        "file": SimpleUploadedFile(
+                            name, _png_bytes(), content_type="image/png"
+                        ),
+                    },
+                )
+            assert response.status_code == 201
+            return int(json.loads(response.content)["document_id"])
+
+        first_id = _post_back("back-a.png")
+        second_id = _post_back("back-b.png")
+        assert second_id != first_id
+
+        first = Document.objects.get(pk=first_id)
+        second = Document.objects.get(pk=second_id)
+        assert first.deleted_at is not None
+        assert second.deleted_at is None
+        # Both rows keep the back kind — replacement never rewrites kind.
+        assert first.kind == str(Document.Kind.MEMBER_IDENTITY_BACK)
+        assert second.kind == str(Document.Kind.MEMBER_IDENTITY_BACK)
+        # Only one active back document remains.
+        assert app.documents.filter(
+            kind=Document.Kind.MEMBER_IDENTITY_BACK, deleted_at__isnull=True
+        ).count() == 1
+        # The front document was not soft-deleted by the back replacement.
+        front.refresh_from_db()
+        assert front.deleted_at is None
+
+
 # ---------------------------------------------------------------------------
 # Source-level contract checks on static/js/async_upload.js
 # ---------------------------------------------------------------------------

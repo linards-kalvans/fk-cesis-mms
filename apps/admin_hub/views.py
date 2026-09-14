@@ -344,9 +344,10 @@ def cockpit_view(request, pk: int):
             # lists together, and the label belongs beside its panel.
             "viewer_tabs": list(
                 zip(
-                    ["Bērna ID", "Vecāka ID", "Portrets"],
+                    ["Bērna ID", "Aizmugure", "Vecāka ID", "Portrets"],
                     [
                         build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY)),
+                        build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY_BACK)),
                         build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY)),
                         build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT)),
                     ],

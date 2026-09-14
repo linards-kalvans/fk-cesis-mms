@@ -206,3 +206,118 @@ def test_approve_action_is_withdrawn_once_approved(
         reverse("admin_hub:cockpit", args=[approved_application.pk])
     ).content.decode()
     assert "disabled" in _approve_button_tag(body)
+
+
+# ---------------------------------------------------------------------------
+# Member ID-card back "Aizmugure" viewer tab (2026-09-11 plan, Task 3
+# Step 2 / requirement 9)
+# ---------------------------------------------------------------------------
+
+
+def _create_back_document(application):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.documents.models import Document
+
+    return Document.objects.create(
+        application=application,
+        kind=Document.Kind.MEMBER_IDENTITY_BACK,
+        file=SimpleUploadedFile(
+            "back_id.png",
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+            content_type="image/png",
+        ),
+        original_filename="back_id.png",
+        content_type="image/png",
+        file_size=12,
+    )
+
+
+def _viewer_tab_tags(body):
+    """Full <button> tags for every viewer tab, in render order."""
+    return re.findall(
+        r"<button[^>]*data-viewer-tab[^>]*>[^<]*</button>", body
+    )
+
+
+def _viewer_tab_labels(body):
+    return [
+        re.sub(r"^<button[^>]*>", "", tag).replace("</button>", "").strip()
+        for tag in _viewer_tab_tags(body)
+    ]
+
+
+def _aizmugure_tab_tag(body):
+    tags = [
+        tag
+        for tag in _viewer_tab_tags(body)
+        if tag.rstrip().endswith(">Aizmugure</button>")
+    ]
+    assert tags, "an Aizmugure viewer tab button must be rendered"
+    return tags[0]
+
+
+def test_cockpit_aizmugure_tab_disabled_without_back_upload(
+    client, reviewer, submitted_application
+):
+    """No back image → the tab still exists but is disabled, matching the
+    existing empty-document viewer behavior."""
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    labels = _viewer_tab_labels(body)
+    assert "Aizmugure" in labels, (
+        f"the cockpit viewer must offer the Aizmugure tab; tabs were {labels}"
+    )
+    tab = _aizmugure_tab_tag(body)
+    assert "disabled" in tab, (
+        f"the empty Aizmugure tab must be disabled; got {tab!r}"
+    )
+
+
+def test_cockpit_aizmugure_tab_uses_authorized_proxy_urls_when_back_uploaded(
+    client, reviewer, submitted_application
+):
+    """With an active back upload the tab is enabled and carries the existing
+    staff-authorized preview + download proxy URLs for that document."""
+    client.force_login(reviewer)
+    back_doc = _create_back_document(submitted_application)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    assert "Aizmugure" in _viewer_tab_labels(body)
+    tab = _aizmugure_tab_tag(body)
+    assert "disabled" not in tab
+
+    preview_url = reverse(
+        "documents:admin-document-preview", args=[back_doc.id]
+    )
+    download_url = reverse(
+        "documents:admin-document-download", args=[back_doc.id]
+    )
+    assert preview_url in body
+    assert download_url in body
+    # The URLs ride on the tab button itself (viewer.js copies them from the
+    # data attributes onto the toolbar links).
+    assert preview_url in tab
+    assert download_url in tab
+
+
+def test_cockpit_aizmugure_tab_sits_after_member_front_tab(
+    client, reviewer, submitted_application
+):
+    """Document order: the back tab comes directly after the member front
+    tab (Bērna ID)."""
+    client.force_login(reviewer)
+    _create_back_document(submitted_application)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    labels = _viewer_tab_labels(body)
+    assert labels.index("Aizmugure") == labels.index("Bērna ID") + 1, (
+        f"Aizmugure must follow the member front tab; tab order was {labels}"
+    )

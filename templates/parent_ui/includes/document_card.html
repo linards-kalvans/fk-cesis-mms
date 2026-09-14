@@ -10,6 +10,10 @@
         <span class="fk-source-badge fk-source-badge--inactive">Nav augšupielādēts</span>
       {% endif %}
     </div>
+    {% if kind == "member_identity_back" %}
+      {# Single line on purpose — contract test matches the exact rendered string. #}
+      <p class="fk-document-card__hint">Nav obligāta, bet nepieciešama, ja augšupielādēta bērna ID karte; nav vajadzīga pasei vai dzimšanas apliecībai.</p>
+    {% endif %}
     <div class="fk-document-card__body">
       {% if document %}
         <p class="fk-document-card__filename">{{ document.original_filename }}</p>

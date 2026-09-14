@@ -266,6 +266,7 @@ DOCUMENT_UPLOAD_ALLOWED_CONTENT_TYPES = (
     "image/png",
     "image/webp",
     "application/pdf",
+    "application/vnd.etsi.asic-e+zip",
 )
 
 # P16-A signed PDF/.edoc maximum upload size (20 MiB by default).

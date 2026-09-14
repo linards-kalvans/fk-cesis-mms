@@ -21,6 +21,7 @@ import pytest
 from datetime import date
 
 from apps.accounts.models import ParentAccount
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 pytestmark = pytest.mark.django_db
 
@@ -314,6 +315,7 @@ class TestDocumentKindSeparation:
         [
             "guardian_identity_document",
             "member_identity_document",
+            "member_identity_back_document",
             "member_portrait_document",
             "child_identity_document",
         ],
@@ -717,10 +719,14 @@ class TestGroupedFormContract:
 
     def test_documents_section_fields(self):
         """Documents section must contain: guardian_identity_document,
-        member_identity_document, member_portrait_document.
+        member_identity_document, member_identity_back_document,
+        member_portrait_document.
 
         Slice D — member_portrait_document now lives in the documents section
         alongside the two identity uploads.
+
+        Member ID-card back — the optional back upload sits between the member
+        front document and the portrait (plan 2026-09-11, Task 1 Step 1).
         """
         from apps.registrations.forms import RegistrationApplicationForm
 
@@ -731,6 +737,7 @@ class TestGroupedFormContract:
         expected = (
             "guardian_identity_document",
             "member_identity_document",
+            "member_identity_back_document",
             "member_portrait_document",
         )
         assert docs_fields == expected, (
@@ -783,7 +790,7 @@ class TestGroupedFormContract:
         sections = list(form.grouped_fields())
 
         expected_counts = {
-            "documents": 3,
+            "documents": 4,
             "guardian": 6,
             "member": 6,
             "agreement": 3,
@@ -1133,3 +1140,268 @@ class TestRegistrationFormContract:
 
         assert not form.is_valid()
         assert form.errors["member_birth_date"] == ["Ievadiet derīgu datumu."]
+
+
+# ===========================================================================
+# 17. Member ID-card back upload — optional fourth document (2026-09-11 plan)
+# ===========================================================================
+
+# Exact agreed Latvian copy (design spec §3.1). Do not loosen to `in` checks:
+# the strings are the contract the club signed off on.
+MEMBER_IDENTITY_FRONT_LABEL = (
+    "Bērna personas dokuments — pase vai ID kartes priekšpuse"
+)
+MEMBER_IDENTITY_BACK_LABEL = (
+    "Bērna ID kartes aizmugure (nav obligāta, bet nepieciešama, ja "
+    "augšupielādēta bērna ID karte; nav vajadzīga pasei vai "
+    "dzimšanas apliecībai)"
+)
+
+
+def _png_upload(name: str) -> SimpleUploadedFile:
+    return SimpleUploadedFile(
+        name=name,
+        content=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+        content_type="image/png",
+    )
+
+
+class TestMemberIdentityBackFormFieldContract:
+    """Form-layer contract for the optional `member_identity_back_document`
+    upload and the renamed member front label (requirements 1–4).
+    """
+
+    def test_member_identity_front_label_renamed(self):
+        """The existing member identity upload label must be renamed exactly."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm()
+        assert (
+            form.fields["member_identity_document"].label
+            == MEMBER_IDENTITY_FRONT_LABEL
+        )
+
+    def test_back_field_exists_with_exact_label(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert "member_identity_back_document" in RegistrationApplicationForm.base_fields
+        form = RegistrationApplicationForm()
+        assert (
+            form.fields["member_identity_back_document"].label
+            == MEMBER_IDENTITY_BACK_LABEL
+        )
+
+    def test_back_field_is_optional_file_field(self):
+        from django import forms
+
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        field = RegistrationApplicationForm.base_fields["member_identity_back_document"]
+        assert isinstance(field, forms.FileField), (
+            "member_identity_back_document must be a forms.FileField."
+        )
+        assert field.required is False
+
+    def test_back_not_in_submit_required_fields(self):
+        """Absence of the back document must never block submission."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        assert (
+            "member_identity_back_document"
+            not in RegistrationApplicationForm.submit_required_fields
+        )
+
+    def test_back_has_no_wizard_step_gate(self):
+        """The back input carries no data-step-required gate (requirement 4)."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        attrs = RegistrationApplicationForm().fields[
+            "member_identity_back_document"
+        ].widget.attrs
+        assert "data-step-required" not in attrs
+        assert "data-step-error-empty" not in attrs
+        assert "data-step-error-format" not in attrs
+
+    def test_documents_section_places_back_between_front_and_portrait(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        sections = dict(RegistrationApplicationForm.section_order)
+        docs = sections["documents"]
+        assert docs.index("member_identity_back_document") == (
+            docs.index("member_identity_document") + 1
+        ), "back must come directly after the member front document"
+        assert docs.index("member_identity_back_document") == (
+            docs.index("member_portrait_document") - 1
+        ), "back must come directly before the portrait document"
+
+    def test_grouped_fields_documents_section_yields_back_bound_field(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm()
+        documents = [fields for name, fields in form.grouped_fields() if name == "documents"][0]
+        assert [bf.name for bf in documents] == [
+            "guardian_identity_document",
+            "member_identity_document",
+            "member_identity_back_document",
+            "member_portrait_document",
+        ]
+
+    def test_back_field_carries_async_upload_hook(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        attrs = RegistrationApplicationForm().fields[
+            "member_identity_back_document"
+        ].widget.attrs
+        assert attrs.get("data-async-upload") == "member_identity_back"
+
+    def test_back_field_progress_slot_id(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        attrs = RegistrationApplicationForm().fields[
+            "member_identity_back_document"
+        ].widget.attrs
+        assert attrs.get("data-progress-slot") == "id_member_identity_back_document_progress"
+
+    def test_back_input_visually_hidden_like_existing_cards(self):
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        attrs = RegistrationApplicationForm().fields[
+            "member_identity_back_document"
+        ].widget.attrs
+        assert "fk-visually-hidden" in attrs.get("class", ""), (
+            "Back canonical input must use the same hidden-input class as the "
+            "existing document cards (visible labels are the tap surface)."
+        )
+
+    def test_document_kind_member_identity_back_exists(self):
+        from apps.documents.models import Document
+
+        values = {choice[0] for choice in Document.Kind.choices}
+        assert "member_identity_back" in values
+        assert str(Document.Kind.MEMBER_IDENTITY_BACK) == "member_identity_back"
+
+    def test_document_kind_order_back_between_front_and_portrait(self):
+        """Workspace card order derives from enum order: front → back → portrait."""
+        from apps.documents.models import Document
+
+        values = list(Document.Kind.values)
+        assert values.index("member_identity_back") == (
+            values.index("member_identity") + 1
+        )
+        assert values.index("member_identity_back") == (
+            values.index("member_portrait") - 1
+        )
+
+    def test_form_submit_has_no_error_for_missing_back_document(self):
+        """Even with is_submit=True, an absent back document must not add a
+        validation error for the back field (requirement 7, form layer)."""
+        from apps.registrations.forms import RegistrationApplicationForm
+
+        form = RegistrationApplicationForm(
+            data={"guardian_email": "backmissing@example.com"},
+            is_submit=True,
+            has_existing_document=True,
+        )
+        form.is_valid()
+        assert "member_identity_back_document" not in form.errors
+
+
+class TestBackDocumentOptionalAtSubmission:
+    """Service-level submission rules (requirement 7): the back document is
+    never required, while the guardian/front/portrait requirements stay.
+    """
+
+    def _app_with_documents(self, parent_account, submit_payload, kinds):
+        from apps.registrations.services import create_or_update_draft
+
+        app = create_or_update_draft(
+            data=submit_payload,
+            files={},
+            verified_account=parent_account,
+        )
+        for kind in kinds:
+            from apps.documents.models import Document
+
+            kind_value = str(kind)
+            Document.objects.create(
+                application=app,
+                kind=kind_value,
+                file=_png_upload(f"{kind_value}.png"),
+                original_filename=f"{kind_value}.png",
+                content_type="image/png",
+                file_size=12,
+            )
+        return app
+
+    def test_submit_succeeds_without_back_document(self, parent_account, submit_payload):
+        """Guardian + front + portrait documents, no back → submits fine."""
+        from apps.registrations.services import submit_application
+
+        app = self._app_with_documents(
+            parent_account,
+            submit_payload,
+            ["guardian_identity", "member_identity", "member_portrait"],
+        )
+        app = submit_application(app, parent_account)
+        assert app.status == "submitted"
+        assert not app.documents.filter(kind="member_identity_back").exists()
+
+    def test_submit_succeeds_with_back_document(self, parent_account, submit_payload):
+        from apps.documents.models import Document
+        from apps.registrations.services import submit_application
+
+        app = self._app_with_documents(
+            parent_account,
+            submit_payload,
+            [
+                "guardian_identity",
+                "member_identity",
+                Document.Kind.MEMBER_IDENTITY_BACK,
+                "member_portrait",
+            ],
+        )
+        app = submit_application(app, parent_account)
+        assert app.status == "submitted"
+
+    def test_submit_still_requires_guardian_document_when_back_present(
+        self, parent_account, submit_payload
+    ):
+        from apps.documents.models import Document
+        from apps.registrations.services import submit_application
+
+        app = self._app_with_documents(
+            parent_account,
+            submit_payload,
+            ["member_identity", Document.Kind.MEMBER_IDENTITY_BACK, "member_portrait"],
+        )
+        with pytest.raises(ValueError):
+            submit_application(app, parent_account)
+
+    def test_submit_still_requires_member_front_when_back_present(
+        self, parent_account, submit_payload
+    ):
+        """The back image never substitutes for the required front/passport."""
+        from apps.documents.models import Document
+        from apps.registrations.services import submit_application
+
+        app = self._app_with_documents(
+            parent_account,
+            submit_payload,
+            ["guardian_identity", Document.Kind.MEMBER_IDENTITY_BACK, "member_portrait"],
+        )
+        with pytest.raises(ValueError):
+            submit_application(app, parent_account)
+
+    def test_submit_still_requires_portrait_when_back_present(
+        self, parent_account, submit_payload
+    ):
+        from apps.documents.models import Document
+        from apps.registrations.services import submit_application
+
+        app = self._app_with_documents(
+            parent_account,
+            submit_payload,
+            ["guardian_identity", "member_identity", Document.Kind.MEMBER_IDENTITY_BACK],
+        )
+        with pytest.raises(ValueError):
+            submit_application(app, parent_account)
