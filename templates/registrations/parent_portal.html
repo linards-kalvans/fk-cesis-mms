@@ -3,6 +3,8 @@
 
 {% block page_title %}Mani pieteikumi — FK Cēsis MMS{% endblock %}
 
+{% block extra_js %}<script src="{% static 'js/async_upload.js' %}" defer></script>{% endblock %}
+
 {% block page_content %}
 <p class="fk-eyebrow">FK Cēsis MMS</p>
 <h1 class="fk-page-title">Mani pieteikumi</h1>
@@ -55,24 +57,6 @@
         </ul>
       </div>
       {% endif %}
-      {% if app.approved_member_id %}
-      <div class="fk-app-block fk-medical-permit">
-        <span class="fk-block-label">Veselības apliecība</span>
-        <p data-medical-permit-status="{{ app.medical_permit_status }}"{% if app.medical_permit_warning %} data-medical-permit-warning{% endif %}>{{ app.medical_permit_status_label }}</p>
-        {% if app.medical_permit_has_file and app.medical_permit %}
-        <p>
-          <a class="fk-button fk-button--secondary fk-button--small" href="{% url 'registrations:medical-permit-preview' app.medical_permit.pk %}">Skatīt</a>
-          <a class="fk-button fk-button--secondary fk-button--small" href="{% url 'registrations:medical-permit-download' app.medical_permit.pk %}">Lejupielādēt</a>
-        </p>
-        {% endif %}
-        <form method="post" action="{% url 'registrations:member-medical-permit-upload' app.approved_member.pk %}" enctype="multipart/form-data" class="fk-medical-permit-upload">
-          {% csrf_token %}
-          <label for="medical_permit_file_{{ app.pk }}">PDF, JPG, PNG vai HEIC — līdz 25 MB:</label>
-          <input type="file" id="medical_permit_file_{{ app.pk }}" name="file" accept=".pdf,.jpg,.jpeg,.png,.heic">
-          <button type="submit" class="fk-button fk-button--secondary fk-button--small">Augšupielādēt</button>
-        </form>
-      </div>
-      {% endif %}
     </div>
 
     <div class="fk-app-block fk-progress-wrap">
@@ -94,6 +78,15 @@
         <div class="fk-progress-bar"><span style="width:0%"></span></div>
       {% endif %}
     </div>
+
+    {% comment %}P23 — permit card in its own full-width row: after the
+    summary / progress blocks, before the main CTA. Async upload updates it
+    in place.{% endcomment %}
+    {% if app.can_upload_medical_permit %}
+    <div class="fk-app-permit">
+      {% include "parent_ui/includes/medical_permit_card.html" with status=app.medical_permit_status status_label=app.medical_permit_status_label warning=app.medical_permit_warning has_file=app.medical_permit_has_file filename=app.medical_permit_filename upload_url=app.medical_permit_upload_url preview_url=app.medical_permit_preview_url download_url=app.medical_permit_download_url input_id=app.medical_permit_input_id %}
+    </div>
+    {% endif %}
 
     <div class="fk-app-actions">
       {% if app.status == 'draft' or app.status == 'fix_requested' %}

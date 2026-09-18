@@ -698,7 +698,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(request, latvian, level=messages.ERROR)
                 return self._after_review_redirect(request, object_id)
             self.message_user(request, "Atjaunots trūkstošais norēķinu ieraksts.")
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "medical_permit_upload":
             upload = request.FILES.get("medical_permit_file")

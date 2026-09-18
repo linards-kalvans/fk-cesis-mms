@@ -70,6 +70,24 @@ def medical_permit_status_label(status: str) -> str:
     return MEDICAL_PERMIT_STATUS_LABELS.get(status, status)
 
 
+def can_parent_upload_application_medical_permit(application) -> bool:
+    """True when the owning parent may upload/replace the permit for this
+    application's stage.
+
+    Explicit allowlist (draft / fix_requested / submitted / approved): a
+    rejected application — and any status not listed — never accepts a parent
+    upload. Pure policy; ownership and HTTP status live in the view.
+    """
+    from apps.registrations.models import RegistrationApplication
+
+    return application.status in {
+        RegistrationApplication.Status.DRAFT,
+        RegistrationApplication.Status.FIX_REQUESTED,
+        RegistrationApplication.Status.SUBMITTED,
+        RegistrationApplication.Status.APPROVED,
+    }
+
+
 def validate_medical_permit_upload(upload) -> None:
     """Validate an upload against the allowed format/size contract.
 
@@ -187,6 +205,12 @@ def upload_application_medical_permit(
     """
     validate_medical_permit_upload(upload)
     permit = cast("MedicalPermit | None", getattr(application, "medical_permit", None))
+    # An approved application's permit must carry the member too — otherwise
+    # the member-endpoint replacement finds no member row and tries to create
+    # a SECOND permit for the same application, violating the OneToOne.
+    # Idempotent; a no-op pre-approval and when already linked.
+    if application.approved_member_id is not None:
+        attach_application_medical_permit(application, application.approved_member)
     if permit is not None and permit.file:
         return replace_medical_permit(
             permit, upload, actor_label=actor_label, actor=actor
@@ -194,6 +218,7 @@ def upload_application_medical_permit(
     if permit is None:
         permit = MedicalPermit.objects.create(
             application=application,
+            member=application.approved_member,
             source=(
                 str(MedicalPermit.Source.STAFF_UPLOAD)
                 if actor is not None

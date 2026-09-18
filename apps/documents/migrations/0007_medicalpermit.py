@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("documents", "0005_document_ocr_error_code_and_more"),
+        ("documents", "0006_alter_document_kind"),
         ("members", "0012_memberexporttemplate"),
         ("registrations", "0012_submission_digest_settings"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

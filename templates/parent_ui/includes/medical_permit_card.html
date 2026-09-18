@@ -1,0 +1,78 @@
+{% comment %}
+P23 — medical-permit card. Mirrors the fk-document-card UI grammar from
+templates/parent_ui/includes/document_card.html: header (kind + badges),
+body (status line + filename/empty state), a visually-hidden native file
+input driven by a full-width secondary label-button. The permit is optional
+intake data — the "Neobligāti" marker is always visible and the card must
+never gain submit-validation or wizard step-gating attributes.
+
+Async contract: static/js/async_upload.js binds the [data-medical-permit-input]
+file input and POSTs the picked file straight to the card's
+data-medical-permit-upload-url on change, then updates this card in place from
+the 201 payload (badge, status, filename, label, actions links). There is
+deliberately NO visible submit button and NO <form> outside the <noscript>
+fallback — nothing here can capture the wizard's implicit Enter submission.
+The <noscript> block keeps a working manual multipart upload (own file input
++ CSRF + stage-correct action) for no-JS parents.
+
+Context: status, status_label, warning, has_file, filename, upload_url,
+preview_url, download_url, input_id, inside_wizard_form. The editable
+workspace passes inside_wizard_form=True: the card then renders WITHOUT the
+<noscript> fallback form, because browsers discard <form> tags nested inside
+the wizard form (the fallback would post the wizard's action, not the permit
+endpoint) — the workspace renders that fallback as a standalone block AFTER
+the wizard's </form> instead.
+{% endcomment %}
+<div class="fk-document-card" data-medical-permit-card data-medical-permit-upload-url="{{ upload_url }}">
+  <div class="fk-document-card__header">
+    <span class="fk-document-card__kind">Veselības apliecība</span>
+    <span>
+      <span class="fk-source-badge">Neobligāti</span>
+      {% if has_file %}
+        <span class="fk-source-badge fk-source-badge--active" data-medical-permit-badge>Aktīvs</span>
+      {% else %}
+        <span class="fk-source-badge fk-source-badge--inactive" data-medical-permit-badge>Nav augšupielādēts</span>
+      {% endif %}
+    </span>
+  </div>
+  <div class="fk-document-card__body" data-medical-permit-body>
+    <p data-medical-permit-status="{{ status }}" data-medical-permit-status-text{% if warning %} data-medical-permit-warning{% endif %}>{{ status_label }}</p>
+    {% if has_file %}
+      <p class="fk-document-card__filename">{{ filename }}</p>
+      <p class="fk-document-card__hint">Dokuments jau ir augšupielādēts. Aizvietojiet tikai tad, ja dokuments ir nepareizs vai novecojis.</p>
+    {% else %}
+      <p class="fk-document-card__empty">Dokuments nav augšupielādēts.</p>
+      <p class="fk-document-card__hint">Derīga līdz 30. septembrim nākamajā gadā pēc augšupielādes.</p>
+    {% endif %}
+  </div>
+  <div class="fk-upload-slot">
+    <input type="file" id="{{ input_id }}" name="file" accept=".pdf,.jpg,.jpeg,.png,.heic" class="fk-visually-hidden" data-medical-permit-input>
+    <label for="{{ input_id }}" class="fk-button fk-button--secondary fk-button--full">
+      <svg class="fk-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span data-medical-permit-label>{% if has_file %}Aizvietot apliecību{% else %}Augšupielādēt apliecību{% endif %}</span>
+    </label>
+  </div>
+  {% comment %} Private file links live in this stable container so the JS can
+  populate and reveal it in place after a successful upload. In the missing
+  state it ships hidden and empty of any private links.{% endcomment %}
+  <div data-medical-permit-actions{% if not has_file %} hidden{% endif %}>
+    {% if has_file %}
+      <a class="fk-button fk-button--secondary fk-button--small" href="{{ preview_url }}">Skatīt</a>
+      <a class="fk-button fk-button--secondary fk-button--small" href="{{ download_url }}">Lejupielādēt</a>
+    {% endif %}
+  </div>
+  {% if not inside_wizard_form %}
+  <noscript>
+    <form method="post" action="{{ upload_url }}" enctype="multipart/form-data" class="fk-medical-permit-upload">
+      {% csrf_token %}
+      <label for="{{ input_id }}_noscript">PDF, JPG, PNG vai HEIC — līdz 25 MB:</label>
+      <input type="file" id="{{ input_id }}_noscript" name="file" accept=".pdf,.jpg,.jpeg,.png,.heic">
+      <button type="submit" class="fk-button fk-button--primary fk-button--full">Augšupielādēt</button>
+    </form>
+  </noscript>
+  {% endif %}
+</div>

@@ -29,15 +29,21 @@ from __future__ import annotations
 import json
 import re
 from datetime import timedelta
+from hashlib import sha256
 
 import pytest
 from django.core import mail
+from django.core.exceptions import FieldDoesNotExist
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import EmailVerificationCode, ParentAccount
-from apps.accounts.services import issue_one_time_code
+from apps.accounts.services import (
+    is_one_time_code_valid,
+    issue_one_time_code,
+    verify_one_time_code,
+)
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 
 pytestmark = pytest.mark.django_db
@@ -298,9 +304,15 @@ class TestCheckFailurePaths:
 
 class TestCheckEndpointCsrf:
     def _pending_client(self, email: str) -> tuple[Client, str]:
+        """CSRF client whose session is persisted first, then issued an
+        OTP bound to that same session key (approved design: endpoint
+        session scoping must accept the origin session's own code)."""
         client = Client(enforce_csrf_checks=True)
-        code = issue_one_time_code(email)
         session = client.session
+        session.save()
+        origin_key = session.session_key
+        assert origin_key, "client session must be persisted before issuing the OTP"
+        code = issue_one_time_code(email, origin_session_key=origin_key)
         session["pending_verification_email"] = email
         session.save()
         return client, code
@@ -334,3 +346,310 @@ class TestCheckEndpointCsrf:
             f"CSRF-token-bearing POST must pass middleware, got {resp.status_code}"
         )
         assert json.loads(resp.content) == {"valid": True}
+
+
+# ===========================================================================
+# OTP duplicate-submit fix — session-bound codes (RED for approved design)
+#
+# Approved contract under test (NOT yet implemented):
+#   * EmailVerificationCode.origin_session_key — nullable, indexed,
+#     max_length 40 (small migration).
+#   * issue_one_time_code(email, *, origin_session_key=...) persists it.
+#   * is_one_time_code_valid(email, code, *, origin_session_key=...) only
+#     accepts an active, unused code belonging to that session.
+#   * verify_one_time_code(email, code, *, origin_session_key=...) is
+#     atomic-row-locked and idempotent ONLY for an unexpired code bound to
+#     the same session: first call consumes, repeat returns the same
+#     ParentAccount; another session gets ValueError.
+#   * verify view + check endpoint pass the current session key.
+# ===========================================================================
+
+ORIGIN_KEY_A = "originsessionkeyaaaa0000000001"
+ORIGIN_KEY_B = "othersessionkeybbbb0000000002"
+
+
+class TestOtpSessionBindingService:
+    """issue_* persists the origin session key; storage stays hashed."""
+
+    def test_issue_persists_origin_session_key(self):
+        email = "issuebind@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        assert re.fullmatch(r"\d{6}", code), "issue must still return the raw code"
+        record = EmailVerificationCode.objects.get(email=email)
+        assert record.origin_session_key == ORIGIN_KEY_A, (
+            "issue_one_time_code must persist the originating session key "
+            "on the EmailVerificationCode row"
+        )
+
+    def test_model_field_nullable_maxlength_40_indexed(self):
+        try:
+            field = EmailVerificationCode._meta.get_field("origin_session_key")
+        except FieldDoesNotExist:
+            pytest.fail(
+                "EmailVerificationCode must gain an origin_session_key field "
+                "(nullable CharField, max_length=40, indexed) via a small "
+                "migration — approved OTP duplicate-submit design"
+            )
+        assert field.null is True, "origin_session_key must be nullable"
+        assert field.max_length == 40, "origin_session_key max_length must be 40"
+        indexed = field.db_index or any(
+            "origin_session_key" in idx.fields
+            for idx in EmailVerificationCode._meta.indexes
+        )
+        assert indexed, "origin_session_key must be indexed"
+
+    def test_service_stores_only_hash_never_plaintext(self):
+        """No plaintext-OTP exposure: binding the session key must not
+        weaken the hashed-at-rest posture.
+
+        Deterministic assertions only — a raw 6-digit OTP can appear
+        coincidentally inside a SHA-256 hex digest, so scanning stored
+        hash text for the code substring is invalid.
+        """
+        email = "hashonly@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        record = EmailVerificationCode.objects.get(email=email)
+        assert record.code_hash == sha256(code.encode()).hexdigest()
+        assert record.code_hash != code
+        attnames = {
+            f.attname for f in EmailVerificationCode._meta.get_fields() if f.concrete
+        }
+        plaintext_otp_fields = attnames & {
+            "code",
+            "raw_code",
+            "one_time_code",
+            "otp",
+            "plaintext_code",
+        }
+        assert not plaintext_otp_fields, (
+            f"EmailVerificationCode must store no plaintext-OTP field: {plaintext_otp_fields}"
+        )
+        assert code not in str(record)
+
+
+class TestIsOneTimeCodeValidSessionScoped:
+    """Read-only validity is session-scoped."""
+
+    def test_valid_only_for_origin_session(self):
+        email = "validscope@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        assert is_one_time_code_valid(
+            email, code, origin_session_key=ORIGIN_KEY_A
+        ) is True, "active unused code must be valid in its own session"
+        assert is_one_time_code_valid(
+            email, code, origin_session_key=ORIGIN_KEY_B
+        ) is False, (
+            "a code bound to another session must never be valid here "
+            "(duplicate-submit fix session scoping)"
+        )
+
+    def test_still_read_only_for_origin_session(self):
+        email = "validreadonly@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        assert is_one_time_code_valid(
+            email, code, origin_session_key=ORIGIN_KEY_A
+        ) is True
+        record = EmailVerificationCode.objects.get(email=email)
+        assert record.used_at is None, "validity check must not consume"
+
+
+class TestVerifyOneTimeCodeSameSessionIdempotency:
+    """The heart of the duplicate-submit fix at service level."""
+
+    def test_first_verify_consumes_and_returns_account(self):
+        email = "idemfirst@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        account = verify_one_time_code(
+            email, code, origin_session_key=ORIGIN_KEY_A
+        )
+
+        assert isinstance(account, ParentAccount)
+        assert account.email == email
+        record = EmailVerificationCode.objects.get(email=email)
+        assert record.used_at is not None, "first verify must consume the code"
+
+    def test_same_session_repeat_returns_same_account_not_error(self):
+        """Concurrent/rapid double submit: both requests share one session
+        key; the loser of the row lock must still get the account, not the
+        generic invalid-code failure."""
+        email = "idemrepeat@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        first = verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+        second = verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+
+        assert second.pk == first.pk, (
+            "repeat same-session verify of a consumed, unexpired, "
+            "same-session code must return the same ParentAccount "
+            "(idempotency), not raise"
+        )
+        assert ParentAccount.objects.filter(email=email).count() == 1
+
+    def test_expired_used_code_not_idempotent_for_same_session(self):
+        """Idempotency window is bounded by expiry: after the code expires
+        even the origin session gets the generic failure again."""
+        email = "idemexpired@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+        _expire_codes(email)
+
+        with pytest.raises(ValueError):
+            verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+
+    def test_expired_active_code_rejected_for_same_session(self):
+        email = "expiredbefore@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+        _expire_codes(email)
+
+        with pytest.raises(ValueError):
+            verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+        assert not ParentAccount.objects.filter(email=email).exists()
+
+
+class TestVerifyOneTimeCodeCrossSessionRejected:
+    """Another session/device must never gain reuse."""
+
+    def test_foreign_session_rejected_after_use(self):
+        email = "foreignused@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+        verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_A)
+
+        with pytest.raises(ValueError):
+            verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_B)
+
+    def test_foreign_session_cannot_preempt_active_bound_code(self):
+        """An active code bound to session A must be generically invalid
+        for session B — and must NOT be consumed there (A can still use
+        it in its own session)."""
+        email = "foreignactive@example.com"
+        code = issue_one_time_code(email, origin_session_key=ORIGIN_KEY_A)
+
+        with pytest.raises(ValueError):
+            verify_one_time_code(email, code, origin_session_key=ORIGIN_KEY_B)
+
+        record = EmailVerificationCode.objects.get(
+            email=email, code_hash=sha256(code.encode()).hexdigest()
+        )
+        assert record.used_at is None, (
+            "a rejected foreign-session verify must not consume the code"
+        )
+        assert not ParentAccount.objects.filter(email=email).exists(), (
+            "foreign session must not obtain a ParentAccount from a "
+            "code bound to another session"
+        )
+        # The origin session can still verify normally afterwards.
+        account = verify_one_time_code(
+            email, code, origin_session_key=ORIGIN_KEY_A
+        )
+        assert account.email == email
+
+
+class TestCheckEndpointSessionScoped:
+    """Endpoint/session scoping with real clients + real /register/ flow."""
+
+    def test_check_rejects_code_bound_to_foreign_session(self):
+        owner = Client()
+        email = "scopedcheck@example.com"
+        code = _start_verification(owner, email)  # bound to owner's session
+
+        stranger = Client()
+        resp = stranger.post(ENTRY_PATH, {"email": email})
+        assert resp.status_code == 302, "stranger needs its own pending email"
+
+        check = stranger.post(reverse(CHECK_URL_NAME), {"code": code})
+        assert json.loads(check.content) == FAILURE_PAYLOAD, (
+            "a code bound to another session must be generically invalid "
+            f"at the check endpoint, got: {check.content!r}"
+        )
+
+    def test_check_same_session_used_code_stays_generic_failure(self):
+        """Even the origin session must not see a consumed code as valid
+        through the read-only check endpoint."""
+        client = Client()
+        email = "scopedused@example.com"
+        code = _start_verification(client, email)
+
+        assert json.loads(_check(client, code).content) == {"valid": True}
+        form_resp = client.post(VERIFY_FORM_PATH, {"code": code})
+        assert form_resp.status_code == 302
+
+        _assert_generic_failure(_check(client, code))
+
+
+class TestVerifyViewDuplicateSubmit:
+    """View-level acceptance with real clients."""
+
+    def test_resubmit_same_session_after_consumption_redirects_to_portal(self):
+        """Acceptance: same browser session, code already consumed by the
+        first submit (e.g. the second request of a duplicate double-click
+        whose session snapshot still carried the pending email) must land
+        on the portal redirect, NOT the generic invalid-code page."""
+        client = Client()
+        email = "dupsubmit@example.com"
+        code = _start_verification(client, email)
+
+        first = client.post(VERIFY_FORM_PATH, {"code": code})
+        assert first.status_code == 302 and "/portal/" in first.url, first.url
+
+        second = client.post(VERIFY_FORM_PATH, {"code": code})
+        assert second.status_code == 302, (
+            "second same-session submit of the same valid code must be "
+            f"idempotent (redirect), got {second.status_code}: "
+            f"{second.content.decode()[:200] if second.status_code == 200 else ''}"
+        )
+        assert "/portal/" in second.url, second.url
+
+        account = ParentAccount.objects.get(email=email)
+        assert ParentAccount.objects.filter(email=email).count() == 1
+        assert client.session[PARENT_ACCOUNT_SESSION_KEY] == account.pk
+
+    def test_second_session_cannot_verify_first_sessions_active_code(self):
+        """Cross-device reuse is impossible: B (with its own pending
+        session for the same email) submitting A's still-active code must
+        get the generic invalid page, no login, and must not consume or
+        bypass it — A can still verify in its own session."""
+        email = "crossdevice@example.com"
+        a = Client()
+        code_a = _start_verification(a, email)
+
+        b = Client()
+        resp = b.post(ENTRY_PATH, {"email": email})
+        assert resp.status_code == 302
+
+        verify_b = b.post(VERIFY_FORM_PATH, {"code": code_a})
+        assert verify_b.status_code in (200, 400), (
+            f"foreign-session verify must not succeed, got {verify_b.status_code}"
+        )
+        content = verify_b.content.decode()
+        assert "Nederīgs vai noilgušs kods" in content, content[:300]
+        assert PARENT_ACCOUNT_SESSION_KEY not in b.session
+        assert not ParentAccount.objects.filter(email=email).exists()
+        code_a_record = EmailVerificationCode.objects.get(
+            email=email, code_hash=sha256(code_a.encode()).hexdigest()
+        )
+        assert code_a_record.used_at is None
+
+        verify_a = a.post(VERIFY_FORM_PATH, {"code": code_a})
+        assert verify_a.status_code == 302 and "/portal/" in verify_a.url
+
+    def test_used_code_stays_generically_invalid_in_other_session(self):
+        """Regression guard: a code consumed in session A must keep the
+        current generic invalid behavior for session B (never idempotent
+        there)."""
+        email = "usedother@example.com"
+        a = Client()
+        code_a = _start_verification(a, email)
+        assert a.post(VERIFY_FORM_PATH, {"code": code_a}).status_code == 302
+
+        b = Client()
+        assert b.post(ENTRY_PATH, {"email": email}).status_code == 302
+        resp = b.post(VERIFY_FORM_PATH, {"code": code_a})
+        assert resp.status_code in (200, 400)
+        assert "Nederīgs vai noilgušs kods" in resp.content.decode()
+        assert PARENT_ACCOUNT_SESSION_KEY not in b.session

@@ -36,6 +36,7 @@ from apps.billing.models import BillingInvoice
 from apps.billing.parent_portal import parent_invoice_groups
 from apps.documents.models import Document, MedicalPermit
 from apps.documents.medical_permits import (
+    can_parent_upload_application_medical_permit,
     medical_permit_status,
     medical_permit_status_label,
 )
@@ -360,16 +361,32 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
         )
 
     # P23 — medical-permit surface context (status, URLs, file availability).
+    # After approval the form targets the member endpoint (the application
+    # status stays "approved" while agreements move on — a signed agreement
+    # must never block replacement uploads).
     _permit = getattr(application, "medical_permit", None)
     _permit_status = medical_permit_status(_permit)
+    if application.approved_member_id is not None:
+        _permit_upload_url = reverse(
+            "registrations:member-medical-permit-upload",
+            args=[application.approved_member_id],
+        )
+    else:
+        _permit_upload_url = reverse(
+            "registrations:application-medical-permit-upload",
+            args=[application.pk],
+        )
     medical_permit_context = {
         "status": _permit_status,
         "status_label": medical_permit_status_label(_permit_status),
+        "warning": _permit_status in ("expiring", "expired"),
         "has_file": bool(_permit is not None and _permit.file),
-        "upload_url": reverse(
-            "registrations:application-medical-permit-upload",
-            args=[application.pk],
+        "filename": (
+            _permit.original_filename if _permit is not None and _permit.file else ""
         ),
+        "can_upload": can_parent_upload_application_medical_permit(application),
+        "input_id": f"medical_permit_file_{application.pk}",
+        "upload_url": _permit_upload_url,
         "preview_url": (
             reverse("registrations:medical-permit-preview", args=[_permit.pk])
             if _permit is not None and _permit.file
@@ -462,8 +479,17 @@ def start_registration(request: HttpRequest) -> HttpResponse:
                 {"form": None, "error": "Ievadiet e-pasta adresi."},
             )
 
+        # Bind the OTP to this browser session (OTP duplicate-submit fix):
+        # make sure a persisted session key exists BEFORE issuing so the
+        # idempotent-reuse / cross-session rejection rules have an anchor.
+        if not request.session.session_key:
+            request.session.save()
+        origin_session_key = request.session.session_key
+
         try:
-            raw_code = issue_one_time_code(email)
+            raw_code = issue_one_time_code(
+                email, origin_session_key=origin_session_key
+            )
         except ValueError:
             return render(
                 request,
@@ -621,6 +647,35 @@ def parent_portal(request: HttpRequest) -> HttpResponse:
             "expired",
         )
         app.medical_permit_has_file = bool(permit is not None and permit.file)
+        app.medical_permit_filename = (
+            permit.original_filename if permit is not None and permit.file else ""
+        )
+        app.medical_permit_preview_url = (
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+            if permit is not None and permit.file
+            else ""
+        )
+        app.medical_permit_download_url = (
+            reverse("registrations:medical-permit-download", args=[permit.pk])
+            if permit is not None and permit.file
+            else ""
+        )
+        app.can_upload_medical_permit = can_parent_upload_application_medical_permit(
+            app
+        )
+        # Post-approval the card's form targets the member endpoint so a
+        # signed agreement never blocks replacement uploads.
+        if app.approved_member_id is not None:
+            app.medical_permit_upload_url = reverse(
+                "registrations:member-medical-permit-upload",
+                args=[app.approved_member_id],
+            )
+        else:
+            app.medical_permit_upload_url = reverse(
+                "registrations:application-medical-permit-upload",
+                args=[app.pk],
+            )
+        app.medical_permit_input_id = f"medical_permit_file_{app.pk}"
     # Personalized hero greeting — the account's canonical Guardian name, if on
     # file. Empty (fresh parent without a name yet) falls back to a plain greeting.
     guardian = Guardian.objects.filter(parent_account=account).first()
@@ -807,16 +862,43 @@ def medical_permit_download(request: HttpRequest, permit_id: int) -> HttpRespons
     return _medical_permit_response(request, permit_id, disposition="attachment")
 
 
+def _medical_permit_upload_payload(permit: MedicalPermit) -> dict[str, object]:
+    """Card-update payload for a successful (201) parent permit upload.
+
+    Carries exactly the safe fields the medical_permit_card needs to refresh
+    itself in place after an async upload — filename, status, and the private
+    preview/download URLs of the just-stored permit. Never file bytes, MIME
+    sniffing data, or anything beyond the parent's own document references.
+    """
+    status = medical_permit_status(permit)
+    return {
+        "filename": permit.original_filename,
+        "status": status,
+        "status_label": medical_permit_status_label(status),
+        "preview_url": reverse(
+            "registrations:medical-permit-preview", args=[permit.pk]
+        ),
+        "download_url": reverse(
+            "registrations:medical-permit-download", args=[permit.pk]
+        ),
+    }
+
+
 def application_medical_permit_upload(
     request: HttpRequest, application_id: int
 ) -> HttpResponse:
     """POST — parent-owned application medical-permit upload (201 on success).
 
-    Allowed on any status (draft or submitted); the permit stays optional
-    intake data. Foreign applications are 404; anonymous visitors follow the
-    protected-parent redirect. Validation failures return 400.
+    Allowed only on the policy-allowed statuses (draft, fix_requested,
+    submitted, approved); a rejected application is 404 even for the owner —
+    the permit stays optional intake data. Foreign applications are 404;
+    anonymous visitors follow the protected-parent redirect. Validation
+    failures return 400. Success returns the card-update JSON payload.
     """
-    from apps.documents.medical_permits import upload_application_medical_permit
+    from apps.documents.medical_permits import (
+        can_parent_upload_application_medical_permit,
+        upload_application_medical_permit,
+    )
 
     account = _current_parent_account(request)
     if account is None:
@@ -826,18 +908,20 @@ def application_medical_permit_upload(
     application = get_object_or_404(RegistrationApplication, pk=application_id)
     if application.parent_account_id != account.pk:
         raise Http404
+    if not can_parent_upload_application_medical_permit(application):
+        raise Http404
     upload = request.FILES.get("file")
     if upload is None:
         return JsonResponse({"error": "Fails nav izvēlēts."}, status=400)
     try:
-        upload_application_medical_permit(
+        permit = upload_application_medical_permit(
             application,
             upload,
             actor_label=f"parent: {account.email}",
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    return JsonResponse({}, status=201)
+    return JsonResponse(_medical_permit_upload_payload(permit), status=201)
 
 
 def member_medical_permit_upload(request: HttpRequest, member_id: int) -> HttpResponse:
@@ -845,6 +929,7 @@ def member_medical_permit_upload(request: HttpRequest, member_id: int) -> HttpRe
 
     Covers both the first permit for an approved child (creates a record
     linked to the member and its source application) and later replacements.
+    Success returns the card-update JSON payload.
     """
     from apps.documents.medical_permits import upload_member_medical_permit
     from apps.members.models import Member
@@ -861,12 +946,12 @@ def member_medical_permit_upload(request: HttpRequest, member_id: int) -> HttpRe
     if upload is None:
         return JsonResponse({"error": "Fails nav izvēlēts."}, status=400)
     try:
-        upload_member_medical_permit(
+        permit = upload_member_medical_permit(
             member, upload, actor_label=f"parent: {account.email}"
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    return JsonResponse({}, status=201)
+    return JsonResponse(_medical_permit_upload_payload(permit), status=201)
 
 
 def view_registration_summary(request: HttpRequest, application_id: int) -> HttpResponse:

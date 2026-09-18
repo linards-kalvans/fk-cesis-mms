@@ -22,12 +22,13 @@ Approved routes: /register/, /register/verify/, /portal/, /applications/new/.
 """
 
 import re
+from hashlib import sha256
 
 import pytest
 from django.core import mail
 from django.test import Client, override_settings
 
-from apps.accounts.models import ParentAccount
+from apps.accounts.models import EmailVerificationCode, ParentAccount
 from apps.accounts.session import PARENT_ACCOUNT_SESSION_KEY
 
 pytestmark = pytest.mark.django_db
@@ -401,8 +402,14 @@ class TestCrossAccountRegression:
 class TestCodeLifecycle:
 
     def test_single_use_code_rejected_on_second_attempt(self):
-        """A one-time code must be single-use; second verification attempt
-        must fail.
+        """A one-time code must be single-use for every other session; a
+        second verification attempt from another browser session must fail.
+
+        (OTP duplicate-submit design: same-session replay is now
+        intentionally idempotent — covered by
+        TestVerifyViewDuplicateSubmit.test_resubmit_same_session_after_consumption_redirects_to_portal
+        in tests/accounts/test_verify_code_check_endpoint.py.  The
+        single-use guarantee under test here is the cross-session one.)
         """
         client = Client()
         client.post(
@@ -417,10 +424,13 @@ class TestCodeLifecycle:
             f"First code use should redirect (302). Got {resp1.status_code}."
         )
 
-        # Second use — must fail
-        resp2 = client.post(VERIFY_ROUTE, {"code": code})
+        # Second use from a foreign session — must fail
+        other = Client()
+        other.post(REGISTER_ROUTE, {"email": "singleuse@example.com"})
+        resp2 = other.post(VERIFY_ROUTE, {"code": code})
         assert resp2.status_code in (200, 400), (
-            f"Second code use must fail (200/400), got {resp2.status_code}."
+            f"Second code use from another session must fail (200/400), "
+            f"got {resp2.status_code}."
         )
 
     def test_expired_code_rejected(self):
@@ -615,3 +625,96 @@ class TestVerifyPagePOSTErrorShowsPendingEmail:
         assert "pendingwrongtest@example.com" in content, (
             "Verify page POST error must still show the pending verification email."
         )
+
+
+# ---------------------------------------------------------------------------
+# 10. OTP duplicate-submit fix: a real /register/-issued code carries the
+#     issuing client's session key (approved design, RED).
+#
+# start_registration must ensure a session key exists BEFORE issuing the
+# OTP and pass it to issue_one_time_code, which persists it on the
+# EmailVerificationCode row as origin_session_key.
+# ---------------------------------------------------------------------------
+
+
+def _latest_code_record(email: str) -> EmailVerificationCode:
+    record = (
+        EmailVerificationCode.objects.filter(email__iexact=email)
+        .order_by("-created_at")
+        .first()
+    )
+    assert record is not None, (
+        f"no EmailVerificationCode row issued for {email}"
+    )
+    return record  # type: ignore[no-any-return]
+
+
+class TestIssuedCodeBoundToOriginSession:
+
+    def test_register_post_binds_code_to_client_session_key(self):
+        """The code issued by POST /register/ must store the originating
+        browser session key — the anchor for same-session idempotency and
+        cross-session rejection."""
+        client = Client()
+        resp = client.post(REGISTER_ROUTE, {"email": "bindorigin@example.com"})
+        assert resp.status_code == 302, f"entry POST failed: {resp.status_code}"
+
+        session_key = client.session.session_key
+        assert session_key, (
+            "start_registration must ensure a session key exists before "
+            "issuing the OTP (design point 2)"
+        )
+
+        record = _latest_code_record("bindorigin@example.com")
+        assert hasattr(record, "origin_session_key"), (
+            "EmailVerificationCode must gain the approved origin_session_key "
+            "field (nullable, indexed, max_length=40)"
+        )
+        assert record.origin_session_key == session_key, (
+            "issued OTP must be bound to the originating Django session key"
+        )
+
+    def test_two_sessions_get_distinct_bindings(self):
+        """Codes issued from independent browser sessions must carry
+        distinct origin keys equal to their own session keys — never a
+        shared/blank binding."""
+        c1 = Client()
+        c1.post(REGISTER_ROUTE, {"email": "bindone@example.com"})
+        c2 = Client()
+        c2.post(REGISTER_ROUTE, {"email": "bindtwo@example.com"})
+
+        r1 = _latest_code_record("bindone@example.com")
+        r2 = _latest_code_record("bindtwo@example.com")
+        assert r1.origin_session_key == c1.session.session_key
+        assert r2.origin_session_key == c2.session.session_key
+        assert r1.origin_session_key != r2.origin_session_key
+
+    def test_binding_does_not_store_plaintext_code(self):
+        """Security guard: session binding must not leak the raw OTP into
+        persisted state. Deterministic assertions only — scanning the
+        stored SHA-256 hex text for a 6-digit substring is probabilistically
+        flaky (the digest can coincidentally contain the digits)."""
+        client = Client()
+        client.post(REGISTER_ROUTE, {"email": "bindhash@example.com"})
+        code = _extract_code_from_email()
+        record = _latest_code_record("bindhash@example.com")
+
+        assert record.code_hash == sha256(code.encode()).hexdigest()
+        assert record.code_hash != code
+        attnames = {
+            field.attname
+            for field in EmailVerificationCode._meta.get_fields()
+            if field.concrete
+        }
+        plaintext_otp_fields = attnames & {
+            "code",
+            "raw_code",
+            "one_time_code",
+            "otp",
+            "plaintext_code",
+        }
+        assert not plaintext_otp_fields, (
+            "EmailVerificationCode must store no plaintext-OTP field: "
+            f"{plaintext_otp_fields}"
+        )
+        assert code not in str(record)

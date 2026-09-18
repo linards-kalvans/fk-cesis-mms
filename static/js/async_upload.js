@@ -6,9 +6,151 @@
  * (on completion) either prefills empty fields or shows a suggestion chip
  * beside fields the user already filled in. When the script is absent
  * (no JS, blocked, etc.) the synchronous form submit path still works.
+ *
+ * P23 — the same file also owns the medical-permit fetch-on-change path:
+ * inputs marked `data-medical-permit-input` POST straight to their card's
+ * advertised upload URL and update the card in place. That binding runs
+ * unconditionally (the portal page has no [data-async-upload-root]) and
+ * never touches the OCR polling machinery.
  */
 (function () {
   'use strict';
+
+  /* P23 — medical-permit async bind path.
+   *
+   * Deliberately placed BEFORE the ROOT early-return guard below: the permit
+   * card also renders on /portal/, which has no [data-async-upload-root].
+   * Selects every normal hidden file input the card advertises, POSTs the
+   * picked file to the card's own data-medical-permit-upload-url, then
+   * patches the card in place from the 201 payload (badge, status, filename,
+   * replacement label, private preview/download links). No reload, no OCR
+   * step — a permit never goes through the document pipeline. A per-input
+   * bound flag keeps the change binding idempotent if the script is ever
+   * evaluated more than once.
+   */
+  function bindMedicalPermitInputs() {
+    var inputs = document.querySelectorAll('input[type="file"][data-medical-permit-input]');
+    Array.prototype.forEach.call(inputs, function (input) {
+      if (input.getAttribute('data-medical-permit-bound') === '1') return;
+      input.setAttribute('data-medical-permit-bound', '1');
+      input.addEventListener('change', function () {
+        if (!input.files || !input.files.length) return;
+        var card = input.closest('[data-medical-permit-card]');
+        if (!card) return;
+        var uploadUrl = card.getAttribute('data-medical-permit-upload-url');
+        if (!uploadUrl) return;
+        var file = input.files[0];
+
+        // Clear the previous inline failure — retry stays available.
+        var staleError = card.querySelector('[data-medical-permit-error]');
+        if (staleError) staleError.remove();
+
+        // CSRF: the workspace wizard form carries a hidden token; the portal
+        // has no DOM form (noscript content is not parsed when JS runs), so
+        // fall back to the csrftoken cookie set by CsrfViewMiddleware.
+        var csrfToken = '';
+        var tokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (tokenInput && tokenInput.value) {
+          csrfToken = tokenInput.value;
+        } else {
+          var cookieMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+          if (cookieMatch) csrfToken = decodeURIComponent(cookieMatch[1]);
+        }
+
+        var formData = new FormData();
+        formData.append('file', file);
+        if (csrfToken) formData.append('csrfmiddlewaretoken', csrfToken);
+
+        fetch(uploadUrl, {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin',
+          headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+        })
+          .then(function (response) {
+            if (!response.ok) {
+              // Surface the server's Latvian error when it sends one.
+              return response.json().catch(function () { return {}; }).then(function (body) {
+                throw new Error(body && body.error ? String(body.error) : '');
+              });
+            }
+            return response.json();
+          })
+          .then(function (payload) {
+            // Header badge → active state, same grammar as the ID cards.
+            var badge = card.querySelector('[data-medical-permit-badge]');
+            if (badge) {
+              badge.className = 'fk-source-badge fk-source-badge--active';
+              badge.textContent = 'Aktīvs';
+            }
+            // Body → status line from the payload + filename + replaced hint.
+            var bodyEl = card.querySelector('[data-medical-permit-body]');
+            if (bodyEl) {
+              while (bodyEl.firstChild) bodyEl.removeChild(bodyEl.firstChild);
+              var statusP = document.createElement('p');
+              statusP.setAttribute('data-medical-permit-status', payload.status || '');
+              statusP.setAttribute('data-medical-permit-status-text', '');
+              statusP.textContent = payload.status_label || payload.status || '';
+              bodyEl.appendChild(statusP);
+              var filenameP = document.createElement('p');
+              filenameP.className = 'fk-document-card__filename';
+              filenameP.textContent = payload.filename || file.name;
+              bodyEl.appendChild(filenameP);
+              var hintP = document.createElement('p');
+              hintP.className = 'fk-document-card__hint';
+              hintP.textContent =
+                'Dokuments jau ir augšupielādēts. Aizvietojiet tikai tad, '
+                + 'ja dokuments ir nepareizs vai novecojis.';
+              bodyEl.appendChild(hintP);
+            }
+            // Upload control becomes the replacement affordance — the child
+            // text span only, so the label's inline upload SVG survives.
+            var labelText = card.querySelector('[data-medical-permit-label]');
+            if (labelText) labelText.textContent = 'Aizvietot apliecību';
+            // Populate + reveal the card's stable private-links container.
+            var actions = card.querySelector('[data-medical-permit-actions]');
+            if (actions) {
+              actions.innerHTML = '';
+              if (payload.preview_url) {
+                var previewLink = document.createElement('a');
+                previewLink.className = 'fk-button fk-button--secondary fk-button--small';
+                previewLink.setAttribute('href', payload.preview_url);
+                previewLink.textContent = 'Skatīt';
+                actions.appendChild(previewLink);
+              }
+              if (payload.download_url) {
+                var downloadLink = document.createElement('a');
+                downloadLink.className = 'fk-button fk-button--secondary fk-button--small';
+                downloadLink.setAttribute('href', payload.download_url);
+                downloadLink.textContent = 'Lejupielādēt';
+                actions.appendChild(downloadLink);
+              }
+              actions.removeAttribute('hidden');
+            }
+          })
+          .catch(function (error) {
+            var message = error && error.message
+              ? error.message
+              : 'Neizdevās augšupielādēt apliecību. Mēģini vēlreiz.';
+            var errorSlot = card.querySelector('[data-medical-permit-error]');
+            if (!errorSlot) {
+              errorSlot = document.createElement('div');
+              errorSlot.className = 'fk-inline-error';
+              errorSlot.setAttribute('role', 'alert');
+              errorSlot.setAttribute('data-medical-permit-error', '');
+              card.appendChild(errorSlot);
+            }
+            errorSlot.textContent = message;
+          });
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindMedicalPermitInputs);
+  } else {
+    bindMedicalPermitInputs();
+  }
 
   var ROOT = document.querySelector('[data-async-upload-root]');
   if (!ROOT) return;

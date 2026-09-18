@@ -294,3 +294,101 @@ class TestVerifyCodeJsStaleResponseGuard:
             "the value-vs-checked-code guard must precede the "
             "GENERIC_INVALID error write in the response path"
         )
+
+
+# ---------------------------------------------------------------------------
+# 4. Duplicate-submit prevention contract (approved OTP fix, RED).
+#
+# Acceptance being pinned:
+#   * A six-digit OTP entry causes AT MOST ONE native verification form
+#     submit — during AJAX preflight and during native submission, a
+#     manual button click or Enter must not create a second submit.
+#   * verify_code.js owns the button state: hook ``data-verify-submit``,
+#     disabled while checking/submitting, submit-event interception,
+#     exactly one programmatic requestSubmit after a valid verdict,
+#     re-enable after invalid verdict / network failure so the manual
+#     no-JS fallback path stays reachable.
+# ---------------------------------------------------------------------------
+
+
+class TestVerifySubmitButtonTemplateHook:
+    """The submit button must carry a stable JS hook (design point 7)."""
+
+    def test_submit_button_carries_stable_hook(self):
+        content = _render_verify_page("submithook@example.com")
+        match = re.search(r"<button[^>]*data-verify-submit[^>]*>", content)
+        assert match is not None, (
+            "the 'Apstiprināt' submit button must expose a stable "
+            "data-verify-submit hook for the duplicate-submit guard; "
+            f"no such button attribute found in: {content[content.find('<form'):content.find('</form>')][:400]}"
+        )
+
+
+class TestVerifyCodeJsDuplicateSubmitContract:
+    """Source-level contract: the script must own edit/check/submit state
+    and make a double submit structurally impossible."""
+
+    @pytest.fixture
+    def src(self) -> str:
+        assert JS_PATH.exists(), f"{JS_PATH} must exist"
+        return _source()
+
+    def test_targets_stable_button_hook(self, src: str):
+        assert "data-verify-submit" in src, (
+            "verify_code.js must bind the button through the stable "
+            "data-verify-submit hook"
+        )
+
+    def test_listens_to_form_submit_event(self, src: str):
+        """Enter-key implicit submission and button clicks both surface as
+        the form's ``submit`` event; intercepting there is the only way to
+        gate every manual path (no keydown hacks needed)."""
+        assert re.search(r"""addEventListener\(\s*['"]submit['"]""", src), (
+            "must bind a submit listener on the form so a manual submit "
+            "(click or Enter) is intercepted while checking/submitting"
+        )
+
+    def test_interception_prevents_default(self, src: str):
+        assert "preventDefault" in src, (
+            "the submit handler must be able to preventDefault a manual "
+            "submit that races the programmatic requestSubmit handoff"
+        )
+
+    def test_tracks_submit_state_flag(self, src: str):
+        """A persistent state flag must distinguish 'already submitted /
+        programmatic handoff in progress' from a fresh manual submit, so
+        exactly ONE requestSubmit ever fires per valid code."""
+        assert re.search(r"\b(submitted|submitting|allowNative|autoSubmit)\w*\b", src), (
+            "must track submit state (e.g. a submitting/submitted or "
+            "allowNativeSubmit flag) to allow exactly one programmatic "
+            "requestSubmit and reject any further manual submit"
+        )
+
+    def test_disables_button_while_checking_or_submitting(self, src: str):
+        assert re.search(
+            r"""disabled\s*=?\s*true|setAttribute\(\s*['"]disabled['"]""", src
+        ), (
+            "button must be disabled during preflight and native submission "
+            "(defense-in-depth against double click/Enter)"
+        )
+
+    def test_reenables_after_invalid_or_network_failure(self, src: str):
+        assert re.search(
+            r"""disabled\s*=?\s*false|removeAttribute\(\s*['"]disabled['"]""", src
+        ), (
+            "button must be re-enabled after an invalid verdict or network "
+            "failure so the user can retry (manual no-JS path stays live)"
+        )
+
+    def test_button_disable_hook_wired_through_state_flag(self, src: str):
+        """The guard must be ordered: submit-state check + preventDefault
+        come before any second submission path can open — i.e. the submit
+        listener exists AND the state flag exists AND requestSubmit remains
+        the sole programmatic submitter (asserted by the existing
+        test_submits_via_request_submit_only)."""
+        assert re.search(r"""addEventListener\(\s*['"]submit['"]""", src)
+        assert re.search(r"\b(submitted|submitting|allowNative|autoSubmit)\w*\b", src)
+        assert "preventDefault" in src
+        assert "disabled" in src, (
+            "disable/enable management must exist for the data-verify-submit button"
+        )
