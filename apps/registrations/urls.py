@@ -40,4 +40,25 @@ urlpatterns = [
         views.open_parent_signed_artifact,
         name="parent-signed-artifact",
     ),
+    # P23 — parent medical-permit upload/preview/download endpoints.
+    path(
+        "applications/<int:application_id>/medical-permit/upload/",
+        views.application_medical_permit_upload,
+        name="application-medical-permit-upload",
+    ),
+    path(
+        "portal/members/<int:member_id>/medical-permit/upload/",
+        views.member_medical_permit_upload,
+        name="member-medical-permit-upload",
+    ),
+    path(
+        "portal/medical-permits/<int:permit_id>/preview/",
+        views.medical_permit_preview,
+        name="medical-permit-preview",
+    ),
+    path(
+        "portal/medical-permits/<int:permit_id>/download/",
+        views.medical_permit_download,
+        name="medical-permit-download",
+    ),
 ]

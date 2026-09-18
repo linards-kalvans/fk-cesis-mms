@@ -109,6 +109,18 @@ def other_verified_client(other_parent_account):
     return client
 
 
+def _verified_login(client, account):
+    """Log ``client`` in as ``account`` via the magic-link verify route.
+
+    Shared helper for tests that build ad-hoc accounts (P23 medical-permit
+    ownership matrix); mirrors the ``verified_client`` fixture behaviour.
+    """
+    from apps.accounts.services import issue_magic_link
+
+    raw = issue_magic_link(account)
+    client.get(f"/accounts/verify/{raw}/")
+
+
 @pytest.fixture
 def staff_client(db):
     """A django test Client logged in as a staff superuser."""

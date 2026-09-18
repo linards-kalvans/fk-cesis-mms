@@ -71,3 +71,16 @@ def test_member_export_audit_actions_exist():
     values = set(AuditEvent.Action.values)
     assert "member_export_template_mutated" in values
     assert "member_export_run" in values
+
+
+def test_medical_permit_audit_actions_exist():
+    """P23 — the six medical-permit audit actions are part of the catalog."""
+    values = set(AuditEvent.Action.values)
+    assert {
+        "medical_permit_uploaded",
+        "medical_permit_replaced",
+        "medical_permit_confirmed",
+        "medical_permit_confirmation_cleared",
+        "medical_permit_previewed",
+        "medical_permit_downloaded",
+    } <= values

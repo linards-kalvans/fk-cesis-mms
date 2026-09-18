@@ -3,6 +3,8 @@
 
 {% block page_title %}Mani pieteikumi — FK Cēsis MMS{% endblock %}
 
+{% block extra_js %}<script src="{% static 'js/async_upload.js' %}" defer></script>{% endblock %}
+
 {% block page_content %}
 <p class="fk-eyebrow">FK Cēsis MMS</p>
 <h1 class="fk-page-title">Mani pieteikumi</h1>
@@ -76,6 +78,15 @@
         <div class="fk-progress-bar"><span style="width:0%"></span></div>
       {% endif %}
     </div>
+
+    {% comment %}P23 — permit card in its own full-width row: after the
+    summary / progress blocks, before the main CTA. Async upload updates it
+    in place.{% endcomment %}
+    {% if app.can_upload_medical_permit %}
+    <div class="fk-app-permit">
+      {% include "parent_ui/includes/medical_permit_card.html" with status=app.medical_permit_status status_label=app.medical_permit_status_label warning=app.medical_permit_warning has_file=app.medical_permit_has_file filename=app.medical_permit_filename upload_url=app.medical_permit_upload_url preview_url=app.medical_permit_preview_url download_url=app.medical_permit_download_url input_id=app.medical_permit_input_id %}
+    </div>
+    {% endif %}
 
     <div class="fk-app-actions">
       {% if app.status == 'draft' or app.status == 'fix_requested' %}

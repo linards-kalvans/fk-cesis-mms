@@ -41,6 +41,12 @@ from apps.core.admin_links import admin_link, admin_links
 from apps.core.audit import record_audit_event
 from apps.core.export import csv_response
 from apps.core.models import AuditEvent
+from apps.documents.admin_filters import MemberMedicalPermitStatusFilter
+from apps.documents.medical_permits import (
+    clear_medical_permit_confirmation,
+    confirm_medical_permit,
+    upload_member_medical_permit,
+)
 from apps.integrations import agreement_platform
 from apps.integrations.tasks import (
     enqueue_create_agreement_submission,
@@ -792,6 +798,64 @@ class GuardianAdmin(admin.ModelAdmin):
         enqueue_sync_billing_record_payments(record.pk)
         self.message_user(request, "Maksājumu pārbaude ielikta rindā.")
 
+    # ------------------------------------------------------------------
+    # P23 — medical-permit handlers (member_id-scoped)
+    # ------------------------------------------------------------------
+
+    def _family_hub_handle_medical_permit_upload(self, request, guardian):
+        member = self._get_guardian_member(
+            guardian, request.POST.get("member_id", "")
+        )
+        upload = request.FILES.get("medical_permit_file")
+        if upload is None:
+            self.message_user(
+                request, "Lūdzu izvēlieties failu.", level=messages.ERROR
+            )
+            return
+        try:
+            upload_member_medical_permit(
+                member,
+                upload,
+                actor_label=f"staff: {request.user}",
+                actor=request.user,
+            )
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return
+        self.message_user(request, "Veselības apliecība augšupielādēta.")
+
+    def _family_hub_handle_confirm_medical_permit(self, request, guardian):
+        member = self._get_guardian_member(
+            guardian, request.POST.get("member_id", "")
+        )
+        permit = getattr(member, "medical_permit", None)
+        if permit is None:
+            self.message_user(
+                request,
+                "Veselības apliecība vēl nav izveidota.",
+                level=messages.ERROR,
+            )
+            return
+        confirm_medical_permit(permit, actor=request.user)
+        self.message_user(request, "Apstiprinājums reģistrēts.")
+
+    def _family_hub_handle_clear_medical_permit_confirmation(
+        self, request, guardian
+    ):
+        member = self._get_guardian_member(
+            guardian, request.POST.get("member_id", "")
+        )
+        permit = getattr(member, "medical_permit", None)
+        if permit is None:
+            self.message_user(
+                request,
+                "Veselības apliecība vēl nav izveidota.",
+                level=messages.ERROR,
+            )
+            return
+        clear_medical_permit_confirmation(permit, actor=request.user)
+        self.message_user(request, "Apstiprinājums noņemts.")
+
 
 @admin.register(TrainingGroup)
 class TrainingGroupAdmin(admin.ModelAdmin):
@@ -864,7 +928,7 @@ class TrainingGroupAdmin(admin.ModelAdmin):
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
     list_display = ("full_name", "guardian", "birth_date", "training_group")
-    list_filter = ("training_group",)
+    list_filter = ("training_group", MemberMedicalPermitStatusFilter)
     search_fields = ("full_name", "personal_id")
     actions = ["export_csv", "export_csv_with_sensitive", "renew_billing"]
     readonly_fields = ("related_records",)

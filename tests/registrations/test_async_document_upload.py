@@ -444,6 +444,168 @@ def _read_async_upload_js() -> str:
     return JS_PATH.read_text(encoding="utf-8")
 
 
+def _js_function_bodies(source: str) -> list[str]:
+    """Return the text of every ``function … { … }`` body (with header) in
+    ``source``, matched by naive brace counting. Good enough for the
+    unbundled ES5-style helpers this file ships."""
+    bodies: list[str] = []
+    pos = 0
+    while True:
+        start = source.find("function", pos)
+        if start == -1:
+            break
+        brace = source.find("{", start)
+        if brace == -1:
+            break
+        depth = 0
+        end = -1
+        for j in range(brace, len(source)):
+            char = source[j]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j
+                    break
+        if end != -1:
+            bodies.append(source[start : end + 1])
+        pos = start + len("function")
+    return bodies
+
+
+class TestMedicalPermitAsyncUploadJsContract:
+    """P23 follow-up — async_upload.js gains an isolated medical-permit bind
+    path (source-level contract, same sniffing convention as
+    TestAsyncUploadJsContract — there is no JS test runner).
+
+    The permit bind must work on BOTH parent surfaces. Critically, the
+    portal page does not render ``[data-async-upload-root]``, so the permit
+    binding must not live behind the root guard's early return. It must
+    never invoke the OCR status polling of the ID-document path."""
+
+    PERMIT_INPUT_HOOK = "data-medical-permit-input"
+    PERMIT_UPLOAD_URL_HOOK = "data-medical-permit-upload-url"
+
+    @staticmethod
+    def _read_js() -> str:
+        return _read_async_upload_js()
+
+    def _permit_bind_body(self) -> str:
+        """The innermost JS function that selects marked permit inputs AND
+        performs the fetch — the isolated permit bind path."""
+        source = self._read_js()
+        candidates = [
+            body
+            for body in _js_function_bodies(source)
+            if self.PERMIT_INPUT_HOOK in body and "fetch(" in body
+        ]
+        assert candidates, (
+            "async_upload.js must define a bind path that selects "
+            'input[type="file"][data-medical-permit-input] and POSTs the '
+            "picked file to the card's upload URL via fetch — keep the "
+            "selector and the fetch in the same function (smallest body wins)"
+        )
+        return min(candidates, key=len)
+
+    def test_permit_binding_is_not_gated_behind_async_upload_root(self):
+        """The portal renders no [data-async-upload-root]; the existing
+        `if (!ROOT) return;` early return would kill any binding placed
+        after it, so the permit bind must run before that guard (or the
+        guard must be restructured away entirely)."""
+        source = self._read_js()
+        marker_idx = source.find(self.PERMIT_INPUT_HOOK)
+        assert marker_idx != -1, (
+            "async_upload.js must reference the data-medical-permit-input hook"
+        )
+        guard_idx = source.find("if (!ROOT) return;")
+        if guard_idx != -1:
+            assert marker_idx < guard_idx, (
+                "permit binding must be reachable without "
+                "[data-async-upload-root] — the portal page has none, so it "
+                "must run before the ROOT early-return guard"
+            )
+
+    def test_permit_inputs_selected_by_marker(self):
+        import re
+
+        source = self._read_js()
+        assert re.search(
+            r"querySelectorAll\([^)]*data-medical-permit-input", source
+        ), (
+            "the permit bind must select inputs via "
+            "querySelectorAll('…[data-medical-permit-input]…')"
+        )
+
+    def test_permit_upload_targets_the_card_advertised_url(self):
+        body = self._permit_bind_body()
+        assert self.PERMIT_UPLOAD_URL_HOOK in body, (
+            "the permit fetch must read its POST target from the card's "
+            f"{self.PERMIT_UPLOAD_URL_HOOK} attribute — not the ID-document "
+            "ROOT upload URL"
+        )
+
+    def test_permit_upload_posts_file_with_same_origin_csrf(self):
+        body = self._permit_bind_body()
+        assert "new FormData" in body, "permit upload must build a FormData body"
+        assert (
+            "append('file'" in body or 'append("file"' in body
+        ), "permit upload must POST the file under the 'file' field name"
+        assert "csrf" in body.lower(), (
+            "permit upload must send the CSRF token (form field, header, or "
+            "cookie fallback — the portal has no visible DOM form to read)"
+        )
+        assert "same-origin" in body, (
+            "permit upload must use credentials: 'same-origin'"
+        )
+
+    def test_permit_success_updates_card_content(self):
+        body = self._permit_bind_body()
+        # Card-update fields consumed from the 201 payload.
+        for field in ("filename", "preview_url", "download_url"):
+            assert field in body, (
+                f"successful permit upload must use the payload's {field!r} "
+                "to update the card in place"
+            )
+        # Active state: badge text + filename element following the card's
+        # existing DOM grammar.
+        assert "Aktīvs" in body, (
+            "successful permit upload must swap the header badge to the "
+            "active 'Aktīvs' state like the ID-document cards"
+        )
+        assert "fk-document-card__filename" in body, (
+            "successful permit upload must render the filename via the "
+            "card's fk-document-card__filename element"
+        )
+        assert "Aizvietot" in body, (
+            "successful permit upload must relabel the upload control to "
+            "the replacement affordance ('Aizvietot apliecību')"
+        )
+        assert "data-medical-permit-actions" in body, (
+            "successful permit upload must populate the card's "
+            "data-medical-permit-actions container with the private "
+            "preview/download links"
+        )
+
+    def test_permit_path_never_requires_or_polls_ocr(self):
+        body = self._permit_bind_body()
+        for retired in ("pollStatus", "ocr_status", "STATUS_URL"):
+            assert retired not in body, (
+                f"the permit bind path must not touch ID-document OCR "
+                f"machinery ({retired!r}) — permits have no OCR step"
+            )
+
+    def test_permit_failure_shows_latvian_inline_error(self):
+        body = self._permit_bind_body()
+        assert "Neizdevās" in body, (
+            "a failed permit upload must surface a Latvian error (parent "
+            "flow is Latvian-only)"
+        )
+        assert (
+            "fk-inline-error" in body or 'role="alert"' in body
+        ), "the permit failure message must use the inline-error primitive"
+
+
 class TestAsyncUploadJsContract:
     """Source-level contract checks on static/js/async_upload.js.
 

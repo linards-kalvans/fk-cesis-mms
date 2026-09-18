@@ -239,6 +239,10 @@
 
 .fk-app-block { min-width: 0; }
 
+/* P23 — the medical-permit card is a full-width row of its own inside the
+four-column .fk-application-card grid (single-column mobile unaffected). */
+.fk-app-permit { grid-column: 1 / -1; }
+
 .fk-block-label {
   display: block;
   font-size: 0.88rem;

@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone as django_timezone
 
 from apps.accounts.models import EmailVerificationCode, MagicLinkToken, ParentAccount
@@ -244,10 +245,16 @@ def _get_otp_ttl_seconds() -> int:
     return int(getattr(settings, "ONE_TIME_CODE_TTL_SECONDS", 300))
 
 
-def issue_one_time_code(email: str) -> str:
+def issue_one_time_code(
+    email: str, *, origin_session_key: str | None = None
+) -> str:
     """Issue a 6-digit one-time code for *email*.
 
     Returns the raw code string.  Respects rate-limit per email.
+
+    When *origin_session_key* is given it is persisted on the record so
+    verification can scope the code to the issuing browser session (OTP
+    duplicate-submit fix).  Only the hash is ever stored.
     """
     limit = _get_otp_rate_limit()
     now = _now_utc().timestamp()
@@ -264,6 +271,7 @@ def issue_one_time_code(email: str) -> str:
         email=email,
         code_hash=_hash_token(code),
         expires_at=django_timezone.now() + timedelta(seconds=ttl),
+        origin_session_key=origin_session_key,
     )
     return code
 
@@ -283,18 +291,45 @@ def send_one_time_code_email(email: str, raw_code: str) -> None:
     _record_send(email)
 
 
-def verify_one_time_code(email: str, code: str) -> ParentAccount:
+def _code_session_scope(origin_session_key: str | None) -> Q:
+    """Lookup scope for the OTP duplicate-submit session binding.
+
+    * Caller has a session key: accept rows bound to that exact key plus
+      legacy NULL-bound rows (pre-binding codes keep prior behaviour
+      until normal expiry; no backfill).
+    * Caller has no session key: accept only legacy NULL-bound rows — a
+      session-bound row is never verifiable without its origin session.
+    """
+    if origin_session_key is None:
+        return Q(origin_session_key__isnull=True)
+    return Q(origin_session_key=origin_session_key) | Q(origin_session_key__isnull=True)
+
+
+@transaction.atomic
+def verify_one_time_code(
+    email: str, code: str, *, origin_session_key: str | None = None
+) -> ParentAccount:
     """Verify a one-time code for *email*.
 
     Returns the ``ParentAccount``.  Creates one for new emails.
     Raises ``ValueError`` on bad/expired/used code.
+
+    Session binding (OTP duplicate-submit fix): the row lookup is
+    serialised with ``select_for_update()`` inside an atomic transaction,
+    and a code bound to another session never matches here.  Within the
+    expiry window, re-verifying an already-consumed code **from its own
+    origin session** is idempotent — it returns the same account instead
+    of raising — so a racing double submit never surfaces the generic
+    invalid-code error.  Legacy NULL-bound rows keep strict one-time
+    semantics.
     """
     record = (
-        EmailVerificationCode.objects.filter(
+        EmailVerificationCode.objects.select_for_update()
+        .filter(
             email__iexact=email,
             code_hash=_hash_token(code),
-            used_at__isnull=True,
         )
+        .filter(_code_session_scope(origin_session_key))
         .order_by("-created_at")
         .first()
     )
@@ -304,6 +339,20 @@ def verify_one_time_code(email: str, code: str) -> ParentAccount:
 
     if record.is_expired:
         raise ValueError("Code expired")
+
+    if record.used_at is not None:
+        # Idempotent replay only for an unexpired code bound to *this*
+        # session (foreign and legacy NULL rows never get a second use).
+        if (
+            origin_session_key is not None
+            and record.origin_session_key == origin_session_key
+        ):
+            account, _ = ParentAccount.objects.get_or_create(
+                email=email,
+                defaults={"phone": ""},
+            )
+            return cast(ParentAccount, account)
+        raise ValueError("Invalid code")
 
     # Mark used (single-use)
     record.used_at = django_timezone.now()
@@ -321,14 +370,17 @@ def verify_one_time_code(email: str, code: str) -> ParentAccount:
     return cast(ParentAccount, account)
 
 
-def is_one_time_code_valid(email: str, code: str) -> bool:
+def is_one_time_code_valid(
+    email: str, code: str, *, origin_session_key: str | None = None
+) -> bool:
     """Read-only check: is *code* an active one-time code for *email*?
 
     Mirrors ``verify_one_time_code`` lookup semantics (case-insensitive
-    email, matching code hash, unused, unexpired) but performs NO writes:
-    it never marks the code used, never creates an account, and never
-    mutates the session.  Consumption stays owned by the verification
-    form POST.
+    email, matching code hash, unused, unexpired, and session-scoped via
+    :func:`_code_session_scope` — a code bound to another session is
+    never valid here) but performs NO writes: it never marks the code
+    used, never creates an account, and never mutates the session.
+    Consumption stays owned by the verification form POST.
     """
     record = (
         EmailVerificationCode.objects.filter(
@@ -336,6 +388,7 @@ def is_one_time_code_valid(email: str, code: str) -> bool:
             code_hash=_hash_token(code),
             used_at__isnull=True,
         )
+        .filter(_code_session_scope(origin_session_key))
         .order_by("-created_at")
         .first()
     )
