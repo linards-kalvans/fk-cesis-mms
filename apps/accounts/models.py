@@ -55,6 +55,12 @@ class EmailVerificationCode(TimeStampedModel):
     code_hash = models.CharField(max_length=256)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
+    # Django session key of the browser that requested this code (OTP
+    # duplicate-submit fix).  Nullable: legacy rows issued before the
+    # binding keep one-time semantics until normal expiry.
+    origin_session_key = models.CharField(
+        max_length=40, null=True, blank=True, db_index=True
+    )
 
     def __str__(self):
         return f"Code for {self.email}"

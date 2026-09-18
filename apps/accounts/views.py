@@ -95,6 +95,12 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         if not pending:
+            # Duplicate submit racing/after the first success: the first
+            # verification consumed the code, logged the session in and
+            # cleared the pending email.  A same-session resubmission must
+            # land on the portal, not on the missing-pending error.
+            if request.session.get(PARENT_ACCOUNT_SESSION_KEY):
+                return redirect("registrations:parent-portal")
             return render(
                 request,
                 "registrations/verify_code.html",
@@ -112,7 +118,12 @@ def verify_one_time_code_view(request: HttpRequest) -> HttpResponse:
             )
 
         try:
-            account = verify_one_time_code(pending, code)
+            # Same-session duplicate/concurrent submits are idempotent at
+            # the service layer (origin_session_key binding); a foreign
+            # session never reuses a bound code.
+            account = verify_one_time_code(
+                pending, code, origin_session_key=request.session.session_key
+            )
         except ValueError:
             return render(
                 request,
@@ -154,7 +165,13 @@ def verify_one_time_code_check_view(request: HttpRequest) -> HttpResponse:
     pending = request.session.get("pending_verification_email")
     code = request.POST.get("code", "").strip()
 
-    if pending and code and is_one_time_code_valid(pending, code):
+    if (
+        pending
+        and code
+        and is_one_time_code_valid(
+            pending, code, origin_session_key=request.session.session_key
+        )
+    ):
         return JsonResponse({"valid": True})
 
     return JsonResponse(

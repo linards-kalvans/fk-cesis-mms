@@ -342,6 +342,36 @@ class TestSubmitApplication:
         with pytest.raises(ValueError):
             submit_application(app, acct)
 
+    def test_submit_without_medical_permit_succeeds(
+        self, draft_with_documents, kit_sizes, parent_account
+    ):
+        """P23 — the medical permit is optional intake data; submit has no
+        medical-permit validation gate."""
+        from apps.documents.models import MedicalPermit
+        from apps.registrations.services import create_or_update_draft, submit_application
+
+        shirt_pk, _shorts_pk = kit_sizes
+        app = create_or_update_draft(
+            data={
+                "guardian_email": parent_account.email,
+                "guardian_first_name": "Submitter",
+                "guardian_family_name": "Doe",
+                "guardian_personal_id": "010101-55555",
+                "guardian_phone": "+37155555555",
+                "guardian_declared_address": "Riga 5",
+                "member_full_name": "Child Sub",
+                "member_personal_id": "010125-55555",
+                "member_birth_date": "2025-05-01",
+                "member_kit_size_shirt": shirt_pk,
+            },
+            files={},
+            application=draft_with_documents,
+            verified_account=parent_account,
+        )
+        assert MedicalPermit.objects.filter(application=app).count() == 0
+        result = submit_application(app, parent_account)
+        assert result.status == "submitted"
+
     def test_submit_with_deleted_identity_document_raises(
         self, draft_with_documents, kit_sizes, parent_account
     ):

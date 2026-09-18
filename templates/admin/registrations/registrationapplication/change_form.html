@@ -83,6 +83,7 @@
       {% if signed_artifact_agreements %}
         {% include "registrations/admin/_signed_artifact_module.html" %}
       {% endif %}
+      {% include "registrations/admin/_medical_permit_module.html" %}
       {% if agreement %}
         {% include "registrations/admin/_agreement_module.html" with review_action_url=review_action_url %}
       {% endif %}

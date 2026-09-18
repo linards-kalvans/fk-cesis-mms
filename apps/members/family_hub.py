@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict, cast
 
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -85,6 +86,9 @@ class _Child(TypedDict):
     billing_setup_error: str
     document_links: list[dict[str, object]]
     signed_artifact_links: list[dict[str, object]]
+    medical_permit_status: str
+    medical_permit_status_label: str
+    medical_permit_has_file: bool
 
 
 def _child_anchor_id(
@@ -239,6 +243,10 @@ def build_family_hub_context(
 ) -> dict[str, object]:
     """Return the full per-family hub context."""
     from apps.billing.models import MembershipPlan
+    from apps.documents.medical_permits import (
+        medical_permit_status,
+        medical_permit_status_label,
+    )
     from apps.members.models import TrainingGroup
 
     applications = list(
@@ -268,6 +276,18 @@ def build_family_hub_context(
         .order_by("member__full_name", "-season", "pk")
     )
     billing_setup_errors = billing_setup_errors or {}
+
+    # P23 — one permit query for the whole hub, keyed by member and by
+    # application, so the per-child status computation never N+1s.
+    from apps.documents.models import MedicalPermit
+
+    _permit_rows = list(
+        MedicalPermit.objects.filter(
+            Q(member__guardian=guardian) | Q(application__guardian=guardian)
+        )
+    )
+    _permit_by_member = {p.member_id: p for p in _permit_rows if p.member_id}
+    _permit_by_app = {p.application_id: p for p in _permit_rows}
 
     # Group billing records by member for the unified billing block
     billing_groups: list[_BillingGroup] = []
@@ -302,6 +322,10 @@ def build_family_hub_context(
         signed_artifact_links = _build_member_signed_artifact_links(
             prefetched, member
         )
+        permit = _permit_by_member.get(member.pk)
+        if permit is None and application is not None:
+            permit = _permit_by_app.get(application.pk)
+        permit_status = medical_permit_status(permit)
         children.append(
             {
                 "member": member,
@@ -321,6 +345,13 @@ def build_family_hub_context(
                 "billing_setup_error": billing_setup_errors.get(agreement.pk, "") if agreement else "",
                 "document_links": document_links,
                 "signed_artifact_links": signed_artifact_links,
+                "medical_permit_status": permit_status,
+                "medical_permit_status_label": medical_permit_status_label(
+                    permit_status
+                ),
+                "medical_permit_has_file": bool(
+                    permit is not None and permit.file
+                ),
             }
         )
 
@@ -329,6 +360,8 @@ def build_family_hub_context(
     for application in applications:
         if application.approved_member_id is not None:
             continue
+        permit = _permit_by_app.get(application.pk)
+        permit_status = medical_permit_status(permit)
         children.append(
             {
                 "member": None,
@@ -348,6 +381,13 @@ def build_family_hub_context(
                 "billing_setup_error": "",
                 "document_links": [],
                 "signed_artifact_links": [],
+                "medical_permit_status": permit_status,
+                "medical_permit_status_label": medical_permit_status_label(
+                    permit_status
+                ),
+                "medical_permit_has_file": bool(
+                    permit is not None and permit.file
+                ),
             }
         )
 

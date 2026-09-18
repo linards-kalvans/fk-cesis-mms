@@ -89,6 +89,15 @@
             {% include "registrations/_terms_v1.html" %}
           </div>
           {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map document_bound_fields=document_bound_fields workspace_mode=workspace_mode %}
+          {% if medical_permit.can_upload %}
+            {% comment %}P23 — async card: the JS POSTs the picked file straight
+            to the card's data-medical-permit-upload-url. No <form>, no submit
+            button, and no step-gating attributes inside the wizard form. The
+            no-JS fallback would not survive as a nested form either, so the
+            card suppresses it (inside_wizard_form=True) and a standalone
+            <noscript> form renders after the wizard below.{% endcomment %}
+            {% include "parent_ui/includes/medical_permit_card.html" with status=medical_permit.status status_label=medical_permit.status_label warning=medical_permit.warning has_file=medical_permit.has_file filename=medical_permit.filename upload_url=medical_permit.upload_url preview_url=medical_permit.preview_url download_url=medical_permit.download_url input_id=medical_permit.input_id inside_wizard_form=True %}
+          {% endif %}
         {% endif %}
         {% if section_name == "guardian" and guardian_profile_locked %}
           <div class="fk-guardian-lock" data-guardian-lock data-guardian-lock-state="locked">
@@ -229,6 +238,22 @@ document.addEventListener('DOMContentLoaded',function(){
   </div>
 </form>
 
+{% if medical_permit.can_upload %}
+{% comment %}P23 — no-JS permit fallback. Deliberately OUTSIDE the wizard
+form: a nested <form> is discarded by the parser, so the suppressed in-card
+fallback lives here as a standalone multipart POST to the stage-correct
+upload endpoint. Only parsed when JS is off — async_upload.js binds the card
+input and POSTs straight to the card URL instead.{% endcomment %}
+<noscript>
+  <form method="post" action="{{ medical_permit.upload_url }}" enctype="multipart/form-data" class="fk-medical-permit-upload">
+    {% csrf_token %}
+    <label for="{{ medical_permit.input_id }}_noscript">Veselības apliecība (neobligāti) — PDF, JPG, PNG vai HEIC, līdz 25 MB:</label>
+    <input type="file" id="{{ medical_permit.input_id }}_noscript" name="file" accept=".pdf,.jpg,.jpeg,.png,.heic">
+    <button type="submit" class="fk-button fk-button--primary fk-button--full">Augšupielādēt apliecību</button>
+  </form>
+</noscript>
+{% endif %}
+
 {% else %}
 
 {# ── Read-only flat view ── #}
@@ -245,6 +270,9 @@ document.addEventListener('DOMContentLoaded',function(){
   <div class="fk-section-body">
     {% if section_name == "documents" %}
       {% include "parent_ui/includes/document_card.html" with document_state=document_state document_kind_labels=document_kind_labels document_field_id_map=document_field_id_map workspace_mode=workspace_mode %}
+      {% if medical_permit.can_upload %}
+        {% include "parent_ui/includes/medical_permit_card.html" with status=medical_permit.status status_label=medical_permit.status_label warning=medical_permit.warning has_file=medical_permit.has_file filename=medical_permit.filename upload_url=medical_permit.upload_url preview_url=medical_permit.preview_url download_url=medical_permit.download_url input_id=medical_permit.input_id %}
+      {% endif %}
     {% endif %}
     <div class="fk-form-section">
       {% for bound_field in bound_fields %}

@@ -80,7 +80,7 @@ Open items requiring attention:
 4. **P15 calendar-year partial billing:** dev complete, LAN sign-off pending.
 5. **P22 digest:** local PostgreSQL verification passed; GitHub CI rerun and LAN/email acceptance pending.
 6. **M6:** production env / second-host, scheduled off-host backups, integration config docs, final security checklist.
-7. **P23 medical permits:** P23 medical-permit implementation lives on feature/p23-medical-permits. Dev excludes it pending merge and LAN acceptance. **Integration gate:** P16-A must land first; before merging P23, rebase/regenerate P23's core audit migration `0010` so it depends on P16-A core migration `0009` and preserves both P16 signed-artifact and P23 medical-permit audit choices.
+7. **P23 medical permits:** DEV complete + LAN acceptance COMPLETE — signed off 2026-09-18. Automated gate: 2632 passed, ruff/mypy/makemigrations clean. P16-A integration gate resolved; audit migration `core/0012` cleanly depends on `core/0009`.
 
 ---
 
@@ -1181,6 +1181,65 @@ P22 is complete when all of the following are true:
 10. The recipient picker shows only active staff Users.
 11. Full repository verification passes: `uv run pytest -q` (all tests), `uv run ruff check .`, `uv run mypy .`.
 12. Manual LAN acceptance confirms end-to-end: configure recipients, submit application, verify staff inbox receives digest, verify flag stamping, verify re-submit re-arms flag, verify failure handling.
+
+---
+
+---
+
+
+---
+
+### P23 — Medical permit management
+**Status:** DEV complete + LAN acceptance COMPLETE — signed off 2026-09-18. Full automated verification passed (2632 tests; ruff, mypy, makemigrations check clean).
+
+**Why now**
+- Youth-club members require a valid medical certificate to participate in training. Previously handled ad-hoc with paper or informal email exchanges.
+- No structured tracking of permit validity, expiry status, or parent/staff upload workflow existed.
+
+**Target outcome**
+- A `MedicalPermit` model with `OneToOne` linkage to `RegistrationApplication` and nullable `OneToOne` linkage to `Member` (attached during approval).
+- Private file storage with opaque non-PII paths (`private/medical-permits/<uuid>.<ext>`).
+- Format/size validation (PDF/JPG/JPEG/PNG/HEIC; matching extension + MIME; max 25 MiB).
+- Validity rule: year N upload/confirmation → valid through 30 September N+1.
+- Status classification: `missing` / `current` / `expiring` (1 Aug – 30 Sep) / `expired` (1 Oct onwards).
+- Three sources: `parent_upload`, `staff_upload`, `staff_confirmation`.
+- Parent-facing upload, preview, and download endpoints with ownership protection.
+- Staff admin actions on the registration change page and family hub (upload, confirm, clear confirmation).
+- Member changelist status filters.
+- Six `AuditEvent` actions with generic redacted metadata.
+
+**Delivered**
+- New `MedicalPermit` model (`apps/documents/models.py`), service layer (`apps/documents/medical_permits.py`), admin filters (`apps/documents/admin_filters.py`), migration `documents/0007`, core audit migration `core/0012`.
+- Parent routes: application and member upload, private preview/download, ownership protection; first child permit after approval supported. Existing parent upload endpoints return JSON 201 with safe UI data (`filename`, `status`/`status_label`, `preview_url`/`download_url`). Async upload refinement delivered: normal upload auto-starts on file selection (no manual submit button); browser updates permit card in place without reload or OCR; portal card is a dedicated full-width row after progress bar; No-JS fallback preserved (portal standalone multipart form, workspace `<noscript>` form after wizard close, never nested).
+- Registration admin change page medical permit module (upload/confirm/clear); family hub medical permit actions per child row.
+- Registration and member changelist status filters (`Trūkst` / `Beidzas` / `Beidzies`).
+- Six `AuditEvent.Action` choices: `MEDICAL_PERMIT_UPLOADED`, `MEDICAL_PERMIT_REPLACED`, `MEDICAL_PERMIT_CONFIRMED`, `MEDICAL_PERMIT_CONFIRMATION_CLEARED`, `MEDICAL_PERMIT_PREVIEWED`, `MEDICAL_PERMIT_DOWNLOADED`.
+- Safety ordering enforced on every write: validate → write storage → persist metadata → best-effort delete old file.
+- No OCR/medical extraction, no automatic expiry enforcement, no reminder emails, no permit history, no public URLs.
+- Verification: `uv run pytest -q` → **2571 passed**; `uv run ruff check .` → clean; `uv run mypy .` → clean; `uv run python manage.py makemigrations --check` → no changes.
+- Spec: `docs/superpowers/specs/2026-09-14-p23-medical-permit-mvp-design.md`. Plan: `docs/superpowers/plans/2026-09-14-p23-medical-permit-mvp.md`.
+
+### P23 acceptance — Medical permit management
+P23 is complete when all of the following are true:
+
+1. `MedicalPermit` model exists with `OneToOne(application)`, nullable `OneToOne(member)`, `FileField` (private storage), `source`, `valid_until`, `confirmed_by`, `confirmed_at`.
+2. Opaque storage path: `private/medical-permits/<uuid4.hex>.<ext>`; extension validated; no PII in stored name.
+3. Format validation: PDF/JPG/JPEG/PNG/HEIC with matching extension + MIME type; max 25 MiB.
+4. Validity rule: upload/confirmation in year N → `valid_until = 30 September N+1`.
+5. Status helpers return `missing`/`current`/`expiring`/`expired` correctly per the date rules.
+6. Parent upload endpoint creates permit row if missing, replaces stored file if present; ownership enforced.
+7. Parent preview/download proxy enforces ownership; anonymous gets redirect to admin login; non-owner gets 404.
+8. Staff registration admin change page shows status label, upload form, confirm button, clear confirmation button.
+9. Staff family hub shows status per child; upload/confirm/clear actions work per child.
+10. Member changelist has a `MedicalPermitStatusFilter` with `Trūkst`/`Beidzas`/`Beidzies` options.
+11. Six `AuditEvent.Action` values present and emitted correctly on upload/replace/confirm/clear/preview/download.
+12. Audit metadata is redacted: never includes filename, personal data, medical data, or file bytes.
+13. Safety ordering verified: DB failure before storage write leaves old file/row intact; storage delete failure after DB write leaves orphan file but never contradicts persisted state.
+14. `attach_application_medical_permit` is called in `approve_application` and is idempotent.
+15. Full repository verification passes: `uv run pytest -q`, `uv run ruff check .`, `uv run mypy .`, `uv run python manage.py makemigrations --check`.
+16. **Manual LAN acceptance COMPLETE — signed off 2026-09-18.** Portal/workspace auto-upload works after hard reload; card transitions to active state with filename and private preview/download links; no normal manual-upload submit path; portal card renders as full-width row; automated gate 2632 passed, ruff/mypy/makemigrations clean.
+
+---
 
 ## 6. Milestone map
 

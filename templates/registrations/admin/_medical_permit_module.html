@@ -1,0 +1,24 @@
+{% comment %}P23 — staff medical-permit module on the application change page.{% endcomment %}
+<div class="module mms-review-medical-permit">
+  <h2>Veselības apliecība</h2>
+  <p data-medical-permit-status="{{ medical_permit_status }}">{{ medical_permit_status_label }}</p>
+  {% if medical_permit_has_file %}
+  <p>Fails augšupielādēts (PDF, JPG, PNG vai HEIC).</p>
+  {% endif %}
+  <form method="post" action="{{ review_action_url }}" enctype="multipart/form-data" class="mms-review-actions__form">
+    {% csrf_token %}
+    <div class="form-row">
+      <label for="medical_permit_file">Fails (PDF, JPG, PNG vai HEIC):</label>
+      <input type="file" name="medical_permit_file" id="medical_permit_file" accept=".pdf,.jpg,.jpeg,.png,.heic">
+    </div>
+    <button type="submit" name="action" value="medical_permit_upload">Pievienot failu</button>
+  </form>
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="confirm_medical_permit">Apstiprināt bez faila</button>
+  </form>
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="clear_medical_permit_confirmation">Noņemt apstiprinājumu</button>
+  </form>
+</div>

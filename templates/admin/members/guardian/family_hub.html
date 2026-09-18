@@ -208,6 +208,35 @@
   {% endfor %}
   {% endif %}
 
+  {# Veselības apliecība (P23) #}
+  <h3>Veselības apliecība</h3>
+  <p data-medical-permit-status="{{ child.medical_permit_status }}">{{ child.medical_permit_status_label }}</p>
+  {% if child.member %}
+    <form method="post" action="{{ action_url }}" enctype="multipart/form-data" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
+      <input type="hidden" name="action" value="medical_permit_upload">
+      <input type="hidden" name="member_id" value="{{ child.member.pk }}">
+      <label for="hub_permit_file_{{ child.member.pk }}">Fails (PDF, JPG, PNG, HEIC):</label>
+      <input type="file" name="medical_permit_file" id="hub_permit_file_{{ child.member.pk }}">
+      <button type="submit">Augšupielādēt / aizvietot</button>
+    </form>
+    <form method="post" action="{{ action_url }}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
+      <input type="hidden" name="action" value="confirm_medical_permit">
+      <input type="hidden" name="member_id" value="{{ child.member.pk }}">
+      <button type="submit">Apstiprināt bez faila</button>
+    </form>
+    <form method="post" action="{{ action_url }}" style="display:inline">
+      {% csrf_token %}
+      <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
+      <input type="hidden" name="action" value="clear_medical_permit_confirmation">
+      <input type="hidden" name="member_id" value="{{ child.member.pk }}">
+      <button type="submit">Noņemt apstiprinājumu</button>
+    </form>
+  {% endif %}
+
   {# Dalība #}
   <h3>Dalība</h3>
   <p>{% include "admin/members/guardian/_lane_status.html" with status=child.membership_status %}</p>

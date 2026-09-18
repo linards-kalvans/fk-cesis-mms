@@ -611,6 +611,26 @@ class TestCssLayoutContract:
                             f".fk-site-header img height must be >= 64px. Found: {m.group(1)}px."
                         )
 
+    def test_fk_app_permit_spans_application_card_grid(self) -> None:
+        """P23 code-review regression (desktop layout): the portal renders the
+        medical-permit card inside ``.fk-app-permit``, which is a grid item of
+        the four-column ``.fk-application-card`` grid (parent_pages.css). With
+        no spanning rule the card falls into a single auto column instead of
+        the intended full-width row. The contract is the span itself — no
+        arbitrary margin or mobile override is pinned."""
+        css = (
+            (_STATIC / "css" / "parent_pages.css").read_text()
+            + "\n"
+            + (_STATIC / "css" / "parent_theme.css").read_text()
+        )
+        assert re.search(
+            r"\.fk-app-permit[^{]*\{[^}]*grid-column\s*:\s*1\s*/\s*-1",
+            css,
+        ), (
+            ".fk-app-permit must declare `grid-column: 1 / -1` so the permit "
+            "row spans the full width of the four-column .fk-application-card grid."
+        )
+
 
 # ===========================================================================
 # Template class hooks
