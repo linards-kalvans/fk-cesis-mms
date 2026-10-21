@@ -151,6 +151,18 @@ P17 delivered the shared `MemberExportTemplate` machinery (admin CRUD, column re
 - Code review approved after two minor fixes: invalid POST retains selected sensitive metadata; audit group IDs sorted numerically.
 - Design: `docs/superpowers/specs/2026-09-11-admin-hub-member-export-design.md`. Plan: `docs/superpowers/plans/2026-09-11-admin-hub-member-export.md`.
 
+### Admin Hub gap fixes — search, previews, medical upload, correction history
+**Status:** Planned (2026-10-21). Planning documentation only; no implementation or validation sign-off.
+
+**Target outcome**
+- Four independently shippable slices, recommended order: application child/guardian-name search; native PDF/image preview with safe fallbacks; medical-permit upload/replace through the existing admin action; correction-request history in the queue and cockpit.
+- Search uses child name and the Guardian's split first/family-name fields, with matching filtered tab counts and query-preserving pagination.
+- Private previews retain authorization/audit; unsupported formats use open/download fallback, with no conversion service or expanded upload allowlist.
+- Medical uploads reuse existing permit validation, replacement, validity, and audits; the upload action honors a validated Hub return URL.
+- History covers **only action-required `request_fix` emails**, not approval/rejection, OTP, agreements, billing, or informational messages. A new registrations-owned model preserves send-time text and pending/sent/failed outcomes; sent means mail-backend acceptance, not delivery/open proof. Successful resubmission resolves the request lifecycle.
+- No resend, general notification hub, provider monitoring, or inferred historical sends. History starts at rollout and follows application deletion, not the audit-log retention schedule.
+- Design: `docs/superpowers/specs/2026-10-21-admin-hub-gap-fixes-design.md`. Plan: `docs/superpowers/plans/2026-10-21-admin-hub-gap-fixes.md`.
+
 ### P18 — Unfinished-application lifecycle
 **Status:** Planned.
 
