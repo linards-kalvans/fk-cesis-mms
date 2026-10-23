@@ -62,6 +62,37 @@ def _make_document():
     )
 
 
+def _make_pdf_document():
+    application = RegistrationApplication.objects.create(
+        claimed_email="guardian@example.com",
+    )
+    return Document.objects.create(
+        application=application,
+        kind=Document.Kind.GUARDIAN_IDENTITY,
+        file=SimpleUploadedFile(
+            "id.pdf", b"%PDF-1.4\n%%EOF\n", content_type="application/pdf"
+        ),
+        original_filename="id.pdf",
+        content_type="application/pdf",
+        file_size=15,
+    )
+
+
+def _make_document_with(filename, content_type):
+    """A document whose filename and declared MIME type may disagree."""
+    application = RegistrationApplication.objects.create(
+        claimed_email="guardian@example.com",
+    )
+    return Document.objects.create(
+        application=application,
+        kind=Document.Kind.GUARDIAN_IDENTITY,
+        file=SimpleUploadedFile(filename, b"file-bytes", content_type=content_type),
+        original_filename=filename,
+        content_type=content_type,
+        file_size=10,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Storage root and endpoint auth
 # ---------------------------------------------------------------------------
@@ -332,3 +363,121 @@ class TestAdminChangePageLinks:
         assert download_url in content, (
             f"Admin change page must contain download link ({download_url})."
         )
+
+
+# ---------------------------------------------------------------------------
+# Slice 2 — trusted PDF responses can be embedded same-origin
+# ---------------------------------------------------------------------------
+
+
+class TestPdfPreviewResponse:
+    """The Admin Hub embeds trusted PDFs natively. The response must carry the
+    real MIME type, inline disposition, and a frame policy that does not forbid
+    the same-origin cockpit from framing it. Authorization and auditing are
+    unchanged."""
+
+    def test_pdf_preview_is_inline_application_pdf(self):
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_pdf_document()
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"].startswith("application/pdf")
+        assert response["Content-Disposition"].startswith("inline")
+
+    def test_pdf_preview_frame_policy_allows_same_origin_embedding(self):
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_pdf_document()
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        frame_options = response.get("X-Frame-Options", "")
+        assert frame_options.upper() != "DENY", (
+            "X-Frame-Options: DENY blocks the Hub's same-origin <iframe>/<object>; "
+            f"got {frame_options!r}"
+        )
+        # SAMEORIGIN (or an absent header) both permit the same-origin cockpit.
+        assert frame_options.upper() in {"", "SAMEORIGIN"}
+
+        csp = response.get("Content-Security-Policy", "")
+        assert "frame-ancestors 'none'" not in csp.lower(), (
+            f"CSP frame-ancestors 'none' blocks same-origin embedding: {csp!r}"
+        )
+
+    def test_non_pdf_preview_keeps_the_default_frame_denial(self):
+        """The fix must be narrow: arbitrary uploaded content stays unframed."""
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_document()
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        assert response.get("X-Frame-Options", "").upper() == "DENY"
+
+    def test_pdf_extension_with_non_pdf_mime_keeps_the_default_frame_denial(self):
+        """A .pdf name alone is not enough: both signals must agree."""
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_document_with("disguised.pdf", "image/png")
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        assert response.get("X-Frame-Options", "").upper() == "DENY"
+
+    def test_pdf_mime_with_non_pdf_extension_keeps_the_default_frame_denial(self):
+        """A PDF MIME type alone is not enough either."""
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_document_with("disguised.png", "application/pdf")
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        assert response.get("X-Frame-Options", "").upper() == "DENY"
+
+    def test_pdf_download_keeps_the_default_frame_denial(self):
+        """Attachments are never framed, even for a trusted PDF."""
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_pdf_document()
+
+        response = client.get(
+            reverse("documents:admin-document-download", args=[document.pk])
+        )
+
+        assert response.get("X-Frame-Options", "").upper() == "DENY"
+
+    def test_pdf_preview_still_audits_and_rejects_non_staff(self):
+        from apps.core.models import AuditEvent
+
+        client = Client()
+        client.force_login(_make_admin_user())
+        document = _make_pdf_document()
+
+        response = client.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        )
+
+        assert response.status_code == 200
+        assert AuditEvent.objects.filter(
+            action=str(AuditEvent.Action.DOCUMENT_PREVIEWED),
+            target_id=str(document.pk),
+        ).count() == 1
+
+        other = Client()
+        other.force_login(_make_non_admin_user())
+        assert other.get(
+            reverse("documents:admin-document-preview", args=[document.pk])
+        ).status_code == 404
