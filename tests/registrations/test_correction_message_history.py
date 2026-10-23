@@ -16,6 +16,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.registrations import services as registration_services
 from apps.registrations.models import (
     ApplicationCorrectionMessage,
     RegistrationApplication,
@@ -367,8 +368,15 @@ class TestResubmissionResolution:
         for row in (sent, pending, failed):
             row.refresh_from_db()
             assert row.resolved_at is not None
+            assert (
+                row.resolution_source
+                == ApplicationCorrectionMessage.ResolutionSource.PARENT_RESUBMISSION
+            )
+            assert row.resolved_by_id is None
         already.refresh_from_db()
         assert already.resolved_at == old_resolved_at
+        assert already.resolution_source == ""
+        assert already.resolved_by_id is None
 
     def test_invalid_submission_does_not_resolve(
         self, submitted_application, parent_account, reviewer
@@ -404,6 +412,74 @@ class TestResubmissionResolution:
 
         row = ApplicationCorrectionMessage.objects.get()
         assert row.resolved_at is None
+
+    def test_submission_returns_the_passed_instance_with_fresh_transition_fields(
+        self, fix_requested_application, parent_account, reviewer
+    ):
+        application = fix_requested_application
+        application.reviewed_by = reviewer
+        application.reviewed_at = timezone.now() - timedelta(hours=1)
+        application.submission_digest_sent_at = timezone.now() - timedelta(hours=2)
+        application.save(
+            update_fields=[
+                "reviewed_by_id",
+                "reviewed_at",
+                "submission_digest_sent_at",
+            ]
+        )
+
+        returned = submit_application(application, parent_account)
+
+        # Immediate view callers ignore the return and read this instance's
+        # status for analytics, so the passed instance must not stay stale.
+        assert returned is application
+        assert application.status == RegistrationApplication.Status.SUBMITTED
+        assert application.submitted_at is not None
+        assert application.review_message == ""
+        assert application.reviewed_by_id is None
+        assert application.reviewed_at is None
+        assert application.submission_digest_sent_at is None
+
+    def test_stale_parent_submit_cannot_overwrite_staff_resolution(
+        self, fix_requested_application, parent_account, reviewer
+    ):
+        application = fix_requested_application
+        row = ApplicationCorrectionMessage.objects.create(
+            application=application,
+            actor=reviewer,
+            subject="staff-resolved subject",
+            body="staff-resolved body",
+            status=ApplicationCorrectionMessage.Status.SENT,
+        )
+        stale_parent_instance = RegistrationApplication.objects.get(pk=application.pk)
+
+        registration_services.resolve_application_corrections(
+            application, reviewer
+        )
+
+        # The digest may have been delivered after staff resolution; a losing
+        # parent submission must neither clear it nor replace staff provenance.
+        digest_sent_at = timezone.now() - timedelta(minutes=5)
+        RegistrationApplication.objects.filter(pk=application.pk).update(
+            submission_digest_sent_at=digest_sent_at
+        )
+        staff_submitted_at = RegistrationApplication.objects.values_list(
+            "submitted_at", flat=True
+        ).get(pk=application.pk)
+
+        with pytest.raises(
+            ValueError, match="only draft or fix_requested applications can be submitted"
+        ):
+            submit_application(stale_parent_instance, parent_account)
+
+        application.refresh_from_db()
+        row.refresh_from_db()
+        assert application.status == RegistrationApplication.Status.SUBMITTED
+        assert application.submitted_at == staff_submitted_at
+        assert application.submission_digest_sent_at == digest_sent_at
+        assert row.resolved_at is not None
+        assert row.resolution_source == "staff_manual"
+        assert row.resolved_by_id == reviewer.id
 
     def test_submission_save_failure_rolls_back_resolution(
         self, fix_requested_application, parent_account
