@@ -415,7 +415,7 @@ def test_plan_then_sign_completes_without_leaving_the_agreement_page(
         ("signed", False, False),
         ("superseded", False, False),
         ("discontinued", False, False),
-        ("void", True, False),
+        ("void", False, False),
     ],
 )
 def test_step_five_controls_match_the_services_own_state_guards(
@@ -426,8 +426,11 @@ def test_step_five_controls_match_the_services_own_state_guards(
     Two separate state sets meet on this card and neither is the other:
 
     * ``set_billing_setup`` refuses SIGNED / SUPERSEDED / DISCONTINUED, so the
-      plan is editable in the other three — VOID included, which the domain
-      does permit.
+      domain permits the plan for GENERATED, SENT and VOID. The Hub's
+      lifecycle panel deliberately withholds that mutation control in every
+      terminal state (VOID included), so this page renders the plan read-only
+      there while the global service keeps its permissive rule for
+      native/family callers.
     * ``mark_agreement_signed`` accepts only GENERATED and SENT, so the sign
       button is offered in two states, not four.
 
@@ -495,3 +498,417 @@ def test_no_schedule_is_shown_while_the_first_billing_month_is_blank(
     # ...and signing is still refused, for the month rather than the plan.
     for tag in _signed_button_tags(body):
         assert "disabled" in tag
+
+
+# ---------------------------------------------------------------------------
+# Unit 3 Task 6: independent document void and membership discontinuation
+# ---------------------------------------------------------------------------
+
+
+def _detail_block(body: str, marker: str) -> str:
+    start = body.index(marker)
+    end = body.index("</details>", start)
+    return body[start:end]
+
+
+@pytest.mark.parametrize(
+    (
+        "state",
+        "void_offered",
+        "discontinue_offered",
+        "regenerate_offered",
+        "mark_sent_enabled",
+        "signing_path_editable",
+    ),
+    [
+        ("generated", True, False, False, True, True),
+        ("sent", True, False, False, False, True),
+        ("signed", True, True, False, False, True),
+        ("void", False, False, True, False, False),
+        ("superseded", False, False, False, False, False),
+        ("discontinued", False, False, False, False, False),
+    ],
+)
+def test_agreement_lifecycle_panel_matches_state_and_permission_gates(
+    client,
+    acting_reviewer,
+    application_with_agreement,
+    state,
+    void_offered,
+    discontinue_offered,
+    regenerate_offered,
+    mark_sent_enabled,
+    signing_path_editable,
+):
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = state
+    if state in ("sent", "signed"):
+        agreement.sent_at = timezone.now()
+    if state == "signed":
+        agreement.signed_at = timezone.now()
+    if state == "void":
+        agreement.voided_at = timezone.now()
+    agreement.save()
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+
+    assert ("data-void-agreement" in body) is void_offered
+    assert ("data-discontinue-membership" in body) is discontinue_offered
+    assert ('value="regenerate_agreement"' in body) is regenerate_offered
+    assert ('name="signing_path"' in body) is signing_path_editable
+
+    mark_sent = re.search(
+        r'<button[^>]*value="mark_agreement_sent"[^>]*>', body
+    )
+    assert mark_sent is not None
+    assert ("disabled" in mark_sent.group(0)) is (not mark_sent_enabled)
+
+
+def test_terminal_agreement_states_hide_misleading_mutation_controls(
+    client, acting_reviewer, application_with_agreement
+):
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    for state in ("void", "superseded", "discontinued"):
+        agreement.state = state
+        agreement.save(update_fields=["state"])
+
+        client.force_login(acting_reviewer)
+        body = client.get(
+            reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+        ).content.decode()
+
+        assert 'name="billing_plan"' not in body
+        assert 'name="signing_path"' not in body
+        assert "Līguma stāvoklis vairs neļauj mainīt parakstīšanas veidu." in body
+        # Artifact/history access stays available.
+        assert "Augšupielādē parakstīto līgumu" in body
+
+
+def test_void_and_discontinuation_are_independent_native_forms(
+    client, acting_reviewer, application_with_agreement, billing_record_factory
+):
+    from apps.billing.models import BillingInvoice
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.sent_at = timezone.now()
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "sent_at", "signed_at"])
+    record = billing_record_factory(application_with_agreement.approved_member)
+    BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date="2026-10-20",
+        amount="30.00",
+    )
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+
+    void_block = _detail_block(body, "data-void-agreement")
+    discontinue_block = _detail_block(body, "data-discontinue-membership")
+
+    assert "data-void-agreement>" in void_block
+    assert "<summary>Anulēt līguma dokumentu</summary>" in void_block
+    assert "data-discontinue-membership>" in discontinue_block
+    assert "<summary>Pārtraukt dalību un norēķinus</summary>" in discontinue_block
+    assert "<form" in void_block and "<form" in discontinue_block
+    assert "onclick" not in void_block and "onclick" not in discontinue_block
+
+    assert 'name="void_reason"' in void_block
+    assert "required" in void_block
+    assert "selected_invoices" not in void_block
+    assert "Anulēšana saglabā līguma vēsturi" in void_block
+    assert "Šis līgums ir parakstīts" in void_block
+    assert "neatceļ rēķinus" in void_block
+
+    assert 'name="selected_invoices"' in discontinue_block
+    assert 'name="effective_date"' in discontinue_block
+    assert 'name="reason"' in discontinue_block
+    assert "void_reason" not in discontinue_block
+    assert "neatlasīsit nevienu rēķinu" in discontinue_block
+    assert "checked" not in discontinue_block
+
+
+def test_discontinuation_invoice_rows_state_their_proposed_outcome(
+    client,
+    acting_reviewer,
+    application_with_agreement,
+    billing_record_factory,
+):
+    from apps.billing.models import BillingInvoice
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "signed_at"])
+    record = billing_record_factory(application_with_agreement.approved_member)
+
+    def _invoice(sequence, **overrides):
+        values = {
+            "billing_record": record,
+            "sequence": sequence,
+            "due_date": "2026-10-20",
+            "amount": "30.00",
+        }
+        values.update(overrides)
+        return BillingInvoice.objects.create(**values)
+
+    _invoice(1)
+    _invoice(2, external_invoice_id="IN-DRAFT", external_status="created")
+    _invoice(
+        3,
+        external_invoice_id="IN-SENT",
+        external_status="sent",
+        payment_status="unpaid",
+    )
+    _invoice(
+        4,
+        external_invoice_id="IN-PAID",
+        external_status="sent",
+        payment_status="paid",
+    )
+    _invoice(
+        5,
+        external_invoice_id="IN-PARTIAL",
+        external_status="sent",
+        payment_status="partial",
+    )
+    _invoice(6, cancelled_at=timezone.now())
+    _invoice(7, external_invoice_id="IN-UNKNOWN", external_status="failed")
+    _invoice(8, sent_at=timezone.now())
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+    block = _detail_block(body, "data-discontinue-membership")
+
+    assert "Atcelt lokāli" in block
+    assert "Arhivēt Invoice Ninja" in block
+    assert "Atcelt Invoice Ninja" in block
+    assert "Jāapstrādā manuāli Invoice Ninja" in block
+    assert "Jau atcelts" in block
+    assert "Nezināms Invoice Ninja statuss" in block
+    assert "Nav derīga Invoice Ninja identifikatora" in block
+    assert block.count('type="checkbox" disabled') >= 5
+    enabled_checkboxes = re.findall(
+        r'<input type="checkbox" name="selected_invoices"', block
+    )
+    assert len(enabled_checkboxes) == 3
+
+    # The eight-column selection table must never size the page: it lives in
+    # a keyboard-focusable, labelled horizontal scroll region.
+    assert 'class="tablewrap tablewrap--lifecycle"' in block
+    assert 'role="region"' in block
+    assert 'aria-label="Dalības pārtraukšanai atlasāmo rēķinu tabula"' in block
+    assert 'tabindex="0"' in block
+    assert block.index('class="tablewrap tablewrap--lifecycle"') < block.index(
+        '<table class="table lifecycle-table"'
+    )
+
+
+def test_discontinuation_is_hidden_when_the_member_is_not_active(
+    client, acting_reviewer, application_with_agreement
+):
+    from apps.members.models import Member
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "signed_at"])
+    application_with_agreement.approved_member.status = Member.Status.DISCONTINUED
+    application_with_agreement.approved_member.save(update_fields=["status"])
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+
+    assert "data-discontinue-membership" not in body
+    assert "data-void-agreement" in body
+
+
+def test_no_change_staff_still_loads_the_page_without_mutation_forms(
+    client, reviewer, application_with_agreement
+):
+    """Staff-only accounts may view the agreement, but every writer endpoint
+    refuses them. The page must load and withhold the destructive controls
+    rather than showing forms that can only 403."""
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "signed_at"])
+
+    client.force_login(reviewer)
+    response = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    )
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Līguma darbības" in body
+    assert "data-void-agreement" not in body
+    assert "data-discontinue-membership" not in body
+    assert 'value="regenerate_agreement"' not in body
+    assert 'name="void_reason"' not in body
+    assert 'name="selected_invoices"' not in body
+
+
+def test_discontinued_agreement_keeps_read_only_invoice_outcomes(
+    client,
+    acting_reviewer,
+    application_with_agreement,
+    billing_record_factory,
+    django_capture_on_commit_callbacks,
+):
+    """After a successful discontinuation the selectable form is gone, but the
+    page must still show what happened to each selected invoice. Queued and
+    completed external work are labelled distinctly."""
+    from datetime import date
+
+    from apps.agreements.services import discontinue_agreement
+    from apps.billing.models import BillingInvoice
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "signed_at"])
+    member = application_with_agreement.approved_member
+    record = billing_record_factory(member)
+
+    local = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date="2026-10-20",
+        amount="30.00",
+    )
+    archived = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=2,
+        due_date="2026-11-20",
+        amount="30.00",
+        external_invoice_id="IN-OUTCOME-ARCHIVE",
+        external_status="created",
+    )
+    failed = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=3,
+        due_date="2026-12-20",
+        amount="30.00",
+        external_invoice_id="IN-OUTCOME-FAILED",
+        external_status="sent",
+    )
+    pending = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=4,
+        due_date="2027-01-20",
+        amount="30.00",
+        external_invoice_id="IN-OUTCOME-PENDING",
+        external_status="sent",
+    )
+
+    with django_capture_on_commit_callbacks(execute=False):
+        discontinue_agreement(
+            agreement,
+            acting_reviewer,
+            effective_date=date(2026, 10, 1),
+            reason="Pārcelšanās",
+            selected_invoice_ids=[local.pk, archived.pk, failed.pk, pending.pk],
+        )
+
+    archived.external_cancellation_status = "done"
+    archived.save(update_fields=["external_cancellation_status"])
+    failed.external_cancellation_status = "failed"
+    failed.save(update_fields=["external_cancellation_status"])
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+    start = body.index("data-discontinuation-outcomes")
+    outcomes = body[start : body.index("</table>", start)]
+
+    assert "Rēķinu iznākums" in body
+    assert "data-discontinue-membership" not in body
+    assert 'name="selected_invoices"' not in body
+    assert 'name="void_reason"' not in body
+    assert "IN-OUTCOME-ARCHIVE" in outcomes
+    assert "IN-OUTCOME-FAILED" in outcomes
+    assert "IN-OUTCOME-PENDING" in outcomes
+    assert "Pabeigts lokāli" in outcomes
+    assert "Ierindots — gaida Invoice Ninja" in outcomes
+    assert "Pabeigts Invoice Ninja" in outcomes
+    assert "Neizdevās — pārbaudiet Invoice Ninja" in outcomes
+    assert "Arhivēt Invoice Ninja" in outcomes
+    assert "Atcelt Invoice Ninja" in outcomes
+    assert "Ierindots" in outcomes
+    local.refresh_from_db()
+    assert local.cancelled_at is not None
+    assert local.cancelled_at.strftime("%d.%m.%Y") in outcomes
+    assert '<input type="checkbox"' not in outcomes
+
+    # The read-only seven-column outcome table gets the same bounded region.
+    wrapper = (
+        '<div class="tablewrap tablewrap--lifecycle" role="region" '
+        'aria-label="Atlasīto rēķinu iznākuma tabula" tabindex="0">'
+    )
+    assert wrapper in outcomes
+    assert outcomes.index(wrapper) < outcomes.index(
+        '<table class="table lifecycle-table"'
+    )
+
+
+def test_cancelled_invoice_proposed_action_matches_the_ui_reason(
+    client,
+    acting_reviewer,
+    application_with_agreement,
+    billing_record_factory,
+):
+    from apps.billing.models import BillingInvoice
+    from apps.registrations.admin_panels import proposed_action_for_invoice
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    agreement.state = agreement.State.SIGNED
+    agreement.signed_at = timezone.now()
+    agreement.save(update_fields=["state", "signed_at"])
+    record = billing_record_factory(application_with_agreement.approved_member)
+    cancelled = BillingInvoice.objects.create(
+        billing_record=record,
+        sequence=1,
+        due_date="2026-10-20",
+        amount="30.00",
+        external_invoice_id="IN-ALREADY-CANCELLED",
+        external_status="sent",
+        cancelled_at=timezone.now(),
+    )
+
+    assert proposed_action_for_invoice(cancelled) == "Jau atcelts"
+
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    ).content.decode()
+    block = _detail_block(body, "data-discontinue-membership")
+    assert "Jau atcelts" in block
