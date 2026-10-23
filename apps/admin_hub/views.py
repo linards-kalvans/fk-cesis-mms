@@ -5,9 +5,82 @@ from __future__ import annotations
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_GET
 
-from apps.admin_hub import queries
+from apps.admin_hub import correction_messages, queries
 from apps.admin_hub.badges import agreement_badge_class, application_badge_class
+
+
+def _application_admin_has_change_permission(request, application) -> bool:
+    """Delegate the cockpit's writer capability to the registered admin.
+
+    The Hub is a skin over the Django admin endpoints, so it must not invent
+    its own permission rule: whatever ``RegistrationApplicationAdmin`` answers
+    for this request and object is what the upload form reflects.
+    """
+    from django.contrib import admin
+
+    from apps.registrations.models import RegistrationApplication
+
+    model_admin = admin.site._registry.get(RegistrationApplication)
+    if model_admin is None:
+        return False
+    return bool(model_admin.has_change_permission(request, application))
+
+
+def _document_viewer_panel(panel: dict[str, object]) -> dict[str, object]:
+    """Add the authorized private proxy URLs to a ``build_doc_panel`` dict.
+
+    ``build_doc_panel`` is shared with the Django admin and stays unaware of
+    the Hub's viewer. Resolving the URLs here keeps every consumer of that
+    builder unchanged and makes the viewer's input explicit: each panel owns
+    its own preview/download pair instead of the template reversing a
+    ``documents:*`` route from a document id.
+    """
+    from django.urls import reverse
+
+    enriched = dict(panel)
+    active = panel["active"]
+    if active is None:
+        enriched["preview_url"] = ""
+        enriched["download_url"] = ""
+    else:
+        active_id = getattr(active, "pk")
+        enriched["preview_url"] = reverse(
+            "documents:admin-document-preview", args=[active_id]
+        )
+        enriched["download_url"] = reverse(
+            "documents:admin-document-download", args=[active_id]
+        )
+    return enriched
+
+
+def _medical_permit_viewer_panel(permit) -> dict[str, object]:
+    """A viewer panel for a stored permit file.
+
+    MedicalPermit is not a Document, so it never uses the ``documents:*``
+    proxy. The permit id resolves through its own parent/staff-authorized
+    preview and download routes.
+    """
+    from django.urls import reverse
+
+    from apps.registrations.admin_panels import doc_preview_kind
+
+    return {
+        "kind": "medical_permit",
+        "panel_title": "Veselības apliecība",
+        "active": permit,
+        "replaced": [],
+        "ocr_summary": [],
+        "ocr_confidence_items": [],
+        "preview_kind": doc_preview_kind(permit),
+        "preview_url": reverse(
+            "registrations:medical-permit-preview", args=[permit.pk]
+        ),
+        "download_url": reverse(
+            "registrations:medical-permit-download", args=[permit.pk]
+        ),
+    }
 
 
 def _billing_is_locked(agreement) -> bool:
@@ -258,20 +331,72 @@ def hub_index_view(request):
 
 @staff_member_required
 def queue_view(request):
+    """Queue page: one normalized tab + search drives list, counts and links.
+
+    ``q`` is normalized here for the template (retained value, encoded link
+    parameters) and again inside ``queries`` so direct callers cannot bypass
+    the same matching. It is deliberately not logged or sent to analytics.
+    """
     tab = queries.normalize_tab(request.GET.get("tab"))
-    rows, page_obj = queries.queue_page(tab, request.GET.get("page"))
+    q = queries.normalize_search(request.GET.get("q"))
+    rows, page_obj = queries.queue_page(tab, request.GET.get("page"), q=q)
     return render(
         request,
         "admin_hub/queue.html",
         {
             "hub_section": "queue",
             "tab": tab,
+            "q": q,
             "tabs": queries.QUEUE_TABS,
-            "tab_counts": queries.tab_counts(),
+            "tab_counts": queries.tab_counts(q=q),
             "rows": rows,
             "page_obj": page_obj,
         },
     )
+
+
+@staff_member_required
+@require_GET
+def correction_messages_view(request, pk: int):
+    """Chronological correction-request history, staff-only and read-only.
+
+    The same URL serves two representations: an XMLHttpRequest gets the bare
+    escaped fragment for the shared dialog, while a normal navigation gets a
+    page the staff member can use without JavaScript. GET performs no
+    mutation. The response is private correspondence and must never be
+    cached by a shared proxy.
+    """
+    from django.shortcuts import get_object_or_404
+
+    from apps.registrations.models import RegistrationApplication
+
+    application = get_object_or_404(RegistrationApplication, pk=pk)
+    page_obj, summary = correction_messages.correction_history_page(
+        application, request.GET.get("page")
+    )
+    is_fragment = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    response = render(
+        request,
+        (
+            "admin_hub/_correction_messages.html"
+            if is_fragment
+            else "admin_hub/correction_messages.html"
+        ),
+        {
+            "hub_section": "queue",
+            "application": application,
+            "page_obj": page_obj,
+            "correction_summary": summary,
+            "awaiting_parent": (
+                application.status
+                == RegistrationApplication.Status.FIX_REQUESTED
+            ),
+        },
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 @staff_member_required
@@ -285,6 +410,10 @@ def cockpit_view(request, pk: int):
         pipeline_progress,
     )
     from apps.documents.models import Document
+    from apps.documents.medical_permits import (
+        medical_permit_status,
+        medical_permit_status_label,
+    )
     from apps.members.models import TrainingGroup
     from django.urls import reverse
 
@@ -303,6 +432,85 @@ def cockpit_view(request, pk: int):
         for field in group.fields
         if field.default_checked
     ]
+
+    # Zipped in the view: Django templates cannot walk two parallel lists
+    # together, and the label belongs beside its panel.
+    viewer_tabs = list(
+        zip(
+            ["Bērna ID", "Aizmugure", "Vecāka ID", "Portrets"],
+            [
+                _document_viewer_panel(
+                    build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY))
+                ),
+                _document_viewer_panel(
+                    build_doc_panel(
+                        application, str(Document.Kind.MEMBER_IDENTITY_BACK)
+                    )
+                ),
+                _document_viewer_panel(
+                    build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY))
+                ),
+                _document_viewer_panel(
+                    build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT))
+                ),
+            ],
+        )
+    )
+    medical_permit = getattr(application, "medical_permit", None)
+    medical_permit_has_file = bool(
+        medical_permit is not None and medical_permit.file
+    )
+    # One capability decides every medical-permit affordance in the Hub: the
+    # admin change permission the staff writer endpoint and the permit proxy
+    # both enforce. Status and validity stay readable regardless.
+    can_change_application = _application_admin_has_change_permission(
+        request, application
+    )
+    # A confirmation-only permit has no stored file, so there is nothing for a
+    # viewer tab to open; its status and validity still render in the cockpit.
+    if medical_permit_has_file and can_change_application:
+        viewer_tabs.append(
+            ("Veselības apliecība", _medical_permit_viewer_panel(medical_permit))
+        )
+    # The first tab with an active file is the deliberate initial selection in
+    # both the rendered markup and viewer.js. None means every kind is missing.
+    viewer_initial_index = next(
+        (
+            index
+            for index, (_label, panel) in enumerate(viewer_tabs)
+            if panel["active"]
+        ),
+        None,
+    )
+    medical_permit_status_value = medical_permit_status(medical_permit)
+    correction_summary = correction_messages.correction_summaries(
+        [application.pk]
+    ).get(application.pk, correction_messages.empty_summary())
+    medical_permit_context = {
+        "status": medical_permit_status_value,
+        "status_label": medical_permit_status_label(medical_permit_status_value),
+        "valid_until": (
+            medical_permit.valid_until if medical_permit is not None else None
+        ),
+        "permit_id": medical_permit.pk if medical_permit is not None else None,
+        "has_file": medical_permit_has_file,
+        "filename": (
+            medical_permit.original_filename
+            if medical_permit is not None and medical_permit_has_file
+            else ""
+        ),
+        "confirmed": bool(
+            medical_permit is not None and medical_permit.confirmed_by_id
+        ),
+        # The same capability gates the file links, the viewer tab and the
+        # upload form; the proxy enforces it again server-side.
+        "can_view_file": can_change_application,
+        "can_upload": can_change_application,
+        "upload_url": reverse(
+            "admin:registrations_registrationapplication_review-action",
+            args=[application.pk],
+        ),
+    }
 
     return render(
         request,
@@ -340,18 +548,16 @@ def cockpit_view(request, pk: int):
             "groups": groups,
             "checkable_total": len(keys),
             "default_checked_count": len(default_checked),
-            # Zipped in the view: Django templates cannot walk two parallel
-            # lists together, and the label belongs beside its panel.
-            "viewer_tabs": list(
-                zip(
-                    ["Bērna ID", "Aizmugure", "Vecāka ID", "Portrets"],
-                    [
-                        build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY)),
-                        build_doc_panel(application, str(Document.Kind.MEMBER_IDENTITY_BACK)),
-                        build_doc_panel(application, str(Document.Kind.GUARDIAN_IDENTITY)),
-                        build_doc_panel(application, str(Document.Kind.MEMBER_PORTRAIT)),
-                    ],
-                )
+            "viewer_tabs": viewer_tabs,
+            "viewer_initial_index": viewer_initial_index,
+            "medical_permit": medical_permit_context,
+            "correction_summary": correction_summary,
+            "awaiting_parent": (
+                application.status
+                == RegistrationApplication.Status.FIX_REQUESTED
+            ),
+            "correction_history_url": reverse(
+                "admin_hub:correction-messages", args=[application.pk]
             ),
             "active_training_groups": list(
                 TrainingGroup.objects.filter(is_active=True).order_by("name")

@@ -1,0 +1,100 @@
+{% comment %}Correction-request history fragment. Everything is rendered as
+escaped plain text: the stored subject/body/note are staff correspondence, not
+markup. This template is served both inside the Hub dialog and, unchanged, on
+the no-JavaScript history page.{% endcomment %}
+<div class="corr-history" data-correction-history>
+  <p class="corr-history__lede">
+    Kopā reģistrētas <strong>{{ page_obj.paginator.count }}</strong> ziņas.
+    Vecākās ziņas ir pirmās. Uzskaite sākta ar šo funkciju — pirms tam
+    nosūtītā korespondence nav zināma.
+  </p>
+
+  {% for message in page_obj.object_list %}
+    <article class="corr-msg" data-correction-message="{{ message.pk }}">
+      <div class="corr-msg__head">
+        <h3>{{ message.subject }}</h3>
+        <span class="badge {% if message.status == 'sent' %}badge--submitted{% elif message.status == 'failed' %}badge--fix{% else %}badge--neutral{% endif %}">
+          {{ message.get_status_display }}
+        </span>
+      </div>
+
+      <dl class="corr-msg__meta">
+        <div>
+          <dt>Reģistrēta</dt>
+          <dd>{{ message.created_at|date:"d.m.Y H:i" }}</dd>
+        </div>
+        <div>
+          <dt>Pieņemta e-pasta sistēmā</dt>
+          <dd>{% if message.sent_at %}{{ message.sent_at|date:"d.m.Y H:i" }}{% else %}Nav apstiprināts{% endif %}</dd>
+        </div>
+        <div>
+          <dt>Atrisināta</dt>
+          <dd>{% if message.resolved_at %}{{ message.resolved_at|date:"d.m.Y H:i" }}{% else %}Nav atrisināta{% endif %}</dd>
+        </div>
+        <div>
+          <dt>Darbinieks</dt>
+          <dd>
+            {% if message.actor %}
+              {{ message.actor.get_full_name|default:message.actor.get_username }}
+            {% else %}
+              Nav norādīts
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      {% if message.status == "sent" %}
+        <p class="corr-msg__outcome corr-msg__outcome--sent">
+          E-pasta sistēma pieņēma ziņu. Tas neapstiprina piegādi vai atvēršanu.
+        </p>
+      {% elif message.status == "failed" %}
+        <p class="corr-msg__outcome corr-msg__outcome--failed">
+          Sūtīšanas mēģinājums netika pieņemts. Vecāks šo ziņu, iespējams, nesaņēma.
+        </p>
+      {% else %}
+        <p class="corr-msg__outcome corr-msg__outcome--pending">
+          Iznākums nav apstiprināts — iespējams nepabeigts process, nevis
+          pierādīta piegāde vai neizdošanās.
+        </p>
+      {% endif %}
+
+      {% if message.review_message %}
+        <div class="corr-msg__block">
+          <span class="corr-msg__label">Piezīme vecākam</span>
+          <pre class="corr-msg__note">{{ message.review_message }}</pre>
+        </div>
+      {% endif %}
+
+      <div class="corr-msg__block">
+        <span class="corr-msg__label">E-pasta teksts</span>
+        <pre class="corr-msg__body">{{ message.body }}</pre>
+      </div>
+    </article>
+  {% empty %}
+    <div class="callout">
+      <span class="callout__icon">i</span>
+      <span>
+        Nav reģistrētu labojuma pieprasījuma ziņu. Korespondence pirms
+        uzskaites sākuma nav zināma — tas nenozīmē, ka e-pasts netika nosūtīts.
+      </span>
+    </div>
+  {% endfor %}
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="corr-pager" aria-label="Ziņu lappuses">
+      {% if page_obj.has_previous %}
+        <a href="{% url 'admin_hub:correction-messages' application.pk %}?page={{ page_obj.previous_page_number }}"
+           data-correction-page>‹ Iepriekšējā lapa</a>
+      {% else %}
+        <span>‹ Iepriekšējā lapa</span>
+      {% endif %}
+      <span class="corr-pager__count">Lapa {{ page_obj.number }} no {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a href="{% url 'admin_hub:correction-messages' application.pk %}?page={{ page_obj.next_page_number }}"
+           data-correction-page>Nākamā lapa ›</a>
+      {% else %}
+        <span>Nākamā lapa ›</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+</div>

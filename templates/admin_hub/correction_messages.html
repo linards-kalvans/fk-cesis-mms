@@ -1,0 +1,22 @@
+{% extends "admin_hub/base_hub.html" %}
+{% block hub_title %}FK Cēsis Admin — Labojuma ziņas{% endblock %}
+
+{% block hub_content %}
+  <div class="crumbs">
+    <a href="{% url 'admin_hub:cockpit' application.pk %}">← Pieteikums #{{ application.pk }}</a>
+    <span>/</span>
+    <span>Labojuma pieprasījuma ziņas</span>
+  </div>
+
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Labojuma pieprasījuma ziņas</h1>
+      <p class="page-sub">
+        {{ application.member_full_name|default:"Bez vārda" }}
+        · pieteikums #{{ application.pk }}
+      </p>
+    </div>
+  </div>
+
+  {% include "admin_hub/_correction_messages.html" %}
+{% endblock %}
