@@ -556,6 +556,24 @@ def cockpit_view(request, pk: int):
                 application.status
                 == RegistrationApplication.Status.FIX_REQUESTED
             ),
+            "can_resolve_corrections": (
+                application.status
+                == RegistrationApplication.Status.FIX_REQUESTED
+                and can_change_application
+            ),
+            # Rejection and fix requests are both submitted-only review
+            # actions. The Hub already knows the change capability, so the
+            # secondary disclosures can reflect the writer's own gates.
+            "can_request_fix": (
+                application.status
+                == RegistrationApplication.Status.SUBMITTED
+                and can_change_application
+            ),
+            "can_reject": (
+                application.status
+                == RegistrationApplication.Status.SUBMITTED
+                and can_change_application
+            ),
             "correction_history_url": reverse(
                 "admin_hub:correction-messages", args=[application.pk]
             ),
@@ -571,6 +589,7 @@ def agreement_view(request, pk: int):
     from django.http import Http404
     from django.shortcuts import get_object_or_404
 
+    from apps.agreements.models import Agreement
     from apps.admin_hub.pipeline import (
         build_pipeline,
         load_pipeline_objects,
@@ -578,6 +597,8 @@ def agreement_view(request, pk: int):
     )
     from apps.admin_hub.timeline import build_agreement_timeline
     from apps.billing.models import MembershipPlan
+    from apps.members.models import Member
+    from apps.registrations.admin_panels import discontinuation_candidates
     from apps.registrations.models import RegistrationApplication
 
     application = get_object_or_404(RegistrationApplication, pk=pk)
@@ -588,14 +609,62 @@ def agreement_view(request, pk: int):
     steps = build_pipeline(objects)
     done, total = pipeline_progress(steps)
     agreement = objects.agreement
+    # Destructive lifecycle choices are gated by the registered admin's
+    # change permission plus the agreement's own domain state. These flags
+    # are presentation only - the endpoint and services still validate.
+    can_change = _application_admin_has_change_permission(request, application)
+    agreement_state = agreement.state
+    terminal_agreement_states = (
+        Agreement.State.VOID,
+        Agreement.State.SUPERSEDED,
+        Agreement.State.DISCONTINUED,
+    )
+    can_void_document = can_change and agreement_state in (
+        Agreement.State.GENERATED,
+        Agreement.State.SENT,
+        Agreement.State.SIGNED,
+    )
+    can_discontinue = (
+        can_change
+        and agreement_state == Agreement.State.SIGNED
+        and objects.member is not None
+        and objects.member.status == Member.Status.ACTIVE
+    )
+    can_regenerate = can_change and agreement_state == Agreement.State.VOID
+    can_mark_sent = can_change and agreement_state == Agreement.State.GENERATED
+    can_set_signing_path = (
+        can_change and agreement_state not in terminal_agreement_states
+    )
+    # The selectable form disappears once the lifecycle action succeeds, but
+    # staff still need to see what happened to the invoices they selected.
+    # Keep a read-only outcome list for the persisted terminal states instead
+    # of dropping the table from the page.
+    discontinuation_invoices = []
+    discontinuation_outcomes = []
+    if objects.member is not None:
+        if can_discontinue:
+            discontinuation_invoices = discontinuation_candidates(objects.member)
+        elif (
+            agreement_state == Agreement.State.DISCONTINUED
+            or objects.member.status == Member.Status.DISCONTINUED
+        ):
+            discontinuation_outcomes = [
+                invoice
+                for invoice in discontinuation_candidates(objects.member)
+                if invoice.cancelled_at is not None
+            ]
     # Step 6's plan is a precondition of step 5's signing, not a successor to
     # it: mark_agreement_signed raises "billing plan required" (P9) and
     # "first billing month required" (P15) before it will move the state. The
     # rail numbering follows the club's own description of the workflow, so
     # the fix is to bring the control to where it is needed rather than to
     # renumber - otherwise the reviewer has to leave for step 6 and come back
-    # for every single agreement.
-    plan_editable = not _billing_is_locked(agreement)
+    # for every single agreement. Terminal lifecycle states stop offering an
+    # editable plan, even though the global service still permits it for void.
+    plan_editable = (
+        not _billing_is_locked(agreement)
+        and agreement_state not in terminal_agreement_states
+    )
     plan, first_billing_month, schedule = _plan_preview(
         agreement, objects.billing_record
     )
@@ -637,6 +706,13 @@ def agreement_view(request, pk: int):
             "plan": plan,
             "first_billing_month": first_billing_month,
             "schedule": schedule,
+            "can_void_document": can_void_document,
+            "can_discontinue": can_discontinue,
+            "can_regenerate": can_regenerate,
+            "can_mark_sent": can_mark_sent,
+            "can_set_signing_path": can_set_signing_path,
+            "discontinuation_invoices": discontinuation_invoices,
+            "discontinuation_outcomes": discontinuation_outcomes,
             "active_plans": (
                 list(
                     MembershipPlan.objects.filter(is_active=True).order_by(

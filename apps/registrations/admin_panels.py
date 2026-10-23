@@ -228,7 +228,7 @@ def build_review_context(
             agreement.state == Agreement.State.SIGNED
             and member.status == Member.Status.ACTIVE
         ):
-            discontinuation_invoice_candidates = _discontinuation_candidates(member)
+            discontinuation_invoice_candidates = discontinuation_candidates(member)
             billing_adjustments = list(
                 BillingAdjustment.objects.filter(
                     billing_record__member=member
@@ -302,7 +302,14 @@ def build_review_context(
     }
 
 
-def _proposed_action_for_invoice(invoice: BillingInvoice) -> str:
+def proposed_action_for_invoice(invoice: BillingInvoice) -> str:
+    """Human-readable outcome of selecting this invoice for discontinuation.
+
+    Presentation only: the authoritative selection rules remain in
+    ``apps.billing.services.create_discontinuation_adjustments``.
+    """
+    if invoice.cancelled_at is not None:
+        return "Jau atcelts"
     if invoice.payment_status in (PaymentStatus.PAID, PaymentStatus.PARTIAL):
         return "Bloķē — jāapstrādā manuāli Invoice Ninja"
     if not invoice.external_invoice_id and invoice.sent_at is None:
@@ -314,13 +321,77 @@ def _proposed_action_for_invoice(invoice: BillingInvoice) -> str:
     return "Nezināms stāvoklis — bloķēs"
 
 
-def _discontinuation_candidates(member) -> list[BillingInvoice]:
-    """Return eligible BillingInvoice rows for a member discontinuation form."""
+_CANCELLATION_ACTION_LABELS = {
+    "archive": "Arhivēt Invoice Ninja",
+    "cancel": "Atcelt Invoice Ninja",
+}
+_CANCELLATION_STATUS_LABELS = {
+    "pending": "Ierindots",
+    "done": "Pabeigts",
+    "failed": "Neizdevās",
+}
+
+
+def _cancellation_outcome(invoice: BillingInvoice) -> str:
+    """Explicit queued-versus-completed wording for one cancelled invoice."""
+    if invoice.cancelled_at is None:
+        return ""
+    if not invoice.external_cancellation_action:
+        return "Pabeigts lokāli"
+    status = invoice.external_cancellation_status
+    if status == "pending":
+        return "Ierindots — gaida Invoice Ninja"
+    if status == "done":
+        return "Pabeigts Invoice Ninja"
+    if status == "failed":
+        return "Neizdevās — pārbaudiet Invoice Ninja"
+    return "Statuss nav norādīts"
+
+
+def _invoice_selectability(invoice: BillingInvoice) -> tuple[bool, str]:
+    """Whether staff may tick this row, plus the Latvian reason when not.
+
+    Mirrors the checks the billing service performs; it does not replace
+    them. A stale page or forged POST still has to satisfy the writer.
+    """
+    if invoice.cancelled_at is not None:
+        return False, "Jau atcelts"
+    if invoice.payment_status in (PaymentStatus.PAID, PaymentStatus.PARTIAL):
+        return False, "Jāapstrādā manuāli Invoice Ninja"
+    if not invoice.external_invoice_id and invoice.sent_at is not None:
+        return False, "Nav derīga Invoice Ninja identifikatora"
+    if invoice.external_invoice_id and invoice.external_status not in (
+        "created",
+        "sent",
+    ):
+        return False, "Nezināms Invoice Ninja statuss"
+    return True, ""
+
+
+def discontinuation_candidates(member) -> list[BillingInvoice]:
+    """Return the member's BillingInvoice rows for a discontinuation form.
+
+    Each row is annotated with the presentation-only ``proposed_action``,
+    ``selectable``/``selectable_reason`` plus cancellation action/status
+    labels and the explicit queued-versus-completed ``cancellation_outcome``
+    consumed by the Hub's read-only outcome table. Invoice ownership and
+    allowed operations stay in ``apps.billing.services``.
+    """
     invoices = list(
-        BillingInvoice.objects.filter(
-            billing_record__member=member
-        ).select_related("billing_record").order_by("due_date")
+        BillingInvoice.objects.filter(billing_record__member=member)
+        .select_related("billing_record", "billing_record__plan")
+        .order_by("due_date")
     )
     for invoice in invoices:
-        invoice.proposed_action = _proposed_action_for_invoice(invoice)
+        invoice.proposed_action = proposed_action_for_invoice(invoice)
+        invoice.selectable, invoice.selectable_reason = _invoice_selectability(
+            invoice
+        )
+        invoice.cancellation_action_label = _CANCELLATION_ACTION_LABELS.get(
+            invoice.external_cancellation_action, "Tikai lokāli"
+        )
+        invoice.cancellation_status_label = _CANCELLATION_STATUS_LABELS.get(
+            invoice.external_cancellation_status, "—"
+        )
+        invoice.cancellation_outcome = _cancellation_outcome(invoice)
     return invoices

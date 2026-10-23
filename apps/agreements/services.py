@@ -562,9 +562,11 @@ def discontinue_agreement(
     Billing mutations, agreement/member state, and the lifecycle event are all
     written inside one ``transaction.atomic()`` block. The billing helper raises
     ``PaidInvoiceSelected`` before any write, so a paid selection blocks the
-    whole operation without side effects. External archive/cancel jobs and the
-    parent email are scheduled with ``transaction.on_commit`` so they only run
-    after commit.
+    whole operation without side effects. External archive/cancel jobs are
+    scheduled with ``transaction.on_commit`` so they only run after commit.
+    The parent email is sent after that inner atomic block returns, not via
+    ``on_commit``: it observes committed state but is not part of the atomic
+    callback set.
     """
     if agreement.state != Agreement.State.SIGNED:
         raise ValueError("discontinuation requires a signed agreement")
