@@ -10,6 +10,7 @@ recreate. Bulk renewal is out of scope.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -44,11 +45,14 @@ def _action_url(app_id):
 
 
 @pytest.fixture
-def signed_app(submitted_application, reviewer, db):
+def signed_app(submitted_application, reviewer, db, monkeypatch):
     """An approved application whose current agreement is SIGNED with an
     explicit billing plan (season 2026/2027) + first billing month."""
     from django.utils import timezone
 
+    # Pin localdate to 2026-09-01 so the fixed 2026-09 first-billing month
+    # equals the cutoff-derived default (cutoff day 20).
+    monkeypatch.setattr(timezone, "localdate", lambda: date(2026, 9, 1))
     app = approve_application(submitted_application, reviewer)
     agreement = create_agreement_for_member(
         app.approved_member, Agreement.SigningPath.PAPER
