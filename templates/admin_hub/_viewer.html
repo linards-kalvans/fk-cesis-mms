@@ -1,6 +1,16 @@
 {% comment %}Expects `viewer_tabs`: a list of (label, panel) pairs, where
-each panel is a build_doc_panel dict. Rotation and zoom are presentation-only
-CSS transforms - no stored file is ever modified.
+each panel carries `active`, `preview_kind`, and the already-resolved
+`preview_url` / `download_url` authorized private proxies (empty when the kind
+has no file), plus `viewer_initial_index`: the index of the first panel with
+an active document (or None when every tab is empty). The Hub resolves the
+URLs in its adapter so this fragment never assumes a Document row - a medical
+permit resolves through its own proxy routes.
+Rotation and zoom are presentation-only CSS transforms - no stored file is
+ever modified.
+
+Safe native previews: images use the raster image path, PDFs use a titled
+native iframe, and every other format (including HTML, SVG and office files)
+gets open/download links only - unsupported content is never embedded.
 
 The "Jaunā cilnē" / "Lejupielādēt" toolbar links always follow whichever tab
 is active: each tab button carries the two authorized proxy URLs (or empty,
@@ -8,46 +18,75 @@ when that kind has no active document) as data attributes, and viewer.js
 copies them onto the two toolbar links on load and on every tab switch. The
 links are never rendered once per-panel here - that is what let them go stale
 on the wrong tab before this fix.
+
+Every available document also carries visible open/download links inside its
+stage, so the authorized fallback works without JavaScript when native
+rendering is unavailable.
 {% endcomment %}
 <div class="viewer">
   <div class="viewer__tabs">
     {% for label, panel in viewer_tabs %}
       <button type="button"
-              class="viewer__tab {% if forloop.first %}is-active{% endif %}{% if not panel.active %} is-missing{% endif %}"
+              class="viewer__tab {% if forloop.counter0 == viewer_initial_index %}is-active{% endif %}{% if not panel.active %} is-missing{% endif %}"
               data-viewer-tab="{{ forloop.counter0 }}"
-              data-viewer-preview="{% if panel.active %}{% url 'documents:admin-document-preview' panel.active.id %}{% endif %}"
-              data-viewer-download="{% if panel.active %}{% url 'documents:admin-document-download' panel.active.id %}{% endif %}"
+              data-viewer-preview="{% if panel.active %}{{ panel.preview_url }}{% endif %}"
+              data-viewer-download="{% if panel.active %}{{ panel.download_url }}{% endif %}"
               {% if not panel.active %}disabled{% endif %}>{{ label }}</button>
     {% endfor %}
   </div>
 
   <div class="viewer__frame">
+    {% if viewer_initial_index is None %}
+      <div class="viewer__empty" data-viewer-empty>
+        <p>Neviens dokuments nav augšupielādēts.</p>
+        <p class="viewer__empty-hint">Augšupielādējiet dokumentu, lai to apskatītu šeit.</p>
+      </div>
+    {% endif %}
+
     {% for label, panel in viewer_tabs %}
       <div class="viewer__stage" data-viewer-stage="{{ forloop.counter0 }}"
-           {% if not forloop.first %}hidden{% endif %}>
+           {% if forloop.counter0 != viewer_initial_index %}hidden{% endif %}>
         {% if panel.active %}
           {% if panel.preview_kind == "image" %}
             <img class="viewer__doc" data-viewer-doc
-                 src="{% url 'documents:admin-document-preview' panel.active.id %}"
+                 src="{{ panel.preview_url }}"
                  alt="Augšupielādētais dokuments">
+            <div class="viewer__image-error" data-viewer-image-error hidden>
+              <p>Šo attēlu pārlūks nevar parādīt.</p>
+              {% if panel.active.original_filename %}
+                <p class="viewer__image-error-file">{{ panel.active.original_filename }}</p>
+              {% endif %}
+              <p>Atveriet failu jaunā cilnē vai lejupielādējiet to.</p>
+            </div>
+          {% elif panel.preview_kind == "pdf" %}
+            <iframe class="viewer__pdf"
+                    src="{{ panel.preview_url }}"
+                    title="{{ label }} — PDF dokumenta priekšskatījums"
+                    loading="lazy"></iframe>
           {% else %}
-            <p class="hint" style="color:#fff">
-              Šis fails nav attēls. Atveriet to jaunā cilnē vai lejupielādējiet.
+            <p class="viewer__unsupported">
+              Šo faila formātu šeit nevar parādīt. Atveriet to jaunā cilnē vai lejupielādējiet.
             </p>
           {% endif %}
+          <p class="viewer__doc-links">
+            <a class="viewer__doc-link" target="_blank" rel="noopener"
+               href="{{ panel.preview_url }}">Atvērt jaunā cilnē</a>
+            <a class="viewer__doc-link"
+               href="{{ panel.download_url }}">Lejupielādēt</a>
+          </p>
         {% else %}
-          <p class="hint" style="color:#fff">Dokuments nav augšupielādēts.</p>
+          <p class="viewer__unsupported">Dokuments nav augšupielādēts.</p>
         {% endif %}
       </div>
     {% endfor %}
 
     <div class="viewer__bar">
-      <button type="button" class="vbtn" data-viewer-rotate="-90" title="Pagriezt pa kreisi (Shift+←)">&#8634; 90°</button>
-      <button type="button" class="vbtn" data-viewer-rotate="90" title="Pagriezt pa labi (Shift+→)">&#8635; 90°</button>
-      <button type="button" class="vbtn" data-viewer-zoom="-0.15" title="Tālāk">&minus;</button>
-      <span class="vbar__zoom" data-viewer-zoom-label>100 %</span>
-      <button type="button" class="vbtn" data-viewer-zoom="0.15" title="Tuvāk">+</button>
-      <button type="button" class="vbtn" data-viewer-reset title="Ietilpināt logā">&#10530; Ietilpināt</button>
+      <button type="button" class="vbtn" data-viewer-rotate="-90" title="Pagriezt pa kreisi (Shift+←)" disabled>&#8634; 90°</button>
+      <button type="button" class="vbtn" data-viewer-rotate="90" title="Pagriezt pa labi (Shift+→)" disabled>&#8635; 90°</button>
+      <button type="button" class="vbtn" data-viewer-zoom="-0.15" title="Tālāk" disabled>&minus;</button>
+      <span class="vbar__zoom" data-viewer-zoom-label>—</span>
+      <button type="button" class="vbtn" data-viewer-zoom="0.15" title="Tuvāk" disabled>+</button>
+      <button type="button" class="vbtn" data-viewer-reset title="Ietilpināt logā" disabled>&#10530; Ietilpināt</button>
       <span class="vbar__spacer"></span>
       <a class="vbtn" target="_blank" rel="noopener" data-viewer-open hidden>&#8599; Jaunā cilnē</a>
       <a class="vbtn vbtn--accent" data-viewer-get hidden>&#8681; Lejupielādēt</a>

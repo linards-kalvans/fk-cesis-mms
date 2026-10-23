@@ -354,3 +354,141 @@ class TestAuditContract:
         payload = str(event.metadata)
         assert permit.original_filename not in payload
         assert app.member_full_name not in payload
+
+# ---------------------------------------------------------------------------
+# Staff proxy access from the Admin Hub (Slice 3)
+# ---------------------------------------------------------------------------
+
+
+def _staff_client(*, superuser=True):
+    from django.contrib.auth.models import User
+    from django.test import Client
+
+    if superuser:
+        User.objects.create_superuser("permit-staff", "permit-staff@example.com", "pw")
+        username = "permit-staff"
+    else:
+        User.objects.create_user(
+            "permit-staff-viewer", "permit-viewer@example.com", "pw", is_staff=True
+        )
+        username = "permit-staff-viewer"
+    client = Client()
+    assert client.login(username=username, password="pw")
+    return client
+
+
+class TestStaffProxyAccess:
+    def test_staff_with_change_permission_can_preview_a_permit(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+
+        assert response.status_code == 200
+        assert response.streaming
+        assert "inline" in response.get("Content-Disposition", "")
+
+    def test_staff_with_change_permission_can_download_a_permit(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-download", args=[permit.pk])
+        )
+
+        assert response.status_code == 200
+        assert response.streaming
+        assert response["Content-Disposition"].startswith("attachment")
+
+    def test_staff_without_change_permission_is_refused(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        staff = _staff_client(superuser=False)
+
+        preview = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+        download = staff.get(
+            reverse("registrations:medical-permit-download", args=[permit.pk])
+        )
+
+        assert preview.status_code == 404
+        assert download.status_code == 404
+
+    def test_staff_missing_file_is_still_404(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit(
+            with_file=False, confirmed=True
+        )
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+
+        assert response.status_code == 404
+
+
+class TestTrustedPermitPdfFraming:
+    def test_inline_pdf_allows_same_origin_framing(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+
+        assert response["X-Frame-Options"] == "SAMEORIGIN"
+
+    def test_pdf_download_keeps_deny(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-download", args=[permit.pk])
+        )
+
+        assert response["X-Frame-Options"] == "DENY"
+
+    def test_inline_non_pdf_keeps_deny(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        permit.original_filename = "permit.png"
+        permit.content_type = "image/png"
+        permit.save(update_fields=["original_filename", "content_type"])
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+
+        assert response.status_code == 200
+        assert response["X-Frame-Options"] == "DENY"
+
+    def test_inline_mime_extension_mismatch_keeps_deny(self):
+        from django.urls import reverse
+
+        _client, _account, _app, permit = _make_owner_with_permit()
+        permit.content_type = "image/png"
+        permit.save(update_fields=["content_type"])
+        staff = _staff_client()
+
+        response = staff.get(
+            reverse("registrations:medical-permit-preview", args=[permit.pk])
+        )
+
+        assert response.status_code == 200
+        assert response["X-Frame-Options"] == "DENY"
