@@ -192,6 +192,64 @@ class RegistrationApplication(TimeStampedModel):
         return bool(self.guardian.first_name.strip() and self.guardian.family_name.strip())
 
 
+class ApplicationCorrectionMessage(models.Model):
+    """Send-time record of a correction-request (``request_fix``) email.
+
+    The row is created before the mail backend is called and keeps the exact
+    rendered subject/body so later review-note edits or resubmission cannot
+    rewrite history. ``status`` distinguishes mail-backend acceptance from
+    delivery: ``sent`` only means ``send_mail`` returned 1, never that the
+    parent received or read the message. ``pending`` means the outcome was not
+    recorded (for example an interruption), not proven success or failure.
+
+    No recipient, provider payload, exception text, or delivery/open flags are
+    stored. The actor link is not a durable actor-name snapshot.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Iznākums nav apstiprināts"
+        SENT = "sent", "Nosūtīts e-pasta sistēmai"
+        FAILED = "failed", "Nosūtīšana neizdevās"
+
+    application = models.ForeignKey(
+        RegistrationApplication,
+        on_delete=models.CASCADE,
+        related_name="correction_messages",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    subject = models.TextField()
+    body = models.TextField()
+    review_message = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+
+    class Meta:
+        ordering = ("created_at", "pk")
+        indexes = [
+            models.Index(
+                fields=["application", "created_at"],
+                name="reg_correctmsg_app_created_idx",
+            )
+        ]
+        verbose_name = "Labojuma pieprasījuma ziņa"
+        verbose_name_plural = "Labojuma pieprasījuma ziņas"
+
+    def __str__(self) -> str:
+        return f"{self.application_id}: {self.subject}"
+
+
 class RegistrationSubmissionDigestSettings(models.Model):
     """Singleton model for the daily submitted-registration digest job (P19).
 

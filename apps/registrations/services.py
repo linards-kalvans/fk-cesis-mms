@@ -1,5 +1,6 @@
 """Service functions for registration workflow."""
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
@@ -30,8 +31,11 @@ from apps.registrations.validators import (
 from apps.registrations.forms import RegistrationApplicationForm
 from apps.registrations.models import (
     PERSONAL_DATA_CONSENT_VERSION,
+    ApplicationCorrectionMessage,
     RegistrationApplication,
 )
+
+logger = logging.getLogger(__name__)
 
 # Module-level wrapper for monkeypatch compatibility.
 # Tests patch both apps.registrations.services.extract_document_data and
@@ -655,24 +659,33 @@ def submit_application(
     _require_active_member_portrait_document(application)
     _require_valid_kit_sizes(application)
 
-    application.status = RegistrationApplication.Status.SUBMITTED
-    application.submitted_at = timezone.now()
-    # Clear review metadata on resubmission
-    application.review_message = ""
-    application.reviewed_by = None
-    application.reviewed_at = None
-    # P19: re-arm the per-row digest delivery flag so the next morning's digest
-    # includes this newly-submitted event.
-    application.submission_digest_sent_at = None
-    application.save(update_fields=[
-        "status",
-        "submitted_at",
-        "updated_at",
-        "review_message",
-        "reviewed_by_id",
-        "reviewed_at",
-        "submission_digest_sent_at",
-    ])
+    # A successful resubmission answers the correction-request lifecycle:
+    # every unresolved row (pending, failed, or sent) is resolved in the same
+    # small DB transaction as the submission write. No SMTP runs here, and an
+    # invalid submission or plain draft save never reaches this block.
+    with transaction.atomic():
+        application.status = RegistrationApplication.Status.SUBMITTED
+        application.submitted_at = timezone.now()
+        # Clear review metadata on resubmission
+        application.review_message = ""
+        application.reviewed_by = None
+        application.reviewed_at = None
+        # P19: re-arm the per-row digest delivery flag so the next morning's
+        # digest includes this newly-submitted event.
+        application.submission_digest_sent_at = None
+        application.save(update_fields=[
+            "status",
+            "submitted_at",
+            "updated_at",
+            "review_message",
+            "reviewed_by_id",
+            "reviewed_at",
+            "submission_digest_sent_at",
+        ])
+        ApplicationCorrectionMessage.objects.filter(
+            application=application,
+            resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now())
 
     return application
 
@@ -728,6 +741,7 @@ def request_application_fix(
         application,
         template_name="request_fix",
         subject="Jūsu pieteikums ir jālabo",
+        correction_actor=reviewer,
     )
     return application
 
@@ -849,12 +863,23 @@ def _render_and_send_notification(
     template_name: str,
     subject: str,
     extra_context: dict | None = None,
+    *,
+    correction_actor: Any = None,
 ) -> None:
     """Render a plain-text email template and send it to the guardian.
 
     Templates live under ``templates/emails/registrations/<template_name>.txt``.
     Absolute URLs are built from ``settings.SITE_URL`` so links work outside
     the request cycle (admin review actions run without a live request).
+
+    Only the ``request_fix`` template is tracked in
+    :class:`ApplicationCorrectionMessage`. The row is rendered once and
+    persisted as ``pending`` before mail is attempted; the exact same subject
+    and body are passed to ``send_mail``. A return value of 1 marks it
+    ``sent``; 0 or an exception marks it ``failed`` (and the exception is
+    re-raised unchanged). An interruption, or a failure while saving the
+    outcome, leaves the row ``pending`` — uncertain, never retried here.
+    SMTP and the outcome write are deliberately not atomic.
     """
     application_path = reverse(
         "registrations:application-workspace", args=[application.id]
@@ -871,13 +896,45 @@ def _render_and_send_notification(
     if extra_context:
         context.update(extra_context)
     body = render_to_string(f"emails/registrations/{template_name}.txt", context)
-    send_mail(
-        subject=subject,
-        message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[application.guardian_contact_email],
-        fail_silently=False,
-    )
+
+    correction_message: ApplicationCorrectionMessage | None = None
+    if template_name == "request_fix":
+        correction_message = ApplicationCorrectionMessage.objects.create(
+            application=application,
+            actor=correction_actor,
+            subject=subject,
+            body=body,
+            review_message=(application.review_message or "").strip(),
+        )
+
+    try:
+        sent_count = send_mail(
+            subject=subject,
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[application.guardian_contact_email],
+            fail_silently=False,
+        )
+    except Exception:
+        if correction_message is not None:
+            correction_message.status = ApplicationCorrectionMessage.Status.FAILED
+            try:
+                correction_message.save(update_fields=["status"])
+            except Exception:
+                # Never mask the original mail exception. The row stays
+                # pending, which truthfully means "outcome unknown".
+                logger.warning(
+                    "Could not record correction-message failure outcome."
+                )
+        raise
+
+    if correction_message is not None:
+        if sent_count == 1:
+            correction_message.status = ApplicationCorrectionMessage.Status.SENT
+            correction_message.sent_at = timezone.now()
+        else:
+            correction_message.status = ApplicationCorrectionMessage.Status.FAILED
+        correction_message.save(update_fields=["status", "sent_at"])
 
 # ---------------------------------------------------------------------------
 # Staff inline edit (Admin Hub cockpit)
