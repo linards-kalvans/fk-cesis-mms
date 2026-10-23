@@ -32,7 +32,35 @@ the no-JavaScript history page.{% endcomment %}
           <dd>{% if message.resolved_at %}{{ message.resolved_at|date:"d.m.Y H:i" }}{% else %}Nav atrisināta{% endif %}</dd>
         </div>
         <div>
-          <dt>Darbinieks</dt>
+          <dt>Atrisinājuma veids</dt>
+          <dd>
+            {% if message.resolution_source == "staff_manual" %}
+              Darbinieks atzīmēja manuāli
+            {% elif message.resolution_source == "parent_resubmission" %}
+              Vecāks iesniedza no jauna
+            {% elif message.resolved_at %}
+              Nav norādīts
+            {% else %}
+              Nav atrisināta
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Atrisināja</dt>
+          <dd>
+            {% if message.resolved_by %}
+              {{ message.resolved_by.get_full_name|default:message.resolved_by.get_username }}
+            {% elif message.resolution_source == "staff_manual" %}
+              Darbinieks vairs nav pieejams
+            {% elif message.resolution_source == "parent_resubmission" %}
+              Vecāks (pieteikuma iesniegšana)
+            {% else %}
+              —
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Pieprasīja</dt>
           <dd>
             {% if message.actor %}
               {{ message.actor.get_full_name|default:message.actor.get_username }}

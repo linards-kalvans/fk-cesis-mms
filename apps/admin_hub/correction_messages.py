@@ -113,7 +113,7 @@ def correction_history_page(
     """
     queryset = ApplicationCorrectionMessage.objects.filter(
         application=application
-    ).select_related("actor")
+    ).select_related("actor", "resolved_by")
     paginator = Paginator(queryset, HISTORY_PAGE_SIZE)
     page_obj = paginator.page(_normalize_page(raw_page, paginator))
     summary = correction_summaries([application.pk]).get(

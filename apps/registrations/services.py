@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -664,16 +664,33 @@ def submit_application(
     # small DB transaction as the submission write. No SMTP runs here, and an
     # invalid submission or plain draft save never reaches this block.
     with transaction.atomic():
-        application.status = RegistrationApplication.Status.SUBMITTED
-        application.submitted_at = timezone.now()
+        # Re-read under a row lock so a parent submission that loses to a staff
+        # manual resolution cannot overwrite that resolution or the digest flag.
+        locked = cast(
+            RegistrationApplication,
+            RegistrationApplication.objects.select_for_update().get(
+                pk=application.pk
+            ),
+        )
+        if locked.status not in (
+            RegistrationApplication.Status.DRAFT,
+            RegistrationApplication.Status.FIX_REQUESTED,
+        ):
+            raise ValueError(
+                "only draft or fix_requested applications can be submitted"
+            )
+
+        now = timezone.now()
+        locked.status = RegistrationApplication.Status.SUBMITTED
+        locked.submitted_at = now
         # Clear review metadata on resubmission
-        application.review_message = ""
-        application.reviewed_by = None
-        application.reviewed_at = None
+        locked.review_message = ""
+        locked.reviewed_by = None
+        locked.reviewed_at = None
         # P19: re-arm the per-row digest delivery flag so the next morning's
         # digest includes this newly-submitted event.
-        application.submission_digest_sent_at = None
-        application.save(update_fields=[
+        locked.submission_digest_sent_at = None
+        locked.save(update_fields=[
             "status",
             "submitted_at",
             "updated_at",
@@ -683,11 +700,128 @@ def submit_application(
             "submission_digest_sent_at",
         ])
         ApplicationCorrectionMessage.objects.filter(
-            application=application,
+            application=locked,
             resolved_at__isnull=True,
-        ).update(resolved_at=timezone.now())
+        ).update(
+            resolved_at=now,
+            resolution_source=(
+                ApplicationCorrectionMessage.ResolutionSource.PARENT_RESUBMISSION
+            ),
+            resolved_by=None,
+        )
 
+    # Existing view callers ignore the return value and then read the passed
+    # instance for parent analytics, so refresh its transition fields rather
+    # than silently leaving it stale.
+    application.refresh_from_db(
+        fields=[
+            "status",
+            "submitted_at",
+            "updated_at",
+            "review_message",
+            "reviewed_by",
+            "reviewed_at",
+            "submission_digest_sent_at",
+        ]
+    )
     return application
+
+
+def resolve_application_corrections(
+    application: RegistrationApplication,
+    reviewer: settings.AUTH_USER_MODEL,
+) -> RegistrationApplication:
+    """Close all outstanding correction requests as a staff action.
+
+    A real transition returns ``FIX_REQUESTED`` to ``SUBMITTED`` exactly as a
+    parent resubmission would, but deliberately bypasses the parent submission
+    completeness/document/kit gates: staff are closing corrections on an
+    already submitted application. It approves nothing, creates no member or
+    agreement, sends no email and emits no analytics event.
+
+    ``SUBMITTED`` with no unresolved attempts is an idempotent no-op. A
+    ``SUBMITTED`` application that still has unresolved attempts is rejected
+    because silently closing it would contradict its state. Every other state
+    is rejected without writes.
+    """
+    with transaction.atomic():
+        fresh = cast(
+            RegistrationApplication,
+            RegistrationApplication.objects.select_for_update().get(
+                pk=application.pk
+            ),
+        )
+        unresolved = ApplicationCorrectionMessage.objects.filter(
+            application=fresh,
+            resolved_at__isnull=True,
+        )
+
+        if fresh.status == RegistrationApplication.Status.SUBMITTED:
+            if unresolved.exists():
+                raise ValueError(
+                    "submitted application has unresolved corrections"
+                )
+            return fresh
+
+        if fresh.status != RegistrationApplication.Status.FIX_REQUESTED:
+            raise ValueError(
+                "cannot resolve corrections in this application state"
+            )
+
+        from_status = str(fresh.status)
+        now = timezone.now()
+
+        fresh.status = RegistrationApplication.Status.SUBMITTED
+        fresh.submitted_at = now
+        fresh.review_message = ""
+        fresh.reviewed_by = None
+        fresh.reviewed_at = None
+        fresh.submission_digest_sent_at = None
+        fresh.save(update_fields=[
+            "status",
+            "submitted_at",
+            "updated_at",
+            "review_message",
+            "reviewed_by_id",
+            "reviewed_at",
+            "submission_digest_sent_at",
+        ])
+
+        resolved_count = unresolved.update(
+            resolved_at=now,
+            resolution_source=(
+                ApplicationCorrectionMessage.ResolutionSource.STAFF_MANUAL
+            ),
+            resolved_by=reviewer,
+        )
+
+        # Fail-safe and structural: no names, contacts, subjects or bodies.
+        # on_commit keeps a rolled-back transition from leaving a success
+        # audit behind and a retry from auditing twice.
+        target_id = str(fresh.pk)
+        metadata = {
+            "from_status": from_status,
+            "to_status": str(fresh.status),
+            "resolved_count": resolved_count,
+            "source": str(
+                ApplicationCorrectionMessage.ResolutionSource.STAFF_MANUAL
+            ),
+        }
+
+        def _audit_resolution() -> None:
+            record_audit_event(
+                action=str(
+                    AuditEvent.Action.APPLICATION_CORRECTIONS_RESOLVED
+                ),
+                actor=reviewer,
+                target_type="registrationapplication",
+                target_id=target_id,
+                target_repr="Registration application correction resolution",
+                metadata=metadata,
+            )
+
+        transaction.on_commit(_audit_resolution)
+        return fresh
 
 
 # ---------------------------------------------------------------------------

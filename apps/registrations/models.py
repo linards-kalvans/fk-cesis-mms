@@ -204,12 +204,22 @@ class ApplicationCorrectionMessage(models.Model):
 
     No recipient, provider payload, exception text, or delivery/open flags are
     stored. The actor link is not a durable actor-name snapshot.
+
+    ``actor`` is the sender of the correction request; ``resolved_by`` is the
+    staff user who closed it manually, when that applies. They are distinct
+    roles and can refer to different people. A parent resubmission resolves
+    the row with no resolving actor (``resolved_by`` stays null).
     """
 
     class Status(models.TextChoices):
         PENDING = "pending", "Iznākums nav apstiprināts"
         SENT = "sent", "Nosūtīts e-pasta sistēmai"
         FAILED = "failed", "Nosūtīšana neizdevās"
+
+    class ResolutionSource(models.TextChoices):
+        UNSET = "", "Nav norādīts"
+        PARENT_RESUBMISSION = "parent_resubmission", "Vecāks iesniedza no jauna"
+        STAFF_MANUAL = "staff_manual", "Darbinieks atzīmēja kā atrisinātu"
 
     application = models.ForeignKey(
         RegistrationApplication,
@@ -226,6 +236,19 @@ class ApplicationCorrectionMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_source = models.CharField(
+        max_length=32,
+        choices=ResolutionSource.choices,
+        blank=True,
+        default=ResolutionSource.UNSET,
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     subject = models.TextField()
     body = models.TextField()
     review_message = models.TextField(blank=True, default="")
