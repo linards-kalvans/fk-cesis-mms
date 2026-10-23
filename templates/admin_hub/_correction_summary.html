@@ -1,0 +1,45 @@
+{% comment %}One row's correction summary. It deliberately carries no subject,
+body or review note: those live only in the authorized history endpoint. The
+tip is CSS-only, so hover/focus never fetches correspondence.{% endcomment %}
+<div class="corr-summary" data-correction-summary data-history-url="{{ history_url }}">
+  <a class="corr-summary__trigger"
+     href="{{ history_url }}"
+     data-correction-open
+     aria-haspopup="dialog"
+     aria-controls="correction-history-dialog"
+     aria-describedby="corr-summary-tip-{{ application.pk }}">
+    {% if summary.has_history %}
+      Ziņas: {{ summary.sent_count }} nosūtītas
+    {% else %}
+      Nav reģistrētas ziņas
+    {% endif %}
+  </a>
+
+  <span class="corr-summary__awaiting{% if awaiting_parent %} corr-summary__awaiting--active{% endif %}">
+    {% if awaiting_parent %}Gaida vecāka labojumu{% else %}Nav gaidāma vecāka atbilde{% endif %}
+  </span>
+
+  {% if summary.latest_status == "failed" %}
+    <span class="corr-summary__warning badge badge--fix">Nosūtīšana neizdevās</span>
+  {% elif summary.latest_status == "pending" %}
+    <span class="corr-summary__warning badge badge--neutral">Nosūtīšanas iznākums nav apstiprināts</span>
+  {% endif %}
+
+  <span class="corr-summary__tip" id="corr-summary-tip-{{ application.pk }}" role="status">
+    {% if summary.has_history %}
+      {% if summary.latest_status == "sent" %}
+        Pēdējā ziņa pieņemta e-pasta sistēmā {{ summary.latest_created_at|date:"d.m.Y H:i" }}.
+      {% elif summary.latest_status == "failed" %}
+        Pēdējais mēģinājums {{ summary.latest_created_at|date:"d.m.Y H:i" }} netika pieņemts e-pasta sistēmā.
+      {% else %}
+        Pēdējā mēģinājuma iznākums nav apstiprināts ({{ summary.latest_created_at|date:"d.m.Y H:i" }}).
+      {% endif %}
+      {% if summary.latest_sent_at %}
+        Pēdējā apstiprinātā nosūtīšana: {{ summary.latest_sent_at|date:"d.m.Y H:i" }}.
+      {% endif %}
+    {% else %}
+      Nav reģistrētu ziņu. Korespondence pirms uzskaites sākuma nav zināma — tas
+      nenozīmē, ka e-pasts netika nosūtīts.
+    {% endif %}
+  </span>
+</div>

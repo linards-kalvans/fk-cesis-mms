@@ -8,6 +8,11 @@ urlpatterns = [
     path("", views.hub_index_view, name="index"),
     path("pieteikumi/", views.queue_view, name="queue"),
     path("pieteikumi/<int:pk>/", views.cockpit_view, name="cockpit"),
+    path(
+        "pieteikumi/<int:pk>/zinojumi/",
+        views.correction_messages_view,
+        name="correction-messages",
+    ),
     path("pieteikumi/<int:pk>/ligums/", views.agreement_view, name="agreement"),
     path("pieteikumi/<int:pk>/maksajumi/", views.billing_view, name="billing"),
     path("rekini/", views.invoices_view, name="invoices"),

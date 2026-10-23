@@ -40,6 +40,73 @@
   <div class="cockpit">
     {% include "admin_hub/_viewer.html" %}
 
+    <div class="cockpit__main">
+    <section class="card" data-correction-history="{{ application.pk }}">
+      <div class="card__head">
+        <span class="card__step">&#9993;</span>
+        <h2 class="anton">Labojuma pieprasījuma ziņas</h2>
+      </div>
+      <div class="card__body">
+        {% include "admin_hub/_correction_summary.html" with summary=correction_summary awaiting_parent=awaiting_parent history_url=correction_history_url application=application %}
+      </div>
+    </section>
+    {% comment %} Medical permit. The status and validity date come from the
+       same service the admin/portal use. Upload posts to the existing admin
+       review-action endpoint - the Hub is not a second writer - and is only
+       offered when RegistrationApplicationAdmin grants change permission.
+       Confirmation and clear-confirmation stay in Django admin. {% endcomment %}
+    <section class="card" data-medical-permit="{{ application.pk }}">
+      <div class="card__head">
+        <span class="card__step">&#128203;</span>
+        <h2 class="anton">Veselības apliecība</h2>
+      </div>
+      <div class="card__body">
+        <p data-medical-permit-status="{{ medical_permit.status }}">
+          <strong>{{ medical_permit.status_label }}</strong>
+        </p>
+        {% if medical_permit.valid_until %}
+          <p class="hint">Derīga līdz <strong>{{ medical_permit.valid_until|date:"d.m.Y" }}</strong></p>
+        {% endif %}
+        {% if medical_permit.has_file %}
+          <p>Fails: <strong>{{ medical_permit.filename }}</strong></p>
+          {% if medical_permit.can_view_file %}
+            <p class="row">
+              <a class="btn btn-secondary btn-sm"
+                 target="_blank" rel="noopener"
+                 href="{% url 'registrations:medical-permit-preview' medical_permit.permit_id %}">Atvērt jaunā cilnē</a>
+              <a class="btn btn-secondary btn-sm"
+                 href="{% url 'registrations:medical-permit-download' medical_permit.permit_id %}">Lejupielādēt</a>
+            </p>
+          {% endif %}
+        {% elif medical_permit.confirmed %}
+          <p class="hint">Apstiprināta bez faila — kluba rīcībā esošs apliecinājums.</p>
+        {% else %}
+          <p class="hint">Fails vēl nav augšupielādēts.</p>
+        {% endif %}
+
+        {% if medical_permit.can_upload %}
+          <form method="post"
+                enctype="multipart/form-data"
+                data-medical-permit-form
+                action="{{ medical_permit.upload_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <div class="f">
+              <label for="medical_permit_file">Fails (PDF, JPG, PNG vai HEIC, līdz 25 MB)</label>
+              <input type="file" name="medical_permit_file" id="medical_permit_file"
+                     accept=".pdf,.jpg,.jpeg,.png,.heic">
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button type="submit" name="action" value="medical_permit_upload"
+                      class="btn btn-secondary">
+                {% if medical_permit.has_file %}Aizstāt failu{% else %}Augšupielādēt failu{% endif %}
+              </button>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    </section>
+
     <section data-checklist="{{ application.pk }}">
       <div class="checkbar">
         <div>
@@ -199,7 +266,10 @@
         </div>
       </details>
     </section>
+    </div>
   </div>
+
+  {% include "admin_hub/_correction_dialog.html" %}
 {% endblock %}
 
 {% block hub_actionbar %}
@@ -231,4 +301,5 @@
 {% block hub_scripts %}
   <script src="{% static 'admin_hub/viewer.js' %}"></script>
   <script src="{% static 'admin_hub/checklist.js' %}"></script>
+  <script src="{% static 'admin_hub/correction_messages.js' %}"></script>
 {% endblock %}

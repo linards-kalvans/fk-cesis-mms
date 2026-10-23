@@ -706,7 +706,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Lūdzu izvēlieties failu.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 upload_application_medical_permit(
                     application,
@@ -716,9 +716,9 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 )
             except ValueError as exc:
                 self.message_user(request, str(exc), level=messages.ERROR)
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             self.message_user(request, "Veselības apliecība augšupielādēta.")
-            return self._change_redirect(object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "confirm_medical_permit":
             permit = getattr(application, "medical_permit", None)

@@ -1,5 +1,9 @@
 /* Document viewer: tab switching, rotation, zoom. Presentation only -
-   nothing here writes to the server or modifies a stored document. */
+   nothing here writes to the server or modifies a stored document.
+
+   Safe native previews: only loaded raster images may be transformed or
+   zoomed. PDF/unknown/missing panels and images that failed to load keep the
+   controls disabled and show no zoom percentage. */
 (function () {
   "use strict";
 
@@ -8,11 +12,46 @@
   var zoomLabel = document.querySelector("[data-viewer-zoom-label]");
   var openLink = document.querySelector("[data-viewer-open]");
   var getLink = document.querySelector("[data-viewer-get]");
+  var controls = [];
+  var failedImages = typeof WeakSet === "function" ? new WeakSet() : null;
   var state = { deg: 0, scale: 1 };
 
-  function activeDoc() {
-    var visible = document.querySelector("[data-viewer-stage]:not([hidden])");
-    return visible ? visible.querySelector("[data-viewer-doc]") : null;
+  ["[data-viewer-rotate]", "[data-viewer-zoom]", "[data-viewer-reset]"].forEach(
+    function (selector) {
+      document.querySelectorAll(selector).forEach(function (element) {
+        controls.push(element);
+      });
+    }
+  );
+
+  function activeStage() {
+    return document.querySelector("[data-viewer-stage]:not([hidden])");
+  }
+
+  function imageForStage(stage) {
+    return stage ? stage.querySelector("[data-viewer-doc]") : null;
+  }
+
+  function isUsableImage(image) {
+    if (!image) { return false; }
+    if (failedImages && failedImages.has(image)) { return false; }
+    return image.complete === true
+      && (image.naturalWidth || 0) > 0
+      && (image.naturalHeight || 0) > 0;
+  }
+
+  function activeImage() {
+    var image = imageForStage(activeStage());
+    return isUsableImage(image) ? image : null;
+  }
+
+  function setControlsEnabled(enabled) {
+    controls.forEach(function (control) {
+      control.disabled = !enabled;
+    });
+    if (!enabled && zoomLabel) {
+      zoomLabel.textContent = "—";
+    }
   }
 
   // Points the "Jaunā cilnē" / "Lejupielādēt" toolbar links at whichever tab
@@ -50,26 +89,21 @@
   }
 
   function apply() {
-    var doc = activeDoc();
-    if (doc) {
-      doc.style.transform =
-        "rotate(" + state.deg + "deg) scale(" + state.scale + ")";
-    }
+    var image = activeImage();
+    if (!image) { return; }
+    image.style.transform =
+      "rotate(" + state.deg + "deg) scale(" + state.scale + ")";
     if (zoomLabel) {
       zoomLabel.textContent = Math.round(state.scale * 100) + " %";
     }
   }
 
-  function activeStage() {
-    return document.querySelector("[data-viewer-stage]:not([hidden])");
-  }
-
   function fit() {
     // "Ietilpināt" means fit, not 100%: setting scale = 1 was a no-op at the
     // default zoom, which is why the button appeared dead.
-    var doc = activeDoc();
+    var image = activeImage();
     var stage = activeStage();
-    if (!doc || !stage) { return; }
+    if (!image || !stage) { return; }
 
     var styles = window.getComputedStyle(stage);
     var boxWidth = stage.clientWidth
@@ -83,8 +117,8 @@
     // clientWidth/Height would overstate the height of a portrait photo and
     // under-scale it after a rotation. naturalWidth/Height are the true
     // pixels; they are 0 until the image has loaded, hence the guard.
-    var naturalWidth = doc.naturalWidth || 0;
-    var naturalHeight = doc.naturalHeight || 0;
+    var naturalWidth = image.naturalWidth || 0;
+    var naturalHeight = image.naturalHeight || 0;
     if (!naturalWidth || !naturalHeight) { return; }
 
     // How large the picture renders at scale 1, after the CSS caps letterbox
@@ -107,38 +141,67 @@
     apply();
   }
 
+  // Applies the enabled/disabled state for the panel that is on screen. When a
+  // usable image is active it also re-applies the current transform and fits
+  // it; every other format leaves the toolbar inert with an unavailable
+  // readout.
+  function refreshControls() {
+    var image = activeImage();
+    setControlsEnabled(Boolean(image));
+    if (!image) { return; }
+    apply();
+    fit();
+  }
+
+  function activateTab(tab, resetTransform) {
+    var index = tab.getAttribute("data-viewer-tab");
+    tabs.forEach(function (item) { item.classList.remove("is-active"); });
+    tab.classList.add("is-active");
+    stages.forEach(function (stage) {
+      stage.hidden = stage.getAttribute("data-viewer-stage") !== index;
+    });
+    // Each tab starts from a neutral orientation and zoom; transform state is
+    // never carried across document switches.
+    if (resetTransform) {
+      state = { deg: 0, scale: 1 };
+    }
+    syncQuickLinks();
+    refreshControls();
+  }
+
   tabs.forEach(function (tab) {
     tab.addEventListener("click", function () {
-      var index = tab.getAttribute("data-viewer-tab");
-      tabs.forEach(function (t) { t.classList.remove("is-active"); });
-      tab.classList.add("is-active");
-      stages.forEach(function (stage) {
-        stage.hidden = stage.getAttribute("data-viewer-stage") !== index;
+      if (tab.disabled) { return; }
+      activateTab(tab, true);
+    });
+  });
+
+  controls.forEach(function (control) {
+    var rotate = control.getAttribute("data-viewer-rotate");
+    var zoom = control.getAttribute("data-viewer-zoom");
+    if (rotate !== null) {
+      control.addEventListener("click", function () {
+        if (!activeImage()) { return; }
+        state.deg += parseInt(rotate, 10);
+        // Re-fit after turning: the bounding box swaps on a quarter turn, so
+        // keeping the old scale would push the document out of the frame.
+        fit();
       });
-      fit();
-      syncQuickLinks();
-    });
+    } else if (zoom !== null) {
+      control.addEventListener("click", function () {
+        if (!activeImage()) { return; }
+        state.scale = Math.min(3, Math.max(0.3, state.scale + parseFloat(zoom)));
+        apply();
+      });
+    } else if (control.hasAttribute("data-viewer-reset")) {
+      control.addEventListener("click", function () {
+        if (!activeImage()) { return; }
+        // Fit preserves the reviewer's chosen orientation, matching the fit()
+        // contract above; reset recalculates only the zoom.
+        fit();
+      });
+    }
   });
-
-  document.querySelectorAll("[data-viewer-rotate]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      state.deg += parseInt(btn.getAttribute("data-viewer-rotate"), 10);
-      // Re-fit after turning: the bounding box swaps on a quarter turn, so
-      // keeping the old scale would push the document out of the frame.
-      fit();
-    });
-  });
-
-  document.querySelectorAll("[data-viewer-zoom]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var delta = parseFloat(btn.getAttribute("data-viewer-zoom"));
-      state.scale = Math.min(3, Math.max(0.3, state.scale + delta));
-      apply();
-    });
-  });
-
-  var resetBtn = document.querySelector("[data-viewer-reset]");
-  if (resetBtn) { resetBtn.addEventListener("click", fit); }
 
   function isTextEntry(target) {
     if (!target || !target.tagName) { return false; }
@@ -152,19 +215,70 @@
     // Shift+Arrow is extend-selection while typing: this page has a rejection
     // textarea, and rotating the document mid-sentence is not a shortcut.
     if (isTextEntry(event.target)) { return; }
+    // Only a successfully loaded, visible raster image can be rotated. Never
+    // mutate a hidden image while a PDF/unknown panel is active.
+    if (!activeImage()) { return; }
     if (event.key === "ArrowLeft") { state.deg -= 90; fit(); }
     if (event.key === "ArrowRight") { state.deg += 90; fit(); }
   });
 
-  // An image has no measurable size until it loads, so the first fit has to
-  // wait for it; re-fit on resize because the frame is fluid.
-  document.querySelectorAll("[data-viewer-doc]").forEach(function (doc) {
-    if (doc.complete) { return; }
-    doc.addEventListener("load", fit);
-  });
-  window.addEventListener("resize", fit);
+  // Attach per-image load/error handling: an image has no measurable size
+  // until it loads, and a failed image (for example HEIC in an unsupported
+  // browser) reveals the escaped fallback while keeping transforms disabled.
+  stages.forEach(function (stage) {
+    var image = imageForStage(stage);
+    if (!image) { return; }
+    var fallback = stage.querySelector("[data-viewer-image-error]");
 
-  apply();
-  fit();
-  syncQuickLinks();
+    function clearError() {
+      if (failedImages) { failedImages.delete(image); }
+      image.hidden = false;
+      if (fallback) { fallback.hidden = true; }
+    }
+
+    function showError() {
+      if (failedImages) { failedImages.add(image); }
+      image.hidden = true;
+      if (fallback) { fallback.hidden = false; }
+    }
+
+    image.addEventListener("load", function () {
+      clearError();
+      if (activeImage() === image) { refreshControls(); }
+    });
+    image.addEventListener("error", function () {
+      showError();
+      if (imageForStage(activeStage()) === image) { refreshControls(); }
+    });
+
+    // The load/error event may already have fired before this script ran.
+    if (image.complete && !((image.naturalWidth || 0) > 0)) {
+      showError();
+    }
+  });
+
+  // Re-fit on resize because the frame is fluid.
+  window.addEventListener("resize", function () {
+    if (activeImage()) { fit(); }
+  });
+
+  var initialTab = document.querySelector("[data-viewer-tab].is-active");
+  if (initialTab && initialTab.disabled) {
+    initialTab = null;
+  }
+  if (!initialTab) {
+    // Fallback for markup without an explicit initial selection: the first
+    // available tab wins, and an all-missing viewer stays without any active
+    // tab or stale toolbar links.
+    tabs.forEach(function (tab) {
+      if (!initialTab && !tab.disabled) { initialTab = tab; }
+    });
+  }
+
+  if (initialTab) {
+    activateTab(initialTab, true);
+  } else {
+    setControlsEnabled(false);
+    syncQuickLinks();
+  }
 })();

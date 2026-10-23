@@ -80,9 +80,16 @@ class TestAdminRendersBillingPlanPicker:
 
 
 class TestSetBillingSetupAction:
-    def test_post_updates_agreement_and_audits(self, staff_client, submitted_application, reviewer):
+    def test_post_updates_agreement_and_audits(
+        self, staff_client, submitted_application, reviewer, monkeypatch
+    ):
         """POST to the billing-setup endpoint updates agreement.billing_plan
         and agreement.first_billing_month, and emits BILLING_PLAN_ASSIGNED."""
+        # Pin localdate to 2026-09-01 so the fixed 2026-09 month equals the
+        # cutoff-derived default (cutoff day 20).
+        monkeypatch.setattr(
+            "apps.billing.services.timezone.localdate", lambda: date(2026, 9, 1)
+        )
         plan = _make_plan()
         app = approve_application(submitted_application, reviewer)
         agreement = create_agreement_for_member(

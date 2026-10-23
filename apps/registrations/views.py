@@ -800,16 +800,53 @@ def open_parent_signed_artifact(
     return build_signed_artifact_response(agreement, disposition="attachment")
 
 
+def _staff_may_change_application(request: HttpRequest, application) -> bool:
+    """Whether this request may change *application* in the Django admin.
+
+    Delegates to the registered ``RegistrationApplicationAdmin`` so the
+    permit proxy and the staff endpoints share one permission rule. Inactive
+    or non-staff users are refused by the admin class itself.
+    """
+    from django.contrib import admin
+
+    model_admin = admin.site._registry.get(RegistrationApplication)
+    if model_admin is None:
+        return False
+    return bool(model_admin.has_change_permission(request, application))
+
+
+def _is_trusted_permit_pdf(permit: MedicalPermit) -> bool:
+    """True only when both the filename extension and declared MIME are PDF.
+
+    Same narrow precedent as ``apps.documents.services._is_trusted_pdf``:
+    only a genuinely labelled PDF may be framed same-origin. Anything else
+    keeps the project default ``X-Frame-Options: DENY``.
+    """
+    filename = permit.original_filename or permit.file.name or ""
+    extension_is_pdf = (
+        "." in filename and filename.rsplit(".", 1)[1].lower() == "pdf"
+    )
+    content_type = (permit.content_type or "").split(";", 1)[0].strip().lower()
+    return extension_is_pdf and content_type == "application/pdf"
+
+
 def _medical_permit_response(
     request: HttpRequest, permit_id: int, *, disposition: str
 ) -> HttpResponse:
-    """Stream a parent-owned MedicalPermit stored file (inline or attachment).
+    """Stream a parent-owned or staff-authorized MedicalPermit stored file.
 
     Ownership runs through the permit's source application or (post-approval)
-    its member — both keyed to the verified parent account. Anonymous visitors
-    are redirected to the registration start; foreign permits, missing files
-    and confirmation-only records are deterministic 404s so permit existence
-    is never leaked. Accesses are audited with redacted metadata.
+    its member — both keyed to the verified parent account. In addition, an
+    authenticated active staff user may preview/download it when the
+    registered ``RegistrationApplicationAdmin`` grants change permission for
+    the source application; that is the same capability the Hub's upload
+    control exposes. Anonymous visitors are redirected to the registration
+    start; foreign permits, missing files and confirmation-only records are
+    deterministic 404s so permit existence is never leaked. Accesses are
+    audited with redacted metadata.
+
+    Only an inline, genuinely PDF-labelled file opts into same-origin framing
+    so the Hub can embed it; downloads and everything else stay ``DENY``.
     """
     from django.http import FileResponse
 
@@ -818,7 +855,14 @@ def _medical_permit_response(
     from apps.documents.models import MedicalPermit
 
     account = _current_parent_account(request)
-    if account is None:
+    # A staff candidate must still pass the admin's object permission below;
+    # this only avoids fetching a permit for visitors who can never qualify.
+    staff_candidate = bool(
+        request.user.is_authenticated
+        and request.user.is_active
+        and request.user.is_staff
+    )
+    if account is None and not staff_candidate:
         return redirect("registrations:start-registration")
     permit = (
         MedicalPermit.objects.filter(pk=permit_id)
@@ -827,10 +871,18 @@ def _medical_permit_response(
     )
     if permit is None:
         raise Http404
-    owns = permit.application.parent_account_id == account.pk
-    if not owns and permit.member_id is not None:
+    owns = (
+        account is not None
+        and permit.application.parent_account_id == account.pk
+    )
+    if not owns and permit.member_id is not None and account is not None:
         owns = permit.member.guardian.parent_account_id == account.pk
-    if not owns or not permit.file:
+    staff_allowed = staff_candidate and _staff_may_change_application(
+        request, permit.application
+    )
+    if not owns and not staff_allowed:
+        raise Http404
+    if not permit.file:
         raise Http404
     record_audit_event(
         action=str(
@@ -846,12 +898,15 @@ def _medical_permit_response(
         permit.file.open("rb")
     except FileNotFoundError:
         raise Http404
-    return FileResponse(
+    response = FileResponse(
         permit.file,
         as_attachment=disposition == "attachment",
         filename=permit.original_filename or "veselibas-aplieciba",
         content_type=permit.content_type or "application/octet-stream",
     )
+    if disposition == "inline" and _is_trusted_permit_pdf(permit):
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return response
 
 
 def medical_permit_preview(request: HttpRequest, permit_id: int) -> HttpResponse:

@@ -12,6 +12,7 @@ its own dedicated "no next" assertion distinct from the others.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -49,10 +50,13 @@ def _changelist_url():
 
 
 @pytest.fixture
-def signed_active_application(submitted_application, reviewer):
+def signed_active_application(submitted_application, reviewer, monkeypatch):
     """An approved application whose current agreement is SIGNED with an
     explicit billing plan + first billing month, and an ACTIVE member - the
     minimum `_signed_active_agreement` guard needs for next-season billing."""
+    # Pin localdate to 2026-09-01 so the fixed 2026-09 first-billing month
+    # equals the cutoff-derived default (cutoff day 20).
+    monkeypatch.setattr(timezone, "localdate", lambda: date(2026, 9, 1))
     app = approve_application(submitted_application, reviewer)
     agreement = get_current_agreement(app.approved_member)
     plan = MembershipPlan.objects.create(
@@ -311,3 +315,127 @@ def test_recreate_current_billing_ignores_an_offsite_next(
     )
     assert resp.status_code == 302
     assert "evil.example.com" not in resp["Location"]
+
+
+# ---------------------------------------------------------------------------
+# medical_permit_upload - the Hub cockpit's only medical writer
+# ---------------------------------------------------------------------------
+
+
+def _permit_upload(name="permit.pdf", content_type="application/pdf"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return SimpleUploadedFile(
+        name=name, content=b"%PDF-1.4 review action", content_type=content_type
+    )
+
+
+def test_medical_permit_upload_returns_to_a_safe_next(
+    staff_client, submitted_application
+):
+    resp = staff_client.post(
+        f"{_action_url(submitted_application.pk)}?next={HUB_URL}",
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(),
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+
+
+def test_medical_permit_upload_missing_file_returns_to_a_safe_next(
+    staff_client, submitted_application
+):
+    from apps.documents.models import MedicalPermit
+
+    resp = staff_client.post(
+        f"{_action_url(submitted_application.pk)}?next={HUB_URL}",
+        {"action": "medical_permit_upload"},
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+    assert not MedicalPermit.objects.filter(application=submitted_application).exists()
+
+
+def test_medical_permit_upload_validation_error_returns_to_a_safe_next(
+    staff_client, submitted_application
+):
+    from apps.documents.models import MedicalPermit
+
+    resp = staff_client.post(
+        f"{_action_url(submitted_application.pk)}?next={HUB_URL}",
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(
+                "permit.webp", "image/webp"
+            ),
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+    assert not MedicalPermit.objects.filter(application=submitted_application).exists()
+
+
+def test_medical_permit_upload_oversize_returns_to_a_safe_next(
+    staff_client, submitted_application, monkeypatch
+):
+    import apps.documents.medical_permits as medical_permits
+
+    monkeypatch.setattr(medical_permits, "MAX_MEDICAL_PERMIT_BYTES", 8)
+
+    resp = staff_client.post(
+        f"{_action_url(submitted_application.pk)}?next={HUB_URL}",
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(),
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+
+
+def test_medical_permit_upload_ignores_an_offsite_next(
+    staff_client, submitted_application
+):
+    resp = staff_client.post(
+        f"{_action_url(submitted_application.pk)}?next=https://evil.example.com/",
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(),
+        },
+    )
+    assert resp.status_code == 302
+    assert "evil.example.com" not in resp["Location"]
+    assert resp["Location"] == _change_url(submitted_application.pk)
+
+
+def test_medical_permit_upload_without_next_lands_on_the_change_page(
+    staff_client, submitted_application
+):
+    resp = staff_client.post(
+        _action_url(submitted_application.pk),
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(),
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == _change_url(submitted_application.pk)
+
+
+def test_medical_permit_upload_requires_change_permission(
+    client, reviewer, submitted_application
+):
+    from apps.documents.models import MedicalPermit
+
+    client.force_login(reviewer)
+    resp = client.post(
+        f"{_action_url(submitted_application.pk)}?next={HUB_URL}",
+        {
+            "action": "medical_permit_upload",
+            "medical_permit_file": _permit_upload(),
+        },
+    )
+    assert resp.status_code == 403
+    assert not MedicalPermit.objects.filter(application=submitted_application).exists()

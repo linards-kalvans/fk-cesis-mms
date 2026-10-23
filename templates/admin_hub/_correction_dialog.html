@@ -1,0 +1,18 @@
+{% comment %}Shared correction-history dialog. Rendered once per page; every
+trigger points at it. Without JavaScript the trigger is an ordinary link to
+the staff-only history page.{% endcomment %}
+<dialog class="corr-dialog" id="correction-history-dialog"
+        aria-labelledby="correction-history-title"
+        data-correction-dialog>
+  <div class="corr-dialog__head">
+    <h2 id="correction-history-title">Labojuma pieprasījuma ziņas</h2>
+    <button type="button" class="corr-dialog__close" data-correction-close
+            aria-label="Aizvērt ziņu vēsturi">×</button>
+  </div>
+  <div class="corr-dialog__body" data-correction-body aria-live="polite" aria-busy="false">
+    <p class="hint">Ielādē ziņu vēsturi…</p>
+  </div>
+  <p class="corr-dialog__fallback">
+    <a data-correction-fallback href="#">Atvērt pilnu vēsturi jaunā lapā</a>
+  </p>
+</dialog>

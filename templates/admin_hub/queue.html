@@ -1,5 +1,6 @@
 {% extends "admin_hub/base_hub.html" %}
 {% load hub_tags %}
+{% load static %}
 
 {% block hub_title %}FK Cēsis Admin — Pieteikumu rinda{% endblock %}
 
@@ -11,9 +12,21 @@
     </div>
   </div>
 
+  <form class="qsearch" method="get" action="{% url 'admin_hub:queue' %}" role="search">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <div class="field-inline">
+      <label for="queue-q">Meklēt pēc vārda</label>
+      <input id="queue-q" type="search" name="q" value="{{ q }}" placeholder="Bērna vai vecāka vārds" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-primary">Meklēt</button>
+    {% if q %}
+      <a class="btn btn-ghost" href="?tab={{ tab }}">Notīrīt</a>
+    {% endif %}
+  </form>
+
   <nav class="tabs">
     {% for slug, label in tabs.items %}
-      <a href="?tab={{ slug }}" class="{% if slug == tab %}is-active{% endif %}">
+      <a href="?tab={{ slug }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}" class="{% if slug == tab %}is-active{% endif %}">
         {{ label }} <span class="tab-count">{{ tab_counts|get_item:slug }}</span>
       </a>
     {% endfor %}
@@ -62,20 +75,28 @@
           {% endif %}
         </div>
         <div class="qactions">
+          {% url 'admin_hub:correction-messages' row.application.pk as row_history_url %}
+          {% include "admin_hub/_correction_summary.html" with summary=row.correction_summary awaiting_parent=row.awaiting_parent history_url=row_history_url application=row.application %}
           <a class="btn btn-red" href="{% url 'admin_hub:cockpit' row.application.pk %}">Izskatīt →</a>
         </div>
       </article>
     {% empty %}
       <div class="card"><div class="card__body">
-        <p class="hint">Šajā skatā nav pieteikumu.</p>
+        {% if q %}
+          <p class="hint">Nav pieteikumu, kas atbilst meklēšanai „{{ q }}”. Notīriet meklēšanu, lai redzētu visu skatu.</p>
+        {% else %}
+          <p class="hint">Šajā skatā nav pieteikumu.</p>
+        {% endif %}
       </div></div>
     {% endfor %}
   </div>
 
+  {% include "admin_hub/_correction_dialog.html" %}
+
   {% if page_obj.paginator.num_pages > 1 %}
     <div class="pager">
       {% if page_obj.has_previous %}
-        <a href="?tab={{ tab }}&amp;page={{ page_obj.previous_page_number }}">‹</a>
+        <a href="?tab={{ tab }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">‹</a>
       {% else %}
         <span>‹</span>
       {% endif %}
@@ -83,14 +104,18 @@
         {% if page_num == page_obj.number %}
           <span class="is-active">{{ page_num }}</span>
         {% else %}
-          <a href="?tab={{ tab }}&amp;page={{ page_num }}">{{ page_num }}</a>
+          <a href="?tab={{ tab }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}&amp;page={{ page_num }}">{{ page_num }}</a>
         {% endif %}
       {% endfor %}
       {% if page_obj.has_next %}
-        <a href="?tab={{ tab }}&amp;page={{ page_obj.next_page_number }}">›</a>
+        <a href="?tab={{ tab }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">›</a>
       {% else %}
         <span>›</span>
       {% endif %}
     </div>
   {% endif %}
+{% endblock %}
+
+{% block hub_scripts %}
+  <script src="{% static 'admin_hub/correction_messages.js' %}"></script>
 {% endblock %}

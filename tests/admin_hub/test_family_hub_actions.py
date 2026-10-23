@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 
 pytestmark = pytest.mark.django_db
+
+
+def _freeze_billing_clock(monkeypatch):
+    """Pin ``localdate`` to 2026-09-01 so the fixed 2026-09 first-billing
+    month equals the cutoff-derived default (cutoff day 20)."""
+    import django.utils.timezone as timezone_module
+
+    monkeypatch.setattr(timezone_module, "localdate", lambda: date(2026, 9, 1))
 
 
 def _action_url(guardian):
@@ -314,11 +323,14 @@ def test_action_rejects_cross_family_agreement(
     assert response.status_code == 404
 
 
-def test_set_billing_setup_from_hub(staff_client, approved_application, active_plan):
+def test_set_billing_setup_from_hub(
+    staff_client, approved_application, active_plan, monkeypatch
+):
     """POSTing set_billing_setup with agreement_id, billing_plan, and
     first_billing_month persists both fields on the agreement."""
     from apps.agreements.models import Agreement
 
+    _freeze_billing_clock(monkeypatch)
     member = approved_application.approved_member
     agreement = Agreement.objects.get(member=member, is_current=True)
     # Clear any default billing plan from approval
@@ -344,12 +356,13 @@ def test_set_billing_setup_from_hub(staff_client, approved_application, active_p
 
 
 def test_mark_agreement_signed_after_set_billing_setup(
-    staff_client, approved_application, active_plan,
+    staff_client, approved_application, active_plan, monkeypatch
 ):
     """After setting billing setup through the hub, mark_agreement_signed
     succeeds and the agreement becomes signed."""
     from apps.agreements.models import Agreement
 
+    _freeze_billing_clock(monkeypatch)
     member = approved_application.approved_member
     agreement = Agreement.objects.get(member=member, is_current=True)
     agreement.billing_plan = None
