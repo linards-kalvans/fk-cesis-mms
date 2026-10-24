@@ -39,37 +39,49 @@
           {% endif %}
         </div>
         <div class="card__body">
-          <form method="post" action="{{ review_action_url }}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
+          {% if can_set_signing_path %}
+            <form method="post" action="{{ review_action_url }}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <div class="form-grid">
+                <div class="f">
+                  <label for="signing_path">Parakstīšanas veids</label>
+                  <select name="signing_path" id="signing_path">
+                    <option value="paper" {% if agreement.signing_path == "paper" %}selected{% endif %}>Ar roku, papīra dokuments</option>
+                    <option value="electronic" {% if agreement.signing_path == "electronic" %}selected{% endif %}>Elektroniski</option>
+                  </select>
+                  <span class="f-hint">Vecāka izvēle pieteikumā: {{ application.get_preferred_agreement_signing_display|default:"nav norādīta" }}</span>
+                </div>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button type="submit" name="action" value="set_signing_path" class="btn btn-secondary">Saglabāt veidu</button>
+              </div>
+            </form>
+          {% else %}
             <div class="form-grid">
               <div class="f">
-                <label for="signing_path">Parakstīšanas veids</label>
-                <select name="signing_path" id="signing_path">
-                  <option value="paper" {% if agreement.signing_path == "paper" %}selected{% endif %}>Ar roku, papīra dokuments</option>
-                  <option value="electronic" {% if agreement.signing_path == "electronic" %}selected{% endif %}>Elektroniski</option>
-                </select>
-                <span class="f-hint">Vecāka izvēle pieteikumā: {{ application.get_preferred_agreement_signing_display|default:"nav norādīta" }}</span>
+                <label>Parakstīšanas veids</label>
+                <div><strong>{{ agreement.get_signing_path_display }}</strong></div>
               </div>
             </div>
-            <div class="row" style="margin-top:14px">
-              <button type="submit" name="action" value="set_signing_path" class="btn btn-secondary">Saglabāt veidu</button>
-            </div>
-          </form>
+            <p class="hint">Līguma stāvoklis vairs neļauj mainīt parakstīšanas veidu.</p>
+          {% endif %}
         </div>
         <div class="card__foot">
           <span class="hint">Ģenerēts {{ agreement.generated_at|date:"d.m.Y H:i" }}</span>
           <span class="card__spacer"></span>
-          <form method="post" action="{{ review_action_url }}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <button type="submit" name="action" value="regenerate_agreement" class="btn btn-secondary">&#8635; Ģenerēt atkārtoti</button>
-          </form>
+          {% if can_regenerate %}
+            <form method="post" action="{{ review_action_url }}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.path }}">
+              <button type="submit" name="action" value="regenerate_agreement" class="btn btn-secondary">&#8635; Ģenerēt atkārtoti</button>
+            </form>
+          {% endif %}
           <form method="post" action="{{ review_action_url }}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.path }}">
             <button type="submit" name="action" value="mark_agreement_sent"
-                    class="btn btn-primary" {% if agreement.sent_at %}disabled{% endif %}>
+                    class="btn btn-primary" {% if not can_mark_sent %}disabled{% endif %}>
               Atzīmēt kā nosūtītu
             </button>
           </form>
@@ -238,26 +250,190 @@
         </div>
       </section>
 
-      <details class="tray">
-        <summary>&#9888; Riskantās darbības — atcelt līgumu</summary>
-        <div class="tray__body stack">
-          <div class="callout callout--warn">
-            <span class="callout__icon">&#9888;</span>
-            <span>Līguma atcelšana saglabā vēsturi, bet atsauc rēķinus ar kredītrēķinu.</span>
-          </div>
-          <form method="post" action="{{ review_action_url }}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <div class="f f--full">
-              <label for="void_reason">Iemesls</label>
-              <textarea name="void_reason" id="void_reason" rows="3"></textarea>
-            </div>
-            <div class="row" style="margin-top:12px">
-              <button type="submit" name="action" value="void_agreement" class="btn btn-danger-outline">Atcelt līgumu</button>
-            </div>
-          </form>
+      <section class="card lifecycle-actions" id="liguma-darbibas" style="margin-top:18px">
+        <div class="card__head">
+          <span class="card__step">&#9888;</span>
+          <h2 class="anton">Līguma darbības</h2>
         </div>
-      </details>
+        <div class="card__body stack">
+          <p class="hint">
+            Dokumenta anulēšana un dalības pārtraukšana ir neatkarīgas darbības.
+            Ja mērķis ir izbeigt dalību, izmantojiet “Pārtraukt dalību un
+            norēķinus”; līguma dokumenta anulēšana nav tās priekšnoteikums.
+          </p>
+
+          {% if can_void_document %}
+            <details class="tray" data-void-agreement>
+              <summary>Anulēt līguma dokumentu</summary>
+              <div class="tray__body stack">
+                <div class="callout callout--warn">
+                  <span class="callout__icon">&#9888;</span>
+                  <span>
+                    Anulēšana saglabā līguma vēsturi, pašreizējo ierakstu,
+                    DocuSeal identifikatoru un parakstīto failu. Biedra statuss
+                    un visi rēķinu un maksājumu apjomi un stāvokļi paliek
+                    nemainīgi. Vecāks saņems paziņojumu par anulēšanu.
+                    {% if agreement.state == "signed" %}
+                      <strong>Šis līgums ir parakstīts — anulēšana neizbeidz
+                      dalību un neatceļ rēķinus.</strong>
+                    {% endif %}
+                  </span>
+                </div>
+                <form method="post" action="{{ review_action_url }}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.path }}">
+                  <div class="f f--full">
+                    <label for="void_reason">Anulēšanas iemesls</label>
+                    <textarea name="void_reason" id="void_reason" rows="3" required></textarea>
+                    <span class="f-hint">Iemesls ir obligāts.</span>
+                  </div>
+                  <div class="row" style="margin-top:12px">
+                    <button type="submit" name="action" value="void_agreement" class="btn btn-danger-outline">Anulēt līguma dokumentu</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+          {% endif %}
+
+          {% if can_discontinue %}
+            <details class="tray tray--danger" data-discontinue-membership>
+              <summary>Pārtraukt dalību un norēķinus</summary>
+              <div class="tray__body stack">
+                <div class="callout callout--warn">
+                  <span class="callout__icon">&#9888;</span>
+                  <span>
+                    Dalība tiks pārtraukta ar norādīto datumu. Tiks apstrādāti
+                    tikai tie rēķini, kurus atzīmēsit zemāk. <strong>Ja
+                    neatlasīsit nevienu rēķinu, dalība tiks pārtraukta, bet
+                    neviens rēķins netiks mainīts.</strong> Automātiski netiek
+                    veidoti atmaksas vai kredītrēķini.
+                  </span>
+                </div>
+                <form method="post" action="{{ review_action_url }}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.path }}">
+                  <div class="form-grid">
+                    <div class="f">
+                      <label for="discontinue_effective_date">Spēkā stāšanās datums</label>
+                      <input type="date" name="effective_date" id="discontinue_effective_date" required>
+                    </div>
+                    <div class="f f--full">
+                      <label for="discontinue_reason">Iemesls</label>
+                      <textarea name="reason" id="discontinue_reason" rows="3" required></textarea>
+                      <span class="f-hint">Iemesls ir obligāts.</span>
+                    </div>
+                  </div>
+
+                  {% if discontinuation_invoices %}
+                    <div class="tablewrap tablewrap--lifecycle" role="region" aria-label="Dalības pārtraukšanai atlasāmo rēķinu tabula" tabindex="0" style="margin-top:14px">
+                      <table class="table lifecycle-table">
+                        <thead>
+                          <tr>
+                            <th>Atlasīt</th>
+                            <th>Rēķins</th>
+                            <th>Summa</th>
+                            <th>Termiņš</th>
+                            <th>Maksājums</th>
+                            <th>Invoice Ninja</th>
+                            <th>Atcelšana</th>
+                            <th>Ietekme</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for invoice in discontinuation_invoices %}
+                            <tr>
+                              <td>
+                                {% if invoice.selectable %}
+                                  <input type="checkbox" name="selected_invoices"
+                                         value="{{ invoice.pk }}"
+                                         aria-label="Atlasīt rēķinu #{{ invoice.sequence }}">
+                                {% else %}
+                                  <input type="checkbox" disabled
+                                         aria-label="Rēķinu #{{ invoice.sequence }} nevar atlasīt"
+                                         title="{{ invoice.selectable_reason }}">
+                                {% endif %}
+                              </td>
+                              <td>#{{ invoice.sequence }}{% if invoice.external_invoice_id %} · {{ invoice.external_invoice_id }}{% endif %}</td>
+                              <td>{{ invoice.amount }} {{ invoice.billing_record.plan.currency }}</td>
+                              <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+                              <td>{{ invoice.get_payment_status_display|default:"—" }}</td>
+                              <td>
+                                {% if invoice.external_status == "created" %}Melnraksts
+                                {% elif invoice.external_status == "sent" %}Nosūtīts
+                                {% elif invoice.external_status %}Nezināms
+                                {% else %}—{% endif %}
+                              </td>
+                              <td>
+                                {% if invoice.cancelled_at %}Atcelts{% else %}—{% endif %}
+                                {% if invoice.external_cancellation_status %} ({{ invoice.cancellation_status_label }}){% endif %}
+                              </td>
+                              <td>
+                                {{ invoice.proposed_action }}
+                                {% if not invoice.selectable %}
+                                  <span class="f-hint">{{ invoice.selectable_reason }}</span>
+                                {% endif %}
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <p class="hint" style="margin-top:10px">Šim biedram nav rēķinu, kurus varētu atlasīt.</p>
+                  {% endif %}
+
+                  <div class="row" style="margin-top:12px">
+                    <button type="submit" name="action" value="discontinue_member" class="btn btn-danger-outline">Pārtraukt dalību un norēķinus</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+          {% endif %}
+
+          {% if discontinuation_outcomes %}
+            <div data-discontinuation-outcomes>
+              <h3 class="anton" style="margin-top:6px">Rēķinu iznākums</h3>
+              <p class="hint">
+                Atlasītie rēķini pēc dalības pārtraukšanas. “Ierindots” nozīmē,
+                ka darbība vēl gaida Invoice Ninja apstrādi; “Pabeigts” nozīmē
+                pabeigtu rezultātu.
+              </p>
+              <div class="tablewrap tablewrap--lifecycle" role="region" aria-label="Atlasīto rēķinu iznākuma tabula" tabindex="0">
+                <table class="table lifecycle-table">
+                  <thead>
+                    <tr>
+                      <th>Rēķins</th>
+                      <th>Summa</th>
+                      <th>Termiņš</th>
+                      <th>Atcelts</th>
+                      <th>Darbība</th>
+                      <th>Statuss</th>
+                      <th>Rezultāts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for invoice in discontinuation_outcomes %}
+                      <tr>
+                        <td>#{{ invoice.sequence }}{% if invoice.external_invoice_id %} · {{ invoice.external_invoice_id }}{% endif %}</td>
+                        <td>{{ invoice.amount }} {{ invoice.billing_record.plan.currency }}</td>
+                        <td>{{ invoice.due_date|date:"d.m.Y" }}</td>
+                        <td>{{ invoice.cancelled_at|date:"d.m.Y H:i" }}</td>
+                        <td>{{ invoice.cancellation_action_label }}</td>
+                        <td>{{ invoice.cancellation_status_label }}</td>
+                        <td>{{ invoice.cancellation_outcome }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if not can_void_document and not can_discontinue %}
+            <p class="hint">Šim līguma stāvoklim nav pieejamu anulēšanas vai dalības pārtraukšanas darbību.</p>
+          {% endif %}
+        </div>
+      </section>
     </div>
 
     <aside class="sidecar">

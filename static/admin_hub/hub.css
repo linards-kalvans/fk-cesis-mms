@@ -1087,3 +1087,33 @@ pre.corr-msg__note {
   .corr-msg__head { flex-direction: column; }
   .corr-summary { max-width: 100%; }
 }
+
+/* lifecycle action tables + mobile clearance */
+.lifecycle-actions details.tray { min-width: 0; }
+.lifecycle-actions .tray__body { min-width: 0; }
+.lifecycle-actions .tray__body > form { min-width: 0; }
+.lifecycle-actions [data-discontinuation-outcomes] { min-width: 0; }
+.tablewrap--lifecycle {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.tablewrap--lifecycle:focus-visible {
+  outline: 3px solid var(--fk-blue);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+@media (max-width: 680px) {
+  html { scroll-padding-bottom: 220px; }
+  .hub-page--flush { padding-bottom: 220px; }
+  .lifecycle-actions details.tray summary,
+  .lifecycle-actions .tray__body .btn { scroll-margin-bottom: 220px; }
+  /* The header and the signed-document tile are the remaining min-content
+     contributors at 320 px; let them wrap instead of widening the page. */
+  .hub-header__inner { padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
+  .hub-header__right { margin-left: auto; }
+  .dltile { flex-wrap: wrap; }
+  .dropzone input[type="file"] { min-width: 0; width: 100%; max-width: 100%; }
+}

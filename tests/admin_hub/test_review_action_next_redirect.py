@@ -439,3 +439,100 @@ def test_medical_permit_upload_requires_change_permission(
     )
     assert resp.status_code == 403
     assert not MedicalPermit.objects.filter(application=submitted_application).exists()
+
+
+# ---------------------------------------------------------------------------
+# discontinue_member - every outcome honours a validated next, and every
+# no-next outcome returns to the native change view (never the changelist).
+# ---------------------------------------------------------------------------
+
+
+def test_discontinue_member_success_returns_to_a_safe_next(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        f"{_action_url(signed_active_application.pk)}?next={HUB_URL}",
+        {
+            "action": "discontinue_member",
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+
+
+def test_discontinue_member_success_without_next_lands_on_the_change_page(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        _action_url(signed_active_application.pk),
+        {
+            "action": "discontinue_member",
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == _change_url(signed_active_application.pk)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"effective_date": "", "reason": "Pārcelšanās"},
+        {"effective_date": "not-a-date", "reason": "Pārcelšanās"},
+        {
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+            "selected_invoices": ["not-an-int"],
+        },
+    ],
+)
+def test_discontinue_member_input_errors_return_to_a_safe_next(
+    staff_client, signed_active_application, payload
+):
+    data = {"action": "discontinue_member", **payload}
+    resp = staff_client.post(
+        f"{_action_url(signed_active_application.pk)}?next={HUB_URL}", data
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == HUB_URL
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"effective_date": "", "reason": "Pārcelšanās"},
+        {"effective_date": "not-a-date", "reason": "Pārcelšanās"},
+        {
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+            "selected_invoices": ["not-an-int"],
+        },
+    ],
+)
+def test_discontinue_member_input_errors_without_next_land_on_the_change_page(
+    staff_client, signed_active_application, payload
+):
+    resp = staff_client.post(
+        _action_url(signed_active_application.pk),
+        {"action": "discontinue_member", **payload},
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == _change_url(signed_active_application.pk)
+
+
+def test_discontinue_member_ignores_an_unsafe_next(
+    staff_client, signed_active_application
+):
+    resp = staff_client.post(
+        f"{_action_url(signed_active_application.pk)}?next=https://evil.example.com/",
+        {
+            "action": "discontinue_member",
+            "effective_date": "2026-09-01",
+            "reason": "Pārcelšanās",
+        },
+    )
+    assert resp.status_code == 302
+    assert resp["Location"] == _change_url(signed_active_application.pk)

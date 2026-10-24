@@ -65,6 +65,7 @@ from apps.registrations.services import (
     approve_application,
     reject_application,
     request_application_fix,
+    resolve_application_corrections,
 )
 
 
@@ -335,15 +336,43 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             message = request.POST.get("review_message", "").strip()
             try:
                 reject_application(application, request.user, message)
-            except ValueError:
-                self.message_user(
-                    request, "Noraidīšanas ziņojums ir obligāts.", level=messages.ERROR
-                )
+            except ValueError as exc:
+                raw = str(exc)
+                if raw == "can only reject submitted application":
+                    latvian = "Noraidīt var tikai iesniegtu pieteikumu."
+                elif raw == "reject message is required":
+                    latvian = "Noraidīšanas ziņojums ir obligāts."
+                else:
+                    # Unexpected state errors stay observable, not disguised.
+                    raise
+                self.message_user(request, latvian, level=messages.ERROR)
                 return self._after_review_redirect(request, object_id)
             nxt = self._validated_next(request)
             if nxt:
                 return redirect(nxt)
             return self._changelist_redirect()
+
+        elif action == "resolve_corrections":
+            try:
+                resolve_application_corrections(application, request.user)
+            except ValueError as exc:
+                raw = str(exc)
+                if raw == "cannot resolve corrections in this application state":
+                    latvian = (
+                        "Labojumus var atzīmēt kā atrisinātus tikai "
+                        "pieteikumam statusā Jālabo."
+                    )
+                elif raw == "submitted application has unresolved corrections":
+                    latvian = (
+                        "Iesniegtam pieteikumam ir neatrisināti labojumu "
+                        "pieprasījumi. Pārbaudiet pieteikuma stāvokli."
+                    )
+                else:
+                    # Unexpected state errors stay observable, not disguised.
+                    raise
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "assign_training_group":
             if application.approved_member_id is None:
@@ -566,7 +595,19 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            # get_current_agreement resolves the application's own current
+            # agreement; the explicit flag keeps a stale/forged request from
+            # acting through this endpoint even if that assumption changes.
+            if not agreement.is_current:
+                self.message_user(
+                    request,
+                    "Darbība pieejama tikai parakstītam līgumam ar aktīvu dalību.",
+                    level=messages.ERROR,
+                )
+                return self._after_review_redirect(request, object_id)
+            if not self._signed_active_agreement(request, application, agreement):
+                return self._after_review_redirect(request, object_id)
             effective_date_raw = request.POST.get("effective_date", "").strip()
             reason = request.POST.get("reason", "").strip()
             selected_invoices = request.POST.getlist("selected_invoices")
@@ -576,7 +617,7 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     "Norādiet spēkā stāšanās datumu un iemeslu.",
                     level=messages.ERROR,
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             try:
                 effective_date = datetime.date.fromisoformat(effective_date_raw)
             except ValueError:
@@ -585,29 +626,62 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     "Nederīgs spēkā stāšanās datums.",
                     level=messages.ERROR,
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
+            try:
+                selected_invoice_ids = [
+                    int(value) for value in selected_invoices if value
+                ]
+            except (TypeError, ValueError):
+                self.message_user(
+                    request, "Nederīga rēķinu atlase.", level=messages.ERROR
+                )
+                return self._after_review_redirect(request, object_id)
             try:
                 discontinue_agreement(
                     agreement,
                     request.user,
                     effective_date=effective_date,
                     reason=reason,
-                    selected_invoice_ids=[int(i) for i in selected_invoices if i],
+                    selected_invoice_ids=selected_invoice_ids,
                 )
             except PaidInvoiceSelected:
                 self.message_user(
                     request,
-                    "Atlasīts apmaksāts rēķins. Pirms turpināt, atmaksājiet to Invoice Ninja.",
+                    "Apmaksāts vai daļēji apmaksāts rēķins jāapstrādā manuāli "
+                    "Invoice Ninja.",
                     level=messages.ERROR,
                 )
-                return self._change_redirect(object_id)
+                return self._after_review_redirect(request, object_id)
             except DiscontinuationInvoiceError as exc:
-                self.message_user(request, str(exc), level=messages.ERROR)
-                return self._change_redirect(object_id)
+                raw = str(exc)
+                if raw == "one or more selected invoices are foreign to this member":
+                    latvian = (
+                        "Atlasē ir šim biedram nepiederīgi vai nezināmi rēķini."
+                    )
+                else:
+                    latvian = (
+                        "Atlasītā rēķina stāvoklis neļauj to apstrādāt. "
+                        "Pārbaudiet to Invoice Ninja."
+                    )
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
             except ValueError as exc:
-                self.message_user(request, str(exc), level=messages.ERROR)
-                return self._change_redirect(object_id)
-            return self._change_redirect(object_id)
+                raw = str(exc)
+                if raw == "one or more selected invoices are foreign to this member":
+                    latvian = (
+                        "Atlasē ir šim biedram nepiederīgi vai nezināmi rēķini."
+                    )
+                elif raw == "discontinuation requires a signed agreement":
+                    latvian = (
+                        "Darbība pieejama tikai parakstītam līgumam ar aktīvu "
+                        "dalību."
+                    )
+                else:
+                    # Unexpected state errors stay observable, not disguised.
+                    raise
+                self.message_user(request, latvian, level=messages.ERROR)
+                return self._after_review_redirect(request, object_id)
+            return self._after_review_redirect(request, object_id)
 
         elif action == "create_next_season_billing":
             if not self._signed_active_agreement(request, application, agreement):

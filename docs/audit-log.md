@@ -48,7 +48,7 @@ Common questions:
 ## Event catalog
 
 **Registration review** (staff): `application_approved`, `application_rejected`,
-`application_fix_requested`.
+`application_fix_requested`, `application_corrections_resolved`.
 **Members** (staff): `training_group_assigned`, `training_group_cleared`.
 **Documents**: `document_previewed`, `document_downloaded` (staff, with IP), `document_deleted`
 (on replace — actor is the parent; or staff admin delete).
@@ -64,6 +64,18 @@ exported rows themselves are **not** stored.
 each successful invoice send) — only state changes, staff-triggered actions, and failures are
 logged, to keep the trail signal-rich. Parent-portal browsing/reads are not audited.
 
+### Manual correction resolution
+
+`application_corrections_resolved` records a real staff transition from `fix_requested` to `submitted`, including a pretracking application with zero correspondence rows. The row-locked service resolves all unresolved attempts and schedules one fail-safe audit call after commit. A submitted/no-unresolved replay performs no update or second audit; inconsistent submitted/unresolved history is rejected. Audit failure still follows the existing fail-safe policy, so audit delivery is not guaranteed.
+
+The event uses structural `target_type="registrationapplication"` and application ID with the fixed generic label `Registration application correction resolution`, not the application's PII-bearing string representation. Metadata contains exactly `from_status`, `to_status`, `resolved_count` and `source` (`staff_manual`). It contains no subject, body, review note, name, contact or provider data. The staff actor remains identifying audit data under normal retention; this service call does not pass a request for IP/user-agent capture.
+
+Correction correspondence is separate from the audit trail. Its `actor` requested the correction; nullable `resolved_by` identifies the staff resolver, and `resolution_source` distinguishes `staff_manual` from `parent_resubmission`. Parent resubmission has no resolving staff FK and does not emit this new staff-resolution event. Deleting the resolving user sets the FK to null but retains manual source/time. Send-time snapshots/outcomes are not rewritten by either resolver; backend acceptance still does not mean delivery. Correspondence follows application CASCADE deletion, not audit pruning.
+
+Apply `registrations/0014_applicationcorrectionmessage_resolution.py` and choices-only `core/0013_alter_auditevent_action.py` before new readers/writers. The selective backfill labels only previously resolved rows as parent resubmission, leaves unresolved source blank and all historical resolving users null. It does not infer missing sends.
+
+The independent Hub rejection, document-void and membership-discontinuation forms retain existing audit/email behavior. In particular, the pre-existing `member_discontinued` audit includes reason text; the new event's strictly structural metadata guarantee does not retroactively redact that event. A queued invoice archive/cancel is not proof of remote completion; consult persisted cancellation outcomes.
+
 ## What's stored (and what isn't)
 
 Stored: actor (+ a label snapshot that survives the user being deleted), action, a denormalized
@@ -71,8 +83,10 @@ target snapshot (survives the target being deleted), small redacted metadata, IP
 browser actions, and the timestamp.
 
 **Never stored** in an audit row: Latvian personal ID codes, document file contents, email message
-bodies, OTP codes, magic-link tokens, or API keys. Metadata holds only statuses, error codes,
-document kinds, group names, and database IDs. `actor_label` and `ip_address` do hold identifying
+bodies, OTP codes, magic-link tokens, or API keys. Structural events use statuses, error codes,
+document kinds, group names, and database IDs; the existing discontinuation event also stores
+the staff-supplied reason, so operators must not place sensitive identity/contact data in it.
+`actor_label` and `ip_address` do hold identifying
 data by design (that is the point of an audit trail) and are bounded by the retention window.
 
 ## Retention

@@ -8,6 +8,7 @@ from html.parser import HTMLParser
 import pytest
 from django.urls import reverse
 
+from apps.registrations.models import RegistrationApplication
 from tests.admin_hub.viewer_markup import (
     attr_value,
     has_attribute,
@@ -73,6 +74,79 @@ def test_approve_button_is_never_gated_on_the_checklist(
     button_html = match.group(0)
     assert "disabled" not in button_html
     assert "is-disabled" not in button_html
+
+
+def test_fix_requested_cockpit_offers_correction_resolution_disclosure(
+    client, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    admin = User.objects.create_superuser(
+        username="cockpit-admin", email="cockpit-admin@example.com", password="pw"
+    )
+    submitted_application.status = RegistrationApplication.Status.FIX_REQUESTED
+    submitted_application.review_message = "Labojiet adresi."
+    submitted_application.save(update_fields=["status", "review_message"])
+    client.force_login(admin)
+
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    assert "data-resolve-corrections" in body
+    assert "Atzīmēt labojumus kā atrisinātus" in body
+    assert 'value="resolve_corrections"' in body
+    assert reverse(
+        "admin:registrations_registrationapplication_review-action",
+        args=[submitted_application.pk],
+    ) in body
+    assert (
+        f'name="next" value="/hub/pieteikumi/{submitted_application.pk}/"'
+        in body
+    )
+    assert "csrfmiddlewaretoken" in body
+    assert "Jāizskata" in body
+    assert "nav" in body and "apstiprinājums" in body
+
+
+def test_cockpit_hides_correction_resolution_outside_fix_requested(
+    client, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    admin = User.objects.create_superuser(
+        username="cockpit-admin-2",
+        email="cockpit-admin-2@example.com",
+        password="pw",
+    )
+    client.force_login(admin)
+
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    assert "data-resolve-corrections" not in body
+    assert 'value="resolve_corrections"' not in body
+
+
+def test_cockpit_hides_correction_resolution_without_change_permission(
+    client, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    user = User.objects.create_user(
+        username="cockpit-viewer", password="x", is_staff=True
+    )
+    submitted_application.status = RegistrationApplication.Status.FIX_REQUESTED
+    submitted_application.save(update_fields=["status"])
+    client.force_login(user)
+
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    assert "data-resolve-corrections" not in body
+    assert 'value="resolve_corrections"' not in body
 
 
 def test_cockpit_posts_approval_to_the_existing_admin_endpoint(
@@ -1008,3 +1082,75 @@ def test_unauthorized_staff_sees_permit_status_but_no_file_controls(
         "Portrets",
     ]
     assert "data-medical-permit-form" not in body
+
+
+# ---------------------------------------------------------------------------
+# Unit 3 Task 5: visible, deliberate rejection
+# ---------------------------------------------------------------------------
+
+
+def _detail_block(body: str, marker: str) -> str:
+    start = body.index(marker)
+    end = body.index("</details>", start)
+    return body[start:end]
+
+
+def test_cockpit_offers_a_separate_visible_reject_disclosure(
+    client, acting_reviewer, submitted_application
+):
+    """Rejection is a distinct review action, not a second button sharing the
+    request-fix note field. The disclosure only reveals; the confirm button is
+    the actual POST and the reason is required."""
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    reject_block = _detail_block(body, "data-reject-application")
+    fix_block = _detail_block(body, "data-request-fix")
+
+    assert "<summary>Noraidīt</summary>" in reject_block
+    assert "Pieteikums tiks noraidīts" in reject_block
+    assert 'name="review_message"' in reject_block
+    assert 'id="reject_reason"' in reject_block
+    assert "required" in reject_block
+    assert 'value="reject"' in reject_block
+    assert 'value="request_fix"' not in reject_block
+    assert "onclick" not in reject_block
+
+    assert 'id="fix_review_message"' in fix_block
+    assert 'value="request_fix"' in fix_block
+    assert 'value="reject"' not in fix_block
+    assert "onclick" not in fix_block
+
+    assert (
+        f'name="next" value="/hub/pieteikumi/{submitted_application.pk}/"'
+        in reject_block
+    )
+
+
+def test_cockpit_hides_reject_outside_the_submitted_state(
+    client, acting_reviewer, approved_application
+):
+    client.force_login(acting_reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[approved_application.pk])
+    ).content.decode()
+
+    assert "data-reject-application" not in body
+    assert 'value="reject"' not in body
+
+
+def test_cockpit_hides_reject_without_change_permission(
+    client, reviewer, submitted_application
+):
+    """A staff-only account may view the cockpit, but the admin endpoint
+    refuses every writer it drives, so no reject affordance is offered."""
+    client.force_login(reviewer)
+    body = client.get(
+        reverse("admin_hub:cockpit", args=[submitted_application.pk])
+    ).content.decode()
+
+    assert "data-reject-application" not in body
+    assert 'value="reject"' not in body
+    assert "data-request-fix" not in body

@@ -1,17 +1,19 @@
 """Agreement history for the agreement page's "Vēsture" sidecar.
 
-The agreement page's actions (mark sent, set signing path, regenerate, void,
-mark signed) never write an ``AgreementLifecycleEvent`` row — that model is
-only populated by ``record_minor_amendment``, ``start_material_amendment``
-and ``discontinue_agreement`` (none of which this page drives). Deriving the
-timeline from real ``AgreementLifecycleEvent`` rows alone would therefore
-read "Nav notikumu" through the entire generate -> send -> sign flow.
+The agreement page's document actions (mark sent, set signing path, regenerate,
+void, mark signed) do not all write an ``AgreementLifecycleEvent`` row: that
+model is populated by ``record_minor_amendment``, ``start_material_amendment``
+and ``discontinue_agreement``. Document void persists its own ``voided_at`` and
+``void_reason`` fields instead, and discontinuation — which the Hub's lifecycle
+panel does drive through the existing admin writer — records a lifecycle event.
+Deriving the timeline from real ``AgreementLifecycleEvent`` rows alone would
+therefore miss the generate -> send -> sign -> void flow.
 
-``build_agreement_timeline`` instead derives most of its entries from the
-agreement's own lifecycle timestamps, which *are* persisted and already
-displayed in this page's "Līguma dati" sidecar, and merges in any
-``AgreementLifecycleEvent`` rows on top. It invents nothing: a null
-timestamp yields no entry, never a synthesised date.
+``build_agreement_timeline`` derives most of its entries from the agreement's
+own lifecycle timestamps, which *are* persisted and already displayed in this
+page's "Līguma dati" sidecar, and merges in any ``AgreementLifecycleEvent``
+rows on top. It invents nothing: a null timestamp yields no entry, never a
+synthesised date.
 """
 
 from __future__ import annotations

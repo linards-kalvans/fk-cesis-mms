@@ -48,6 +48,33 @@
       </div>
       <div class="card__body">
         {% include "admin_hub/_correction_summary.html" with summary=correction_summary awaiting_parent=awaiting_parent history_url=correction_history_url application=application %}
+        {% if can_resolve_corrections %}
+          {% comment %} Closing corrections is a staff action, not a parent
+             response and not approval. It posts to the registered admin
+             endpoint so it inherits the admin change permission and CSRF
+             protection; the Hub stays a presentation layer. {% endcomment %}
+          <details class="tray" data-resolve-corrections style="margin-top:14px">
+            <summary>Atzīmēt labojumus kā atrisinātus</summary>
+            <div class="tray__body">
+              <p class="hint" style="margin-bottom:12px">
+                Šī darbība aizvērs <strong>visus neizskatītos</strong> labojumu
+                pieprasījumus, tostarp neizdevušos vai nepabeigtos sūtījumus.
+                Pieteikums atgriezīsies statusā <strong>Jāizskata</strong>.
+                Vecākam netiks nosūtīts e-pasts, un tas <strong>nav</strong>
+                pieteikuma apstiprinājums.
+              </p>
+              <form method="post"
+                    action="{% url 'admin:registrations_registrationapplication_review-action' application.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="action" value="resolve_corrections"
+                        class="btn btn-secondary">
+                  Apstiprināt: atzīmēt labojumus kā atrisinātus
+                </button>
+              </form>
+            </div>
+          </details>
+        {% endif %}
       </div>
     </section>
     {% comment %} Medical permit. The status and validity date come from the
@@ -247,24 +274,59 @@
         </form>
       </div>
 
-      <details class="tray" id="riskantas-darbibas" style="margin-top:14px">
-        <summary>&#9888; Riskantās darbības — labojuma pieprasījums, noraidīšana</summary>
-        <div class="tray__body">
-          <form method="post"
-                action="{% url 'admin:registrations_registrationapplication_review-action' application.pk %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <div class="f f--full">
-              <label for="review_message">Ziņojums vecākam</label>
-              <textarea name="review_message" id="review_message" rows="3"></textarea>
+      <div class="review-actions" id="pieteikuma-darbibas" style="margin-top:14px">
+        {% if can_request_fix %}
+          <details class="tray" data-request-fix>
+            <summary>Pieprasīt labojumu</summary>
+            <div class="tray__body">
+              <p class="hint" style="margin-bottom:10px">
+                Pieteikums atgriezīsies pie vecāka statusā
+                <strong>Jālabo</strong>, un vecāks saņems e-pastu ar norādīto
+                ziņojumu.
+              </p>
+              <form method="post"
+                    action="{% url 'admin:registrations_registrationapplication_review-action' application.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="f f--full">
+                  <label for="fix_review_message">Ziņojums vecākam</label>
+                  <textarea name="review_message" id="fix_review_message" rows="3" required></textarea>
+                </div>
+                <div class="row" style="margin-top:12px">
+                  <button type="submit" name="action" value="request_fix" class="btn btn-secondary">Pieprasīt labojumu</button>
+                </div>
+              </form>
             </div>
-            <div class="row" style="margin-top:12px">
-              <button type="submit" name="action" value="request_fix" class="btn btn-secondary">Pieprasīt labojumu</button>
-              <button type="submit" name="action" value="reject" class="btn btn-danger-outline">Noraidīt pieteikumu</button>
+          </details>
+        {% endif %}
+        {% if can_reject %}
+          <details class="tray tray--danger" data-reject-application>
+            <summary>Noraidīt</summary>
+            <div class="tray__body">
+              <div class="callout callout--warn" style="margin-bottom:12px">
+                <span class="callout__icon">&#9888;</span>
+                <span>
+                  Pieteikums tiks noraidīts. Vecāks saņems e-pastu ar norādīto
+                  iemeslu, un pieteikumu vairs nevarēs atgriezt labošanai.
+                </span>
+              </div>
+              <form method="post"
+                    action="{% url 'admin:registrations_registrationapplication_review-action' application.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="f f--full">
+                  <label for="reject_reason">Noraidīšanas iemesls</label>
+                  <textarea name="review_message" id="reject_reason" rows="3" required></textarea>
+                  <span class="f-hint">Iemesls ir obligāts un tiks nosūtīts vecākam.</span>
+                </div>
+                <div class="row" style="margin-top:12px">
+                  <button type="submit" name="action" value="reject" class="btn btn-danger-outline">Noraidīt pieteikumu</button>
+                </div>
+              </form>
             </div>
-          </form>
-        </div>
-      </details>
+          </details>
+        {% endif %}
+      </div>
     </section>
     </div>
   </div>
@@ -286,7 +348,12 @@
          approval redirect target, so no continuation CTA belongs here — the
          step rail links forward instead. {% endcomment %}
       {% if can_approve %}
-        <a class="btn btn-secondary" href="#riskantas-darbibas">Pieprasīt labojumu / noraidīt</a>
+        {% if can_request_fix %}
+          <a class="btn btn-secondary" href="#pieteikuma-darbibas">Pieprasīt labojumu</a>
+        {% endif %}
+        {% if can_reject %}
+          <a class="btn btn-danger-outline" href="#pieteikuma-darbibas">Noraidīt</a>
+        {% endif %}
         {% comment %} Submits the step-2 form above via its id, so the training-group
            select stays in its card while the action stays on screen. The
            checklist never gates this - see the card copy. {% endcomment %}

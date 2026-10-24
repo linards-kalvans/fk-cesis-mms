@@ -31,6 +31,8 @@ def _message(
     created_at=None,
     sent_at=None,
     resolved_at=None,
+    resolution_source="",
+    resolved_by=None,
     actor=None,
 ):
     row = ApplicationCorrectionMessage.objects.create(
@@ -42,6 +44,8 @@ def _message(
         review_message=review_message,
         sent_at=sent_at,
         resolved_at=resolved_at,
+        resolution_source=resolution_source,
+        resolved_by=resolved_by,
     )
     if created_at is not None:
         ApplicationCorrectionMessage.objects.filter(pk=row.pk).update(
@@ -278,6 +282,123 @@ def test_history_marks_resolved_and_unresolved_rows(
 
     assert resolved_at.strftime("%d.%m.%Y") in body
     assert "Nav atrisināta" in body
+
+
+def test_history_shows_manual_resolution_source_and_resolver(
+    client, reviewer, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    resolver = User.objects.create_user(
+        username="resolver",
+        first_name="Anna",
+        last_name="Bērziņa",
+        password="x",
+    )
+    resolved_at = timezone.now()
+    _message(
+        submitted_application,
+        subject="Manuāli atrisinātā ziņa",
+        actor=reviewer,
+        resolved_at=resolved_at,
+        resolution_source=ApplicationCorrectionMessage.ResolutionSource.STAFF_MANUAL,
+        resolved_by=resolver,
+    )
+
+    _, body = _history_body(client, reviewer, submitted_application)
+
+    assert "Darbinieks atzīmēja manuāli" in body
+    assert "Anna Bērziņa" in body
+    assert resolved_at.strftime("%d.%m.%Y") in body
+    # Sending actor and resolving staff are distinct labels.
+    assert "Pieprasīja" in body
+    assert "Vecāks iesniedza no jauna" not in body
+
+
+def test_history_labels_parent_resubmission_without_a_staff_resolver(
+    client, reviewer, submitted_application
+):
+    _message(
+        submitted_application,
+        subject="Vecāka atbilde",
+        actor=reviewer,
+        resolved_at=timezone.now(),
+        resolution_source=(
+            ApplicationCorrectionMessage.ResolutionSource.PARENT_RESUBMISSION
+        ),
+    )
+
+    _, body = _history_body(client, reviewer, submitted_application)
+
+    assert "Vecāks iesniedza no jauna" in body
+    assert "Vecāks (pieteikuma iesniegšana)" in body
+    assert "Darbinieks atzīmēja manuāli" not in body
+    assert "Darbinieks vairs nav pieejams" not in body
+
+
+def test_history_deleted_resolver_keeps_manual_source_and_placeholder(
+    client, reviewer, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    resolver = User.objects.create_user(
+        username="deleted-resolver", password="x"
+    )
+    resolved_at = timezone.now()
+    row = _message(
+        submitted_application,
+        subject="Dzēsta darbinieka ziņa",
+        resolved_at=resolved_at,
+        resolution_source=ApplicationCorrectionMessage.ResolutionSource.STAFF_MANUAL,
+        resolved_by=resolver,
+    )
+    resolver.delete()
+
+    _, body = _history_body(client, reviewer, submitted_application)
+
+    row.refresh_from_db()
+    assert row.resolved_by_id is None
+    assert row.resolution_source == "staff_manual"
+    assert row.resolved_at == resolved_at
+    assert "Darbinieks atzīmēja manuāli" in body
+    assert "Darbinieks vairs nav pieejams" in body
+    assert "Vecāks iesniedza no jauna" not in body
+
+
+def test_history_escapes_resolving_staff_name(
+    client, reviewer, submitted_application
+):
+    from django.contrib.auth.models import User
+
+    resolver = User.objects.create_user(
+        username="escape-resolver",
+        first_name="<script>alert(1)</script>",
+        last_name="Bērziņš",
+        password="x",
+    )
+    _message(
+        submitted_application,
+        resolved_at=timezone.now(),
+        resolution_source=ApplicationCorrectionMessage.ResolutionSource.STAFF_MANUAL,
+        resolved_by=resolver,
+    )
+
+    _, body = _history_body(client, reviewer, submitted_application)
+
+    assert "<script>alert(1)</script>" not in body
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in body
+
+
+def test_history_query_joins_both_actors(submitted_application):
+    from apps.admin_hub.correction_messages import correction_history_page
+
+    _message(submitted_application)
+
+    page_obj, _ = correction_history_page(submitted_application, 1)
+    select_related = page_obj.object_list.query.select_related
+
+    assert "actor" in select_related
+    assert "resolved_by" in select_related
 
 
 def _summary(application):
