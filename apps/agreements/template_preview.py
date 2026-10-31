@@ -28,6 +28,7 @@ def _cache() -> FileBasedCache:
 def _key() -> str:
     identity = "|".join(str(getattr(settings, name, "")) for name in (
         "AGREEMENT_PROVIDER_MODE", "DOCUSEAL_API_URL", "DOCUSEAL_TEMPLATE_ID",
+        "DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS",
     ))
     return hashlib.sha256(identity.encode()).hexdigest()
 

@@ -154,6 +154,93 @@ def docuseal_config(settings):
     settings.DOCUSEAL_API_URL = "https://docuseal.example/api"
     settings.DOCUSEAL_API_KEY = "test-key"
     settings.DOCUSEAL_TEMPLATE_ID = "42"
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = []
+
+
+@pytest.mark.parametrize("origin", ["https://agreements.mplytics.eu", "https://agreements.mplytics.eu:443/"])
+def test_internal_api_can_download_explicit_public_origin(docuseal_config, settings, origin):
+    from apps.integrations import docuseal
+
+    settings.DOCUSEAL_API_URL = "http://docuseal:3000/api"
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = [origin]
+    metadata = Mock()
+    metadata.json.return_value = {"documents": [{"url": "https://agreements.mplytics.eu/file/sample.pdf"}]}
+    blob = MagicMock(status_code=200)
+    blob.__enter__.return_value = blob
+    payload = pdf_bytes()
+    blob.iter_content.return_value = [payload]
+    with patch("apps.integrations.docuseal._request", return_value=metadata) as api, patch("requests.get", return_value=blob) as download:
+        assert docuseal.fetch_template_documents() == [payload]
+    api.assert_called_once_with("GET", "http://docuseal:3000/api/templates/42", "test-key", allow_redirects=False)
+    assert download.call_args.args == ("https://agreements.mplytics.eu/file/sample.pdf",)
+    assert download.call_args.kwargs["allow_redirects"] is False
+    assert "headers" not in download.call_args.kwargs
+
+
+@pytest.mark.parametrize("url", [
+    "http://agreements.mplytics.eu/file/sample.pdf",
+    "https://agreements.mplytics.eu:444/file/sample.pdf",
+    "https://agreements.mplytics.eu:0/file/sample.pdf",
+    "https://agreements.mplytics.eu.evil.example/file/sample.pdf",
+    "https://evil.agreements.mplytics.eu/file/sample.pdf",
+    "https://user:pass@agreements.mplytics.eu/file/sample.pdf",
+    "https://agreements.mplytics.eu@evil.example/file/sample.pdf",
+    "//agreements.mplytics.eu/file/sample.pdf",
+])
+def test_extra_origin_is_exact_not_a_wildcard(docuseal_config, settings, url):
+    from apps.integrations import docuseal
+    from apps.integrations.agreement_platform import AgreementPlatformConfigError
+
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = ["https://agreements.mplytics.eu"]
+    response = Mock()
+    response.json.return_value = {"documents": [{"url": url}]}
+    with patch("apps.integrations.docuseal._request", return_value=response), patch("requests.get") as download:
+        with pytest.raises(AgreementPlatformConfigError):
+            docuseal.fetch_template_documents()
+    download.assert_not_called()
+
+
+@pytest.mark.parametrize("origin", ["*", "https://*.mplytics.eu", "https://agreements.mplytics.eu/path", "https://agreements.mplytics.eu?q=1", "https://agreements.mplytics.eu#fragment", "https://user@agreements.mplytics.eu"])
+def test_invalid_configured_origins_fail_closed(docuseal_config, settings, origin):
+    from apps.integrations import docuseal
+    from apps.integrations.agreement_platform import AgreementPlatformConfigError
+
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = [origin]
+    response = Mock()
+    response.json.return_value = {"documents": [{"url": "https://docuseal.example/sample.pdf"}]}
+    with patch("apps.integrations.docuseal._request", return_value=response), patch("requests.get") as download:
+        with pytest.raises(AgreementPlatformConfigError):
+            docuseal.fetch_template_documents()
+    download.assert_not_called()
+
+
+def test_trust_configuration_change_invalidates_failed_preview(preview_cache, settings):
+    with patch("apps.integrations.agreement_platform.fetch_template_documents", side_effect=RuntimeError()):
+        preview_cache.refresh_template_preview()
+    assert preview_cache.preview_failed()
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = ["https://agreements.mplytics.eu"]
+    assert not preview_cache.preview_failed()
+
+
+@pytest.mark.django_db
+def test_split_origin_template_renders_through_parent_endpoints(docuseal_config, settings, preview_cache, verified_client):
+    settings.AGREEMENT_PROVIDER_MODE = "docuseal"
+    settings.DOCUSEAL_API_URL = "http://docuseal:3000/api"
+    settings.DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = ["https://agreements.mplytics.eu"]
+    metadata = Mock()
+    metadata.json.return_value = {"documents": [{"url": "https://agreements.mplytics.eu/file/sample.pdf"}]}
+    blob = MagicMock(status_code=200)
+    blob.__enter__.return_value = blob
+    blob.iter_content.return_value = [pdf_bytes()]
+    with patch("apps.integrations.docuseal._request", return_value=metadata), patch("requests.get", return_value=blob):
+        preview_cache.refresh_template_preview()
+    manifest = verified_client.get(reverse("registrations:agreement-template-preview"))
+    assert manifest.status_code == 200
+    assert len(manifest.json()["pages"]) == 2
+    for url in manifest.json()["pages"]:
+        image = verified_client.get(url)
+        assert image.status_code == 200
+        assert image.content.startswith(b"\x89PNG")
 
 
 def test_fetches_blank_template_documents_without_post_or_key_on_blob(docuseal_config):
