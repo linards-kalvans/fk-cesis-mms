@@ -41,8 +41,10 @@ Do **not** use archived implementation plans for current planning unless user ex
 - Grouped form sections: guardian, child/player, documents
 - `RegistrationApplication` workflow with `draft`, `submitted`, `fix_requested`, `approved`, `rejected`
 - `fix_requested` save preserves status
+- **Registration agreement preview (2026-10-31):** implemented in the editable **Piekrišana** step, above signing/payment preferences. Blank configured DocuSeal template rendered to private cached PNG pages by a background worker; active verified-parent access, navigation/enlarged dialog, no PDF/download/print/signing controls, no submission creation. Full local gate **2897 passed / 2 existing PostgreSQL-only skips**, ruff/mypy/migration/JS syntax checks clean; isolated desktop/mobile Chrome interactions checked. Live DocuSeal and deployed worker/private-volume acceptance pending. See `docs/registration-agreement-preview.md` for cache, limits, operations, and the browser-save limitation.
 
 ### Documents and OCR
+- **Registration agreement preview acceptance (2026-10-31):** user accepted the local LAN instance and authorized commit/push to `dev`; deployed worker/private-volume validation remains pending. Details: `docs/registration-agreement-preview.md`.
 - `Document` model exists
 - private storage root `PRIVATE_DOCUMENTS_ROOT` / `private-uploads/` exists
 - admin-only protected preview/download endpoints exist

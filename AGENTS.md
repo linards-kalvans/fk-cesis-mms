@@ -47,6 +47,8 @@ Target Django monolith with domain apps:
 - Current acceptance testing runs on LAN URL `http://192.168.3.245:8000`.
 
 ### P1 delivered registration workflow UX
+- **Registration preview acceptance:** user accepted the local LAN instance on 2026-10-31 and authorized commit/push to `dev`; this is not deployed-environment sign-off. See `docs/registration-agreement-preview.md`.
+- **Registration agreement preview (2026-10-31):** editable **Piekrišana** embeds the blank configured DocuSeal template above signing/payment preferences, with raster-page navigation and an enlarged dialog. `apps/agreements/template_preview.py` fetches/renders in qcluster and caches PNG pages for one hour under the shared private root; `apps/registrations/preview_views.py` exposes active verified-parent-only manifest/images, never source PDFs or signing sessions. PyMuPDF dependency; no migrations. No download/print UI (not DRM). Full local gate: **2897 passed / 2 existing PostgreSQL-only skips**, ruff/mypy/migration/JS syntax clean; isolated Chrome desktop/mobile interactions checked. Live provider/deployment acceptance pending. Operator details: `docs/registration-agreement-preview.md`.
 - `/register/` is guardian email entry for one-time code verification.
 - `/register/verify/` completes verified parent access before continuation.
 - `/portal/` acts as chooser/dashboard for verified guardians.

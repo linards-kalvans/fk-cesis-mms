@@ -99,6 +99,24 @@ def _stub_stream(external_id: str) -> DocumentStream:
     )
 
 
+def fetch_template_documents() -> list[bytes]:
+    """Return blank template PDFs, without creating agreements/submissions."""
+    mode = getattr(settings, "AGREEMENT_PROVIDER_MODE", "stub")
+    if mode == "stub":
+        import pymupdf
+
+        with pymupdf.open() as document:
+            page = document.new_page()
+            page.insert_text((72, 90), "FK Cesis - agreement template (STUB)", fontsize=16)
+            page.insert_text((72, 130), "Preview only. Not a signing document.")
+            return [document.tobytes()]
+    if mode == "docuseal":
+        from apps.integrations import docuseal
+
+        return docuseal.fetch_template_documents()
+    raise AgreementPlatformConfigError("unknown agreement provider mode")
+
+
 def _mode() -> str:
     return getattr(settings, "AGREEMENT_PROVIDER_MODE", "stub")
 

@@ -4,7 +4,7 @@
 
 {% block page_title %}Jauna reģistrācija — FK Cēsis MMS{% endblock %}
 
-{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script><script src="{% static 'js/address_autocomplete.js' %}"></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'js/wizard.js' %}"></script><script src="{% static 'js/address_autocomplete.js' %}"></script><script src="{% static 'js/agreement_preview.js' %}" defer></script>{% endblock %}
 
 {% block page_content %}
 
@@ -61,6 +61,9 @@
         </div>
       </div>
       <div class="fk-section-body">
+        {% if section_name == "agreement" %}
+          {% include "parent_ui/includes/agreement_preview.html" %}
+        {% endif %}
         {% if section_name == "documents" %}
         <p class="fk-section-note" style="margin-bottom:18px;">Augšupielādējiet personas apliecinošo dokumentu foto. Dati tiks izmantoti priekšaizpildei nākamajā solī.</p>
         {% endif %}
