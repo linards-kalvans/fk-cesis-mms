@@ -3,10 +3,13 @@
 from django.urls import path
 
 from apps.registrations import views
+from apps.registrations import preview_views
 
 app_name = "registrations"
 
 urlpatterns = [
+    path("register/agreement-preview/", preview_views.agreement_template_preview, name="agreement-template-preview"),
+    path("register/agreement-preview/<slug:version>/<int:page>/", preview_views.agreement_template_page, name="agreement-template-page"),
     path("applications/new/", views.new_application, name="new-application"),
     path("register/", views.start_registration, name="start-registration"),
     # Canonical application workspace

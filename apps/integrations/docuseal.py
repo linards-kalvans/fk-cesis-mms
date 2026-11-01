@@ -11,6 +11,7 @@ import hmac
 import logging
 import time
 from typing import Iterator
+from urllib.parse import urlsplit
 
 import requests
 from django.conf import settings
@@ -200,6 +201,65 @@ def list_submission_documents(external_id: str) -> list[DocumentResult]:
             )
         )
     return results
+
+
+def _template_document_origin(url: str) -> tuple[str, str, int]:
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in {"http", "https"} or not parsed.hostname
+        or parsed.username is not None or parsed.password is not None
+        or "*" in parsed.netloc
+    ):
+        raise AgreementPlatformConfigError("invalid template document origin")
+    port = parsed.port
+    return parsed.scheme, parsed.hostname, port if port is not None else (443 if parsed.scheme == "https" else 80)
+
+
+def fetch_template_documents() -> list[bytes]:
+    """Read the blank template only; never create a submission or send email.
+
+    Trust the API origin plus explicitly configured template blob origins.
+    Fetch without the API key and without redirects to avoid credential leaks
+    and arbitrary outbound requests. Bound the combined download to 20 MiB.
+    """
+    api_url, api_key, template_id = _require_config()
+    response = _request(
+        "GET", f"{api_url}/templates/{template_id}", api_key, allow_redirects=False
+    )
+    try:
+        payload = response.json()
+        documents = payload.get("documents") if isinstance(payload, dict) else None
+        if not isinstance(documents, list) or not 1 <= len(documents) <= 20:
+            raise AgreementPlatformConfigError("invalid template documents")
+        allowed_origins = {_template_document_origin(api_url)}
+        for origin in getattr(settings, "DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS", []):
+            parsed = urlsplit(origin)
+            if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+                raise AgreementPlatformConfigError("template allowlist requires origins, not URLs")
+            allowed_origins.add(_template_document_origin(origin))
+        results = []
+        total = 0
+        for document in documents:
+            url = document.get("url") if isinstance(document, dict) else None
+            if not isinstance(url, str):
+                raise AgreementPlatformConfigError("missing template document URL")
+            if _template_document_origin(url) not in allowed_origins:
+                raise AgreementPlatformConfigError("untrusted template document URL")
+            with requests.get(url, timeout=_TIMEOUT, stream=True, allow_redirects=False) as blob:
+                if blob.status_code != 200:
+                    raise AgreementPlatformTransientError("template download unavailable")
+                chunks = []
+                for chunk in blob.iter_content(chunk_size=64 * 1024):
+                    total += len(chunk)
+                    if total > 20 * 1024 * 1024:
+                        raise AgreementPlatformConfigError("template documents exceed size limit")
+                    chunks.append(chunk)
+                results.append(b"".join(chunks))
+        return results
+    except (ValueError, AttributeError) as exc:
+        raise AgreementPlatformConfigError("invalid template response") from exc
+    except requests.RequestException as exc:
+        raise AgreementPlatformTransientError("template download unavailable") from exc
 
 
 def stream_submission_document(external_id: str) -> DocumentStream:

@@ -196,6 +196,11 @@ AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
 DOCUSEAL_API_URL = os.environ.get("DOCUSEAL_API_URL", "")
 DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")
 DOCUSEAL_TEMPLATE_ID = os.environ.get("DOCUSEAL_TEMPLATE_ID", "")
+DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 DOCUSEAL_WEBHOOK_SECRET = os.environ.get("DOCUSEAL_WEBHOOK_SECRET", "")
 # Agreement numbers sent to DocuSeal: {PREFIX}-{YEAR}-{SEQUENCE:03d}
 AGREEMENT_NUMBER_PREFIX = os.environ.get("AGREEMENT_NUMBER_PREFIX") or "FKC"

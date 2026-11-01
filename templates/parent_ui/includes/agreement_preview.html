@@ -1,0 +1,30 @@
+<section class="fk-agreement-preview" data-agreement-preview
+         data-preview-url="{% url 'registrations:agreement-template-preview' %}"
+         data-preview-loading="Līguma priekšskatījums tiek sagatavots…"
+         data-preview-error="Līguma priekšskatījums pašlaik nav pieejams. Lūdzu, mēģiniet vēlāk."
+         data-preview-page-label="Lapa">
+  <div class="fk-agreement-preview__header">
+    <strong>Līguma paraugs</strong>
+    <button type="button" class="fk-button fk-button--secondary fk-button--small" data-preview-expand disabled>Palielināt</button>
+  </div>
+  <div data-preview-home>
+    <div data-preview-content>
+      <p class="fk-agreement-preview__status" data-preview-status role="status">Līguma priekšskatījums tiek sagatavots…</p>
+      <div class="fk-agreement-preview__paper" data-preview-paper hidden>
+        <img data-preview-image alt="Līguma paraugs" draggable="false">
+      </div>
+      <div class="fk-agreement-preview__navigation" data-preview-navigation hidden>
+        <button type="button" class="fk-button fk-button--secondary fk-button--small" data-preview-prev aria-label="Iepriekšējā lapa">←</button>
+        <span data-preview-page role="status"></span>
+        <button type="button" class="fk-button fk-button--secondary fk-button--small" data-preview-next aria-label="Nākamā lapa">→</button>
+      </div>
+      <button type="button" class="fk-button fk-button--secondary fk-button--small" data-preview-retry hidden>Mēģināt vēlreiz</button>
+    </div>
+  </div>
+  <p class="fk-agreement-preview__note"><strong>Priekšskatījums, nevis parakstāms līgums.</strong><br>Līgumu parakstīšanai saņemsiet pēc pieteikuma apstiprināšanas.</p>
+  <noscript><p>Priekšskatījumam nepieciešams iespējot JavaScript. Pieteikumu var iesniegt arī bez priekšskatījuma.</p></noscript>
+  <dialog class="fk-agreement-preview__dialog" data-preview-dialog aria-label="Līguma paraugs — palielināts priekšskatījums">
+    <button type="button" class="fk-button fk-button--secondary fk-button--small" data-preview-close>Aizvērt</button>
+    <div data-preview-expanded></div>
+  </dialog>
+</section>
