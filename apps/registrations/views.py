@@ -1,9 +1,12 @@
 """Views for parent registration workflow."""
 
+from smtplib import SMTPException
 from typing import cast
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.core.validators import validate_email
 from django.db.models import Q
 from django.http import (
     Http404,
@@ -251,6 +254,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
 
     editable = application.is_editable_by(account)
     guardian_profile_locked = editable and application.guardian_profile_populated
+    response_status = 200
 
     if request.method == "POST":
         if not editable:
@@ -293,14 +297,20 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                     status=200,
                 )
             if submit_requested:
-                submit_application(application, account)
-                analytics_services.track_application_submitted(
-                    request,
-                    referral_code=application.referral_code,
-                    application_status=application.status,
-                )
-                return redirect("registrations:parent-portal")
-            return redirect("registrations:application-workspace", application_id=application.id)
+                try:
+                    submit_application(application, account)
+                except ValueError as exc:
+                    form.add_error(None, str(exc))
+                    response_status = 400
+                else:
+                    analytics_services.track_application_submitted(
+                        request,
+                        referral_code=application.referral_code,
+                        application_status=application.status,
+                    )
+                    return redirect("registrations:parent-portal")
+            else:
+                return redirect("registrations:application-workspace", application_id=application.id)
         elif is_ajax:
             return JsonResponse(
                 {"errors": form.error_summary_items()},
@@ -434,6 +444,7 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             "save_indicator_error_msg": SAVE_INDICATOR_ERROR,
             "personal_data_consent_version": PERSONAL_DATA_CONSENT_VERSION,
         },
+        status=response_status,
     )
 
 
@@ -479,6 +490,16 @@ def start_registration(request: HttpRequest) -> HttpResponse:
                 {"form": None, "error": "Ievadiet e-pasta adresi."},
             )
 
+        try:
+            validate_email(email)
+        except ValidationError:
+            return render(
+                request,
+                "registrations/start_registration.html",
+                {"form": None, "error": "Ievadiet derīgu e-pasta adresi."},
+                status=400,
+            )
+
         # Bind the OTP to this browser session (OTP duplicate-submit fix):
         # make sure a persisted session key exists BEFORE issuing so the
         # idempotent-reuse / cross-session rejection rules have an anchor.
@@ -496,7 +517,15 @@ def start_registration(request: HttpRequest) -> HttpResponse:
                 "registrations/start_registration.html",
                 {"form": None, "error": "Pārāk daudz pieprasījumu. Mēģiniet vēlāk."},
             )
-        send_one_time_code_email(email, raw_code)
+        try:
+            send_one_time_code_email(email, raw_code)
+        except SMTPException:
+            return render(
+                request,
+                "registrations/start_registration.html",
+                {"form": None, "error": "Neizdevās nosūtīt kodu. Lūdzu, mēģiniet vēlreiz."},
+                status=400,
+            )
 
         # Store pending email in session
         request.session["pending_verification_email"] = email
@@ -541,13 +570,17 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
             application=application,
             verified_account=account,
         )
-        submit_application(application, account)
-        analytics_services.track_application_submitted(
-            request,
-            referral_code=application.referral_code,
-            application_status=application.status,
-        )
-        return redirect("registrations:parent-portal")
+        try:
+            submit_application(application, account)
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        else:
+            analytics_services.track_application_submitted(
+                request,
+                referral_code=application.referral_code,
+                application_status=application.status,
+            )
+            return redirect("registrations:parent-portal")
 
     return render(
         request,
