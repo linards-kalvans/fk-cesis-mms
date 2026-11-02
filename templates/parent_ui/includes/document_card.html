@@ -57,6 +57,7 @@
             </span>
 
             <p id="{{ field_id }}_progress" class="fk-form-progress" data-state="idle" hidden></p>
+            {% for error in bound_field.errors %}<p class="fk-form-error">{{ error }}</p>{% endfor %}
           </div>
         {% endwith %}
       {% endwith %}

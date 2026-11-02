@@ -555,6 +555,21 @@
   document.querySelectorAll('.fk-dropzone input[type="file"]').forEach(initDropzone);
 
   document.addEventListener('click', function (e) {
+    var errorLink = e.target.closest('.fk-error-summary a[href^="#id_"]');
+    if (errorLink) {
+      var field = document.getElementById(errorLink.getAttribute('href').slice(1));
+      var fieldStep = field && field.closest('.fk-wizard-step');
+      if (fieldStep) {
+        e.preventDefault();
+        showStep(Array.prototype.indexOf.call(steps, fieldStep));
+        var target = field.type === 'file'
+          ? field.closest('.fk-document-card') || field.closest('.fk-form-field') || field
+          : field;
+        target.scrollIntoView({ block: 'center' });
+        if (target !== field) target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
+      }
+    }
     if (e.target.matches('[data-wizard-next]') || e.target.closest('[data-wizard-next]')) {
       var stepOk = validateStep(current);
       if (stepOk && current < total - 1) {

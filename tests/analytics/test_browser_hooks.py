@@ -87,8 +87,8 @@ def test_application_workspace_invalid_submit_shows_validation_summary_impressio
         {"submit_action": "submit"},  # empty payload — form invalid
     )
 
-    # View falls through to render (status 200) with form errors in context.
-    assert response.status_code == 200
+    # Invalid submission re-renders with a 400 and form errors in context.
+    assert response.status_code == 400
     assert (
         b'data-analytics-impression="application_validation_error_summary_shown"'
         in response.content

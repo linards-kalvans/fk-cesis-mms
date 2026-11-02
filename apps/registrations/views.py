@@ -270,6 +270,9 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
             request.FILES,
             is_submit=submit_requested,
             has_existing_document=_active_guardian_identity_exists(application),
+            has_existing_portrait=application.documents.filter(
+                kind=Document.Kind.MEMBER_PORTRAIT, deleted_at__isnull=True,
+            ).exists(),
             guardian_profile_locked=guardian_profile_locked,
         )
         if form.is_valid():
@@ -316,6 +319,8 @@ def application_workspace(request: HttpRequest, application_id: int) -> HttpResp
                 {"errors": form.error_summary_items()},
                 status=400,
             )
+        elif submit_requested:
+            response_status = 400
     else:
         form = RegistrationApplicationForm(
             initial={
@@ -561,6 +566,9 @@ def submit_registration(request: HttpRequest, application_id: int) -> HttpRespon
         request.FILES,
         is_submit=True,
         has_existing_document=_active_guardian_identity_exists(application),
+        has_existing_portrait=application.documents.filter(
+            kind=Document.Kind.MEMBER_PORTRAIT, deleted_at__isnull=True,
+        ).exists(),
         guardian_profile_locked=guardian_profile_locked,
     )
     if form.is_valid():

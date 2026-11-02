@@ -3,7 +3,11 @@
 
 from django import forms
 
-from apps.registrations.messages import STEP_FIELD_FORMAT, STEP_FIELD_REQUIRED
+from apps.registrations.messages import (
+    MEMBER_PORTRAIT_REQUIRED,
+    STEP_FIELD_FORMAT,
+    STEP_FIELD_REQUIRED,
+)
 from apps.registrations.validators import (
     PERSONAL_ID_FORMAT_MESSAGE,
     is_valid_personal_id,
@@ -128,12 +132,14 @@ class RegistrationApplicationForm(forms.Form):
         *args,
         is_submit: bool = False,
         has_existing_document: bool = False,
+        has_existing_portrait: bool = False,
         guardian_profile_locked: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.is_submit = is_submit
         self.has_existing_document = has_existing_document
+        self.has_existing_portrait = has_existing_portrait
         self.guardian_profile_locked = guardian_profile_locked
 
         # Populate kit size choices from database (active shirt options, natural size order).
@@ -199,6 +205,7 @@ class RegistrationApplicationForm(forms.Form):
         _field_step_map = {
             "guardian_identity_document": "documents",
             "member_identity_document": "documents",
+            "member_portrait_document": "documents",
             "guardian_first_name": "guardian",
             "guardian_family_name": "guardian",
             "guardian_personal_id": "guardian",
@@ -223,6 +230,8 @@ class RegistrationApplicationForm(forms.Form):
             widget.attrs["data-step-error-empty"] = STEP_FIELD_REQUIRED
             if field_name in _format_validated:
                 widget.attrs["data-step-error-format"] = STEP_FIELD_FORMAT
+
+        self.fields["member_portrait_document"].widget.attrs["data-step-error-empty"] = MEMBER_PORTRAIT_REQUIRED
 
         # Slice C — verified email is the OTP identity; never parent-editable.
         # Staff change it via Django admin (apps.accounts.services.change_parent_email).
@@ -270,6 +279,9 @@ class RegistrationApplicationForm(forms.Form):
 
         if not self.has_existing_document and not cleaned_data.get("guardian_identity_document"):
             self.add_error("guardian_identity_document", "Vecāka personas dokuments ir obligāts iesniegšanai.")
+
+        if not self.has_existing_portrait and not cleaned_data.get("member_portrait_document"):
+            self.add_error("member_portrait_document", MEMBER_PORTRAIT_REQUIRED)
 
         return cleaned_data
 

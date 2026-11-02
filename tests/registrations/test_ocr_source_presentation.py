@@ -208,7 +208,7 @@ class TestErrorSummaryFullBehavior:
         - show a heading/summary block text,
         - show the field label ('E-pasts'),
         - show the validation message ('E-pasts ir obligāts.'),
-        - include an anchor target linking to the invalid field (id-guardian_email)."""
+        - include an anchor target linking to the invalid field (id_guardian_email)."""
         client = Client()
         acct, app = _create_workspace_draft_with_field_sources()
         _login(client, acct)
@@ -232,7 +232,7 @@ class TestErrorSummaryFullBehavior:
             },
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         content = resp.content.decode()
 
         # 1. Summary heading / block text visible
@@ -251,9 +251,9 @@ class TestErrorSummaryFullBehavior:
         )
 
         # 4. Anchor link points to invalid field
-        assert "id-guardian_email" in content, (
+        assert 'href="#id_guardian_email"' in content, (
             "Error summary must include an anchor target linking to "
-            "the invalid field (id-guardian_email)."
+            "the invalid field (id_guardian_email)."
         )
 
 
