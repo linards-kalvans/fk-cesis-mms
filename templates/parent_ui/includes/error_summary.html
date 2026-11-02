@@ -4,7 +4,11 @@
     <ul>
       {% for item in items %}
         <li>
-          <a href="#id-{{ item.field }}">{{ item.label|default:item.field }}: {{ item.message }}</a>
+          {% if item.field == "__all__" %}
+            {{ item.message }}
+          {% else %}
+            <a href="#id_{{ item.field }}">{{ item.label|default:item.field }}: {{ item.message }}</a>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 # Inline error shown next to a required wizard field that blocks advancing.
 STEP_FIELD_REQUIRED: str = "Šis lauks ir obligāts, lai turpinātu."
+MEMBER_PORTRAIT_REQUIRED: str = "Lūdzu, augšupielādējiet bērna portretu."
 
 # Inline error shown when a field is filled but the format is invalid.
 STEP_FIELD_FORMAT: str = "Lūdzu, pārbaudi ievadītā lauka formātu."
