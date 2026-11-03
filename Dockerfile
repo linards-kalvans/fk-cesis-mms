@@ -9,12 +9,14 @@
 # Run (compose handles env_file + ports + volumes in compose.yaml):
 #   docker run --rm -p 127.0.0.1:8000:8000 --env-file .env fk-cesis-mms:dev
 
-ARG PYTHON_VERSION=3.12-slim-bookworm
+# Reviewed multi-platform index; builder and runtime must use the same Python.
+# Override only for a reviewed compatibility candidate, never with a floating tag.
+ARG PYTHON_IMAGE=python:3.14.10-slim-bookworm@sha256:516b51cb9db2ef061e465c803e50f64361b82cefd91e525b889b967b83e83527
 
 # ----------------------------------------------------------------------------
 # Stage 1 — build deps with uv
 # ----------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION} AS builder
+FROM ${PYTHON_IMAGE} AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -22,8 +24,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1
 
-# uv ships as a tiny static binary; pin the major to keep builds reproducible.
-COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+# Python 3.14-aware builder tooling; not copied into the runtime image.
+COPY --from=ghcr.io/astral-sh/uv:0.9.8@sha256:08f409e1d53e77dfb5b65c788491f8ca70fe1d2d459f41c89afa2fcbef998abe /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -41,22 +43,26 @@ RUN uv sync --frozen --no-dev
 ENV DJANGO_SECRET_KEY=build-time-not-secret \
     DJANGO_DEBUG=false \
     DATABASE_URL=sqlite:///tmp/build.sqlite3
-RUN uv run python manage.py collectstatic --noinput --clear
+# Do not use `uv run` here: its implicit sync reinstalls the dev dependency group.
+RUN .venv/bin/python manage.py collectstatic --noinput --clear
 
 # ----------------------------------------------------------------------------
 # Stage 2 — runtime
 # ----------------------------------------------------------------------------
-FROM python:${PYTHON_VERSION} AS runtime
+FROM ${PYTHON_IMAGE} AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:${PATH}" \
     DJANGO_SETTINGS_MODULE=fk_cesis_mms.settings
 
-# curl is only here for the in-container healthcheck.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
- && rm -rf /var/lib/apt/lists/*
+# Health probes use Python, avoiding curl and its otherwise unused dependencies.
+# Runtime never installs packages. Remove the base image's pip/ensurepip bundles,
+# including their independently versioned vendored dependencies (not the venv).
+RUN rm -rf /usr/local/lib/python*/ensurepip \
+           /usr/local/lib/python*/site-packages/pip \
+           /usr/local/lib/python*/site-packages/pip-*.dist-info \
+           /usr/local/bin/pip*
 
 # Non-root runtime user. UID 10001 should match the service user that owns
 # bind-mounted data directories in the infra repo runtime.
@@ -81,7 +87,7 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/healthz || exit 1
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).close()"]
 
 # compose.yaml overrides this for `web` (runs migrate first) and `qcluster`.
 CMD ["gunicorn", "fk_cesis_mms.wsgi:application", \

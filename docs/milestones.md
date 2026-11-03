@@ -18,6 +18,7 @@ Do **not** use archived implementation plans for current planning unless user ex
 ## 2. Current implemented baseline
 
 ### Foundation and platform
+- **Runtime image security (2026-11-03, locally verified candidate):** pinned Python 3.14.10/Bookworm, targeted dependency remediation and pre-promotion final-image scan gate. Same-DB baseline **3 CRITICAL/56 HIGH** → candidate **2 CRITICAL/36 HIGH**, **0 fixable H/C** and no new H/C. Final-runtime PostgreSQL suite **2918 passed/18 Node skips** (the exact 18 passed separately); web/worker/native/encryption smoke passed on 3.14 and the 3.12 comparison. Remaining unfixed OS findings stay visible. Publication, deployed acceptance and coordinated web/worker digest-template support remain pending; no release sign-off. See `docs/runtime-image-security-2026-11-03.md`.
 - Django project scaffold exists and boots
 - `uv` workflow is in place
 - `.env` autoload works for local commands and app startup

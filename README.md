@@ -4,7 +4,7 @@ FK Cēsis youth football club management system — MVP.
 
 ## Stack
 
-- Python 3.12+, Django 5.x
+- Python 3.12+ (container/CI: 3.14), Django 6.0
 - `uv` for dependency management
 - pytest + pytest-django for testing
 - SQLite for local development; PostgreSQL for production
@@ -197,6 +197,7 @@ Live tiny-IDP sample-document validation, agreement-handling first slice, and pr
 - Milestones: `docs/milestones.md`
 - Runtime contract: `docs/runtime-contract.md`
 - Local Docker smoke: `docs/local-docker-smoke.md`
+- Runtime image security evidence and publication handoff: `docs/runtime-image-security-2026-11-03.md`
 - Deployment ownership pointer: `docs/deployment.md` (deployed runtime lives in `https://github.com/linards-kalvans/fk-cesis`)
 - Audit log (operator guide): `docs/audit-log.md`
 - Historical plans archive: `docs/archive/plans/` *(read only when explicitly needed for history)*

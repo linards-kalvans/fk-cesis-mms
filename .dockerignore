@@ -30,13 +30,18 @@ tmp/
 
 # Tests + docs + tooling not needed at runtime
 tests/
-docs/archive/
-docs/superpowers/
+docs/
 opencode.json
 design-template.html
 
 # Claude / agent artifacts
 .claude
+.opencode/
+.superpowers/
+.playwright-mcp/
+.worktrees/
+graphify-out/
+data/
 AGENTS.md
 CLAUDE.md
 README.md
