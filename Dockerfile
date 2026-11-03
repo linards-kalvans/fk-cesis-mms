@@ -11,7 +11,7 @@
 
 # Reviewed multi-platform index; builder and runtime must use the same Python.
 # Override only for a reviewed compatibility candidate, never with a floating tag.
-ARG PYTHON_IMAGE=python:3.14
+ARG PYTHON_IMAGE=python:3.14-slim-trixie
 
 # ----------------------------------------------------------------------------
 # Stage 1 — build deps with uv
