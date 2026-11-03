@@ -11,7 +11,7 @@
 
 # Reviewed multi-platform index; builder and runtime must use the same Python.
 # Override only for a reviewed compatibility candidate, never with a floating tag.
-ARG PYTHON_IMAGE=python:3.14.10-slim-bookworm@sha256:516b51cb9db2ef061e465c803e50f64361b82cefd91e525b889b967b83e83527
+ARG PYTHON_IMAGE=python:3.14
 
 # ----------------------------------------------------------------------------
 # Stage 1 — build deps with uv
@@ -25,7 +25,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1
 
 # Python 3.14-aware builder tooling; not copied into the runtime image.
-COPY --from=ghcr.io/astral-sh/uv:0.9.8@sha256:08f409e1d53e77dfb5b65c788491f8ca70fe1d2d459f41c89afa2fcbef998abe /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
