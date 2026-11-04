@@ -9,6 +9,16 @@ This repository builds the application image. The `fk-cesis` infrastructure repo
 - Production tag: `main`
 - Immutable release tags: `<major>.<minor>`, for example `0.42`
 
+The Dockerfile pins the Python 3.14/Bookworm base by digest for both builder and
+runtime. CI scans the built final image before registry login/promotion and gates
+fixable HIGH/CRITICAL vulnerabilities; unfixed findings remain in its reports.
+Runtime has no pip/ensurepip, uv, mypy or ruff: dependency changes require a new
+image. See [security evidence and handoff](runtime-image-security-2026-11-03.md)
+for the locally verified candidate, remaining risks and publication limitations.
+Both web and qcluster must use the same accepted image reference. Digest rollout
+requires coordinated support in the deployment repository's repository/tag
+templates; it is not implemented by this application change.
+
 ## Processes
 
 Runtime must run two application containers from the same image:

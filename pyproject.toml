@@ -2,11 +2,11 @@
 name = "fk-cesis-mms"
 version = "0.1.0"
 description = "FK Cēsis MMS — youth football club management MVP"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
 dependencies = [
-    "cryptography>=48.0.0",
+    "cryptography>=50.0.2",
     "dj-database-url>=3.1.2",
     "django>=5.0",
     "django-q2>=1.10.0",
