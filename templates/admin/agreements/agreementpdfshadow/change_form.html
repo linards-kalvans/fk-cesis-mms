@@ -1,0 +1,23 @@
+{% extends "admin/change_form.html" %}
+{% block after_field_sets %}
+{{ block.super }}
+<section class="module">
+  <h2>PDF salīdzinājums — nav izmantojams parakstīšanai</h2>
+  <p>DocuSeal dokuments paliek galvenais līgums. Salīdzinājuma kļūda nemaina līgumu, paziņojumus vai rēķinus.</p>
+  <p>Papīra salīdzinājuma variantā apzināti nav elektroniskās parakstīšanas un laika zīmoga nosacījumu.</p>
+  <p><a href="{{ primary_pdf_url }}?disposition=attachment">Lejupielādēt sākotnējo DocuSeal PDF</a></p>
+  {% if shadow.status == "ready" %}
+    <p><a href="{{ shadow_pdf_url }}?disposition=attachment">Lejupielādēt salīdzinājuma PDF</a></p>
+    <h3>DocuSeal sākotnējais dokuments</h3>
+    <iframe src="{{ primary_pdf_url }}" title="DocuSeal sākotnējais dokuments" width="100%" height="550" loading="lazy"></iframe>
+    <h3>WeasyPrint salīdzinājums</h3>
+    <iframe src="{{ shadow_pdf_url }}" title="WeasyPrint salīdzinājums" width="100%" height="550" loading="lazy"></iframe>
+  {% else %}
+    <p>Salīdzinājuma PDF vēl nav pieejams. Statuss: {{ shadow.get_status_display }}.</p>
+  {% endif %}
+  {% if shadow.can_retry and shadow_enabled %}
+    <button type="submit" formaction="{{ shadow_retry_url }}" formmethod="post" name="shadow_retry" value="1">Atkārtot salīdzinājumu</button>
+  {% endif %}
+  {% if not shadow_enabled %}<p>Jaunu salīdzinājumu sagatavošana ir atspējota.</p>{% endif %}
+</section>
+{% endblock %}

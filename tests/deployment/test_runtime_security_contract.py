@@ -21,7 +21,23 @@ def test_collectstatic_cannot_implicitly_reinstall_dev_dependencies():
     assert "RUN .venv/bin/python manage.py collectstatic" in dockerfile
     assert "RUN uv run python manage.py collectstatic" not in dockerfile
     assert 'CMD ["python", "-c", "import urllib.request;' in dockerfile
-    assert "apt-get install" not in dockerfile
+
+
+def test_pdf_native_dependencies_are_explicit_and_build_time_only():
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    # Native text shaping is required by the default-off PDF renderer. Keep the
+    # exception narrow: no curl/dev tools/recommends/blanket OS upgrade.
+    assert dockerfile.count("apt-get install") == 1
+    command = re.search(
+        r"apt-get install -y --no-install-recommends\s*\\\n(.*?)\s*\\\n"
+        r"\s*&& rm -rf /var/lib/apt/lists/\*", dockerfile, re.S,
+    )
+    assert command is not None
+    assert set(command.group(1).split()) == {
+        "libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz-subset0", "fonts-dejavu-core", "zlib1g",
+    }
+    assert "apt-get upgrade" not in dockerfile
+    assert dockerfile.index("apt-get install") < dockerfile.index("USER app")
 
 
 def test_ci_scans_before_registry_login_and_push_without_rebuilding():

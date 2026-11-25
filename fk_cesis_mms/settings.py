@@ -193,6 +193,7 @@ OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
 # Agreement-platform integration (P5 Slice D — DocuSeal self-hosted).
 AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
+AGREEMENT_PDF_SHADOW_ENABLED = os.environ.get("AGREEMENT_PDF_SHADOW_ENABLED", "false").lower() == "true"
 DOCUSEAL_API_URL = os.environ.get("DOCUSEAL_API_URL", "")
 DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")
 DOCUSEAL_TEMPLATE_ID = os.environ.get("DOCUSEAL_TEMPLATE_ID", "")

@@ -7,3 +7,6 @@ class AgreementsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.agreements"
     label = "agreements"
+
+    def ready(self):
+        from apps.agreements import shadow  # noqa: F401

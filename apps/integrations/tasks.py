@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from django_q.tasks import async_task
@@ -280,6 +281,15 @@ def create_agreement_submission(agreement_id: int, send_email: bool = True) -> N
             "updated_at",
         ]
     )
+
+    if getattr(settings, "AGREEMENT_PDF_SHADOW_ENABLED", False):
+        # Primary result is already persisted. Comparison failures cannot change it.
+        try:
+            from apps.agreements.shadow import enqueue_agreement_pdf_shadow
+
+            enqueue_agreement_pdf_shadow(agreement, result)
+        except Exception:
+            logger.warning("Agreement PDF shadow forwarding unavailable")
 
 
 def sync_agreement_submission(agreement_id: int) -> None:
