@@ -4,6 +4,28 @@ from apps.accounts.models import ParentAccount
 
 _counter = {"n": 0}
 
+DEFAULT_TEST_FIRST_BILLING_MONTH = "2026-09"
+
+
+def assign_agreement_billing_intent(
+    agreement, plan, first_billing_month=DEFAULT_TEST_FIRST_BILLING_MONTH
+):
+    """Give an agreement a deterministic billing intent.
+
+    Automatic default-plan preselection is intentionally date-sensitive: P15
+    leaves both fields empty once the cutoff-derived month normalizes into the
+    next season year. Tests that exercise signing, lifecycle transitions, or
+    parent/staff access need a known plan and first billing month, not the
+    outcome of today's date, so they assign it explicitly here.
+
+    ``2026-09`` is valid for the shared ``2026/2027`` test plans: it is inside
+    the season start year and is not a skip month.
+    """
+    agreement.billing_plan = plan
+    agreement.first_billing_month = first_billing_month
+    agreement.save(update_fields=["billing_plan", "first_billing_month"])
+    return agreement
+
 
 def _split_full_name(full_name: str) -> tuple[str, str]:
     """Test-only local split. Last token is family name; earlier tokens are first name."""

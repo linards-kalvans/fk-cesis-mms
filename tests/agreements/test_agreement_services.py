@@ -18,6 +18,7 @@ from apps.agreements.services import (
     set_signing_path,
     void_agreement,
 )
+from tests.support import assign_agreement_billing_intent
 
 
 pytestmark = pytest.mark.django_db
@@ -118,6 +119,7 @@ def test_mark_sent_from_generated_succeeds_and_sends_email(
 def test_mark_signed_email_subject_is_latvian(agreement_member, actor, default_plan):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_signed(a, actor)
     assert mail.outbox[0].subject == "Jūsu līgums ir parakstīts"
 
@@ -142,6 +144,7 @@ def test_mark_signed_from_generated_succeeds_and_sends_email(
 ):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_signed(a, actor)
     a.refresh_from_db()
     assert a.state == Agreement.State.SIGNED
@@ -154,6 +157,7 @@ def test_mark_signed_from_sent_succeeds_and_sends_email(
     agreement_member, actor, default_plan
 ):
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_sent(a, actor)
     mail.outbox.clear()
     mark_agreement_signed(a, actor)
@@ -241,6 +245,7 @@ def test_set_signing_path_same_value_is_idempotent(agreement_member, actor):
 def test_set_signing_path_allowed_when_signed(agreement_member, actor, default_plan):
     """User explicitly chose 'override at any state' — verify signed allows it."""
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.ELECTRONIC)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_signed(a, actor)
     set_signing_path(a, Agreement.SigningPath.PAPER, actor)
     a.refresh_from_db()
@@ -285,6 +290,7 @@ def test_signed_email_body_contains_guardian_display_name(
 ):
     mail.outbox.clear()
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_signed(a, actor)
     assert "Anna Bērziņa" in mail.outbox[0].body
 

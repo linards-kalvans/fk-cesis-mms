@@ -341,7 +341,7 @@ def _plan_form(body: str) -> tuple[str, dict[str, str]]:
 
 
 def test_plan_then_sign_completes_without_leaving_the_agreement_page(
-    client, acting_reviewer, application_with_agreement
+    client, acting_reviewer, application_with_agreement, monkeypatch
 ):
     """End-to-end proof that the round trip is gone.
 
@@ -357,6 +357,17 @@ def test_plan_then_sign_completes_without_leaving_the_agreement_page(
     from apps.agreements.models import Agreement
     from apps.billing.services import derive_first_billing_month
     from apps.billing.models import BillingRecord, MembershipPlan
+    import apps.billing.services as billing_services
+    from datetime import date
+
+    # Pin the billing date inside the shared 2026/2027 season. The derived
+    # month is date-sensitive: after the November cutoff it normalizes into
+    # 2027-01, which the P15 year guard correctly refuses for this plan. This
+    # test is about the form/endpoint round trip, so give it a valid date
+    # rather than the current calendar's boundary result.
+    monkeypatch.setattr(
+        billing_services.timezone, "localdate", lambda: date(2026, 9, 1)
+    )
 
     member = application_with_agreement.approved_member
     agreement = member.agreements.get(is_current=True)

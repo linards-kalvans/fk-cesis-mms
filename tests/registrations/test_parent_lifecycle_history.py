@@ -50,13 +50,17 @@ def default_plan(db):
 def approved_app(submitted_application, reviewer, default_plan):
     """An approved application with a signed agreement.
 
-    ``default_plan`` makes ``create_agreement_for_member`` preselect a
-    ``billing_plan`` on the new agreement so the P9 signing guard passes.
+    The billing intent is assigned explicitly because automatic P9/P15
+    preselection depends on today's date and can deliberately leave the plan
+    unset once the cutoff-derived month rolls into the next season year.
     """
+    from tests.support import assign_agreement_billing_intent
+
     app = approve_application(submitted_application, reviewer)
     agreement = create_agreement_for_member(
         app.approved_member, Agreement.SigningPath.PAPER
     )
+    assign_agreement_billing_intent(agreement, default_plan)
     mark_agreement_sent(agreement, reviewer)
     mark_agreement_signed(agreement, reviewer)
     return app

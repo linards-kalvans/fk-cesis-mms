@@ -38,12 +38,16 @@ def staff_user(db):
 def signed_agreement(agreement_member, staff_user, default_plan):
     """A signed, current agreement for the test member.
 
-    ``default_plan`` makes ``create_agreement_for_member`` preselect a
-    ``billing_plan`` on the new agreement so the P9 signing guard passes.
+    The billing intent is assigned explicitly: automatic P9/P15 preselection
+    is date-sensitive and leaves the plan unset once the cutoff-derived month
+    rolls into the next season year.
     """
+    from tests.support import assign_agreement_billing_intent
+
     agreement = create_agreement_for_member(
         agreement_member, Agreement.SigningPath.PAPER
     )
+    assign_agreement_billing_intent(agreement, default_plan)
     mark_agreement_sent(agreement, staff_user)
     mark_agreement_signed(agreement, staff_user)
     return agreement

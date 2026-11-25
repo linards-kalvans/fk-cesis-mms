@@ -12,6 +12,7 @@ from apps.agreements.services import (
     void_agreement,
 )
 from apps.core.models import AuditEvent
+from tests.support import assign_agreement_billing_intent
 
 pytestmark = pytest.mark.django_db
 
@@ -30,6 +31,7 @@ def test_mark_agreement_signed_via_webhook_records_system_event(
     agreement_member, actor, default_plan
 ):
     a = create_agreement_for_member(agreement_member, Agreement.SigningPath.PAPER)
+    assign_agreement_billing_intent(a, default_plan)
     mark_agreement_sent(a, actor=actor)
     mark_agreement_signed(a, actor=None)
 

@@ -224,10 +224,22 @@ def active_plan(db):
 
 @pytest.fixture
 def approved_application(submitted_application, reviewer, default_plan):
-    """A submitted application that has been approved (creates Member + Agreement)."""
-    from apps.registrations.services import approve_application
+    """A submitted application that has been approved (creates Member + Agreement).
 
-    return approve_application(submitted_application, reviewer)
+    The agreement is given an explicit deterministic billing intent. Automatic
+    P9/P15 preselection depends on today's date relative to the plan cutoff and
+    skip months; once the cutoff rolls into the next season year the guard
+    deliberately leaves both fields empty, so every Hub consumer would see an
+    unconfigured agreement.
+    """
+    from apps.agreements.services import get_current_agreement
+    from apps.registrations.services import approve_application
+    from tests.support import assign_agreement_billing_intent
+
+    application = approve_application(submitted_application, reviewer)
+    agreement = get_current_agreement(application.approved_member)
+    assign_agreement_billing_intent(agreement, default_plan)
+    return application
 
 
 @pytest.fixture
