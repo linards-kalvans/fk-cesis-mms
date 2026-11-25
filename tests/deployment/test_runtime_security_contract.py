@@ -34,7 +34,7 @@ def test_pdf_native_dependencies_are_explicit_and_build_time_only():
     )
     assert command is not None
     assert set(command.group(1).split()) == {
-        "libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz-subset0", "fonts-dejavu-core", "zlib1g",
+        "libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz-subset0", "fonts-dejavu-core", "zlib1g", "libzstd1",
     }
     assert "apt-get upgrade" not in dockerfile
     assert dockerfile.index("apt-get install") < dockerfile.index("USER app")

@@ -52,10 +52,11 @@ RUN .venv/bin/python manage.py collectstatic --noinput --clear
 FROM ${PYTHON_IMAGE} AS runtime
 
 # Optional, default-off agreement PDF comparison renderer. No network assets.
-# Refresh its existing compression dependency too (CVE-2026-85091); no blanket upgrade.
+# Refresh existing compression libraries (CVE-2026-85091, CVE-2026-124851).
+# Keep upgrades targeted; no blanket OS upgrade.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core zlib1g \
+      libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core zlib1g libzstd1 \
  && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
