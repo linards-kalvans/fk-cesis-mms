@@ -17,6 +17,30 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ## 2. Current implemented baseline
 
+### Agreement PDF shadow forwarding — local implementation, acceptance pending
+
+- Default-off `AGREEMENT_PDF_SHADOW_ENABLED` mirrors future successful primary
+  submissions into separate private comparison PDFs. DocuSeal stays authoritative;
+  lifecycle, sending, mail and billing are unchanged, with no historical backfill.
+  Existing primary admin and shadow original downloads now reject split-origin blobs.
+- Additive `agreements/0008_agreement_pdf_shadow`; read-only staff comparison/retry
+  at `/admin/agreements/agreementpdfshadow/`. Root DB intentionally unmigrated,
+  no activation, deployment, commit or push.
+- Latest 2026-11-25 real-clock PostgreSQL gate: **2989 passed, no failures, errors
+  or skips**. Deterministic test fixtures fixed the prior 81 date-sensitive results
+  without weakening production guards or dropping tests. Static checks passed;
+  independent code review approved with deferred minor findings. Evidence:
+  `docs/acceptance/2026-11-25-shadow-test-repair-and-review.md`.
+- Historical 2026-11-18 isolated PostgreSQL **2964 passed, zero failures/errors/skips**; static
+  gates clean; exact image build and offline non-root rendering passed. Fixable H/C
+  image gate passed for that candidate after targeted zlib refresh, but four
+  introduced unfixed Expat HIGH findings remain open. No exact-latest-source image
+  build or scan has been performed; security risk acceptance and live provider/browser
+  acceptance remain open.
+- Operator guide: `docs/agreement-pdf-shadow.md`; evidence and boundaries:
+  `docs/acceptance/2026-11-18-agreement-pdf-shadow.md`. Full DocuSeal replacement is
+  future work, not a completed milestone or release sign-off.
+
 ### Foundation and platform
 - **Runtime image security (2026-11-03, locally verified candidate):** pinned Python 3.14.10/Bookworm, targeted dependency remediation and pre-promotion final-image scan gate. Same-DB baseline **3 CRITICAL/56 HIGH** → candidate **2 CRITICAL/36 HIGH**, **0 fixable H/C** and no new H/C. Final-runtime PostgreSQL suite **2918 passed/18 Node skips** (the exact 18 passed separately); web/worker/native/encryption smoke passed on 3.14 and the 3.12 comparison. Remaining unfixed OS findings stay visible. Publication, deployed acceptance and coordinated web/worker digest-template support remain pending; no release sign-off. See `docs/runtime-image-security-2026-11-03.md`.
 - Django project scaffold exists and boots
