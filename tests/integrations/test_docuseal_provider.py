@@ -415,6 +415,8 @@ def test_stream_submission_document_empty_documents_raises_not_found(
 def test_stream_submission_document_fetch_404_raises_not_found(
     docuseal_settings, monkeypatch
 ):
+    blob_response = _mock_response(404, {"error": "gone"})
+
     def fake_request(method, url, headers=None, timeout=None, **kwargs):
         if url.endswith("/documents"):
             return _mock_response(
@@ -429,13 +431,15 @@ def test_stream_submission_document_fetch_404_raises_not_found(
                     ]
                 },
             )
-        return _mock_response(404, {"error": "gone"})
+        return blob_response
 
     monkeypatch.setattr(
         "apps.integrations.docuseal.requests.request", fake_request
     )
-    with pytest.raises(ap.AgreementPlatformNotFoundError):
+    with pytest.raises(ap.AgreementPlatformNotFoundError) as info:
         docuseal.stream_submission_document("1001")
+    assert "sign.example/docs/501.pdf" not in str(info.value)
+    blob_response.close.assert_called_once()
 
 
 def test_stream_submission_document_fetch_5xx_raises_transient(
@@ -555,6 +559,117 @@ def test_stream_submission_document_closes_response_on_iteration_error(
     with pytest.raises(RuntimeError):
         list(docuseal.stream_submission_document("1001").chunks)
     captured["response"].close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# stream_submission_document — document origin + redirect hardening
+# ---------------------------------------------------------------------------
+
+
+def _document_payload(url, *, content_type="application/pdf", filename="agreement.pdf"):
+    return {"documents": [{"filename": filename, "content_type": content_type, "url": url}]}
+
+
+@pytest.mark.parametrize(
+    "untrusted_url",
+    [
+        "https://evil.example/docs/501.pdf",
+        "http://sign.example/docs/501.pdf",
+        "https://user:secret@sign.example/docs/501.pdf",
+        "https://sign.example:8443/docs/501.pdf",
+        "ftp://sign.example/docs/501.pdf",
+    ],
+)
+def test_stream_rejects_untrusted_document_origin_before_any_blob_request(
+    docuseal_settings, monkeypatch, untrusted_url,
+):
+    calls = []
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        calls.append((url, headers or {}))
+        return _mock_response(200, _document_payload(untrusted_url))
+
+    monkeypatch.setattr("apps.integrations.docuseal.requests.request", fake_request)
+
+    with pytest.raises(ap.AgreementPlatformConfigError):
+        docuseal.stream_submission_document("1001")
+
+    assert len(calls) == 1
+    assert calls[0][0].endswith("/submissions/1001/documents")
+    assert "secret-key" in calls[0][1].values()
+
+
+def test_stream_allows_same_origin_with_default_port(docuseal_settings, monkeypatch):
+    captured = []
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        captured.append((url, kwargs, headers or {}))
+        if url.endswith("/documents"):
+            return _mock_response(
+                200, _document_payload("https://sign.example:443/docs/501.pdf"),
+            )
+        return _doc_stream_response()
+
+    monkeypatch.setattr("apps.integrations.docuseal.requests.request", fake_request)
+
+    stream = docuseal.stream_submission_document("1001")
+    assert b"".join(stream.chunks).startswith(b"%PDF-")
+    assert [url for url, _, _ in captured] == [
+        "https://sign.example/api/submissions/1001/documents",
+        "https://sign.example:443/docs/501.pdf",
+    ]
+    assert captured[0][1]["allow_redirects"] is False
+    assert captured[1][1]["allow_redirects"] is False
+    assert captured[1][2]["X-Auth-Token"] == "secret-key"
+
+
+def test_stream_rejects_metadata_redirect_without_following(docuseal_settings, monkeypatch):
+    calls = []
+    metadata_response = _mock_response(
+        302, _document_payload("https://sign.example/docs/501.pdf"),
+    )
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        calls.append((url, kwargs))
+        return metadata_response
+
+    monkeypatch.setattr("apps.integrations.docuseal.requests.request", fake_request)
+
+    with pytest.raises(ap.AgreementPlatformConfigError):
+        docuseal.stream_submission_document("1001")
+
+    assert len(calls) == 1
+    assert calls[0][1]["allow_redirects"] is False
+    metadata_response.close.assert_called_once()
+
+
+def test_stream_rejects_blob_redirect_and_closes_without_credential_follow(
+    docuseal_settings, monkeypatch,
+):
+    calls = []
+    blob_response = _doc_stream_response()
+    blob_response.status_code = 307
+    blob_response.headers = {"Location": "https://evil.example/steal"}
+
+    def fake_request(method, url, headers=None, timeout=None, **kwargs):
+        calls.append((url, kwargs, headers or {}))
+        if url.endswith("/documents"):
+            return _mock_response(
+                200, _document_payload("https://sign.example/docs/501.pdf"),
+            )
+        return blob_response
+
+    monkeypatch.setattr("apps.integrations.docuseal.requests.request", fake_request)
+
+    with pytest.raises(ap.AgreementPlatformConfigError):
+        docuseal.stream_submission_document("1001")
+
+    blob_calls = [call for call in calls if not call[0].endswith("/documents")]
+    assert len(blob_calls) == 1
+    assert blob_calls[0][1]["allow_redirects"] is False
+    assert blob_calls[0][2]["X-Auth-Token"] == "secret-key"
+    blob_response.close.assert_called_once()
+    assert not any("evil.example" in url for url, _, _ in calls)
 
 
 # ---------------------------------------------------------------------------

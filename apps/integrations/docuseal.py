@@ -110,13 +110,18 @@ def _request(method: str, url: str, api_key: str, **kwargs) -> requests.Response
 
     status = resp.status_code
     if status in (401, 403):
+        resp.close()
         raise AgreementPlatformAuthError(f"auth failed: {status}")
     if status == 404:
-        raise AgreementPlatformNotFoundError(f"not found: {url}")
+        resp.close()
+        raise AgreementPlatformNotFoundError("not found")
     if status >= 500:
+        resp.close()
         raise AgreementPlatformTransientError(f"server error: {status}")
     if status >= 400:
-        raise AgreementPlatformConfigError(f"request rejected: {status} {resp.text}")
+        detail = resp.text
+        resp.close()
+        raise AgreementPlatformConfigError(f"request rejected: {status} {detail}")
     return resp
 
 
@@ -125,9 +130,12 @@ def create_submission(agreement, send_email: bool = True) -> SubmissionResult:
     # Prefill as readonly fields, not a `values` map: readonly fields are
     # non-interactive, so the signer skips field-by-field re-confirmation and
     # goes straight to the signature fields.
+    field_payload = _build_field_payload(agreement)
+    shadow_enabled = getattr(settings, "AGREEMENT_PDF_SHADOW_ENABLED", False)
+    signing_path = getattr(agreement, "signing_path", "") if shadow_enabled else ""
     fields = [
         {"name": name, "default_value": value, "readonly": True}
-        for name, value in _build_field_payload(agreement).items()
+        for name, value in field_payload.items()
     ]
     submitter = {
         **_build_submitter(agreement),
@@ -148,6 +156,10 @@ def create_submission(agreement, send_email: bool = True) -> SubmissionResult:
         external_id=str(submitter.get("submission_id", "")),
         external_url=str(submitter.get("embed_src", "")),
         external_state=_normalize_state(submitter.get("status", "pending")),
+        generation_snapshot=(
+            {"fields": field_payload, "signing_path": signing_path}
+            if shadow_enabled else None
+        ),
     )
 
 
@@ -167,20 +179,33 @@ def archive_submission(external_id: str) -> None:
     _request("DELETE", f"{api_url}/submissions/{external_id}", api_key)
 
 
+def _reject_redirect(response: requests.Response) -> None:
+    """Never follow a redirect: it can move credentials to another origin."""
+    if 300 <= response.status_code < 400:
+        raise AgreementPlatformConfigError("provider redirect rejected")
+
+
 def list_submission_documents(external_id: str) -> list[DocumentResult]:
     api_url, api_key, _ = _require_config()
     resp = _request(
-        "GET", f"{api_url}/submissions/{external_id}/documents", api_key
+        "GET",
+        f"{api_url}/submissions/{external_id}/documents",
+        api_key,
+        allow_redirects=False,
     )
     try:
-        payload = resp.json()
-    except ValueError as exc:
-        # Malformed JSON body — never leak a raw ValueError out of the
-        # adapter. Treat as an invalid provider response (terminal config
-        # contract failure); the caller maps it to a Latvian admin message.
-        raise AgreementPlatformConfigError(
-            f"invalid JSON in DocuSeal documents response: {exc}"
-        ) from exc
+        _reject_redirect(resp)
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            # Malformed JSON body — never leak a raw ValueError out of the
+            # adapter. Treat as an invalid provider response (terminal config
+            # contract failure); the caller maps it to a Latvian admin message.
+            raise AgreementPlatformConfigError(
+                f"invalid JSON in DocuSeal documents response: {exc}"
+            ) from exc
+    finally:
+        resp.close()
     if not isinstance(payload, dict):
         return []
     raw_docs = payload.get("documents")
@@ -289,7 +314,19 @@ def stream_submission_document(external_id: str) -> DocumentStream:
     )
     if selected is None:
         raise AgreementPlatformNotFoundError("submission document not found")
-    response = _request("GET", selected.url, api_key, stream=True)
+    # Signed-document blobs are trusted only on the configured API origin.
+    # DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS is template-only and must not widen
+    # this boundary. Validate before sending the API token anywhere.
+    if _template_document_origin(selected.url) != _template_document_origin(api_url):
+        raise AgreementPlatformConfigError("untrusted submission document URL")
+    response = _request(
+        "GET", selected.url, api_key, stream=True, allow_redirects=False,
+    )
+    try:
+        _reject_redirect(response)
+    except AgreementPlatformConfigError:
+        response.close()
+        raise
 
     def chunks() -> Iterator[bytes]:
         try:
