@@ -75,8 +75,11 @@ def test_portal_shows_sent_paper_copy(
 def test_portal_shows_signed_copy(
     submitted_application, verified_client, reviewer, default_membership_plan
 ):
+    from tests.support import assign_agreement_billing_intent
+
     approve_application(submitted_application, reviewer)
     agreement = submitted_application.approved_member.agreements.get(is_current=True)
+    assign_agreement_billing_intent(agreement, default_membership_plan)
     mark_agreement_signed(agreement, reviewer)
     resp = verified_client.get(_portal_url())
     html = resp.content.decode("utf-8")

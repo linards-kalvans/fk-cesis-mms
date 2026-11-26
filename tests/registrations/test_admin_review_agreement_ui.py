@@ -88,7 +88,11 @@ def test_mark_sent_advances_state(
 def test_mark_signed_advances_state_from_generated(
     submitted_application, staff_client, reviewer, default_membership_plan
 ):
+    from tests.support import assign_agreement_billing_intent
+
     approve_application(submitted_application, reviewer)
+    agreement = get_current_agreement(submitted_application.approved_member)
+    assign_agreement_billing_intent(agreement, default_membership_plan)
     resp = staff_client.post(
         _action_url(submitted_application.id),
         {"action": "mark_agreement_signed"},

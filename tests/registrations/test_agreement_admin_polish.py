@@ -106,10 +106,13 @@ def test_sync_updates_signing_path_when_agreement_is_sent(
 def test_sync_updates_signing_path_when_agreement_is_signed(
     submitted_application, reviewer, default_membership_plan
 ):
+    from tests.support import assign_agreement_billing_intent
+
     submitted_application.preferred_agreement_signing = "electronic"
     submitted_application.save(update_fields=["preferred_agreement_signing"])
     approve_application(submitted_application, reviewer)
     agreement = get_current_agreement(submitted_application.approved_member)
+    assign_agreement_billing_intent(agreement, default_membership_plan)
     mark_agreement_sent(agreement, reviewer)
     from apps.agreements.services import mark_agreement_signed
 

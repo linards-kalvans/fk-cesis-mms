@@ -4,6 +4,7 @@ create_draft_billing_for_member."""
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -46,18 +47,28 @@ def member(db, guardian):
 
 
 class TestCreateAgreementPreselectsBillingPlan:
-    def test_preselects_default_plan_and_derived_month(self, member):
+    def test_preselects_default_plan_and_derived_month(self, member, monkeypatch):
         """When a default active plan exists, the new agreement gets
-        billing_plan set and first_billing_month derived from cutoff."""
+        billing_plan set and first_billing_month derived from cutoff.
+
+        Pin the billing date inside the 2026/2027 season so this asserts the
+        preselection rule itself, not whichever month today happens to be.
+        Without the pin, after the November cutoff the derived month rolls into
+        the next season year and P15 deliberately leaves the agreement empty.
+        """
+        import apps.billing.services as billing_services
         from apps.agreements.models import Agreement
         from apps.agreements.services import create_agreement_for_member
 
+        monkeypatch.setattr(
+            billing_services.timezone, "localdate", lambda: date(2026, 9, 1)
+        )
         plan = _make_plan(is_default=True, is_active=True)
         agreement = create_agreement_for_member(
             member, signing_path=Agreement.SigningPath.PAPER
         )
         assert agreement.billing_plan_id == plan.pk
-        assert agreement.first_billing_month  # non-blank YYYY-MM string
+        assert agreement.first_billing_month == "2026-09"
 
     def test_no_default_leaves_billing_plan_empty(self, member):
         """Without a default plan, billing_plan is None and

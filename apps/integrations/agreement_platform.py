@@ -8,7 +8,7 @@ raises these. Mode is selected by settings.AGREEMENT_PROVIDER_MODE
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator
 
 from django.conf import settings
@@ -39,6 +39,7 @@ class SubmissionResult:
     external_id: str
     external_url: str
     external_state: str  # "pending" | "completed" | "archived"
+    generation_snapshot: dict | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -64,10 +65,21 @@ class DocumentStream:
 
 
 def _stub_create(agreement) -> SubmissionResult:
+    snapshot = None
+    if getattr(settings, "AGREEMENT_PDF_SHADOW_ENABLED", False):
+        try:
+            from apps.integrations.docuseal import _build_field_payload
+
+            snapshot = {"fields": _build_field_payload(agreement),
+                        "signing_path": agreement.signing_path}
+        except Exception:
+            # Optional comparison data must never change existing stub behavior.
+            pass
     return SubmissionResult(
         external_id=f"stub-{agreement.id}",
         external_url=f"https://stub.invalid/{agreement.id}",
         external_state="pending",
+        generation_snapshot=snapshot,
     )
 
 

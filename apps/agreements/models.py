@@ -10,6 +10,54 @@ from apps.documents.storage import PrivateDocumentStorage
 private_document_storage = PrivateDocumentStorage()
 
 
+class AgreementPDFShadow(TimeStampedModel):
+    """Private comparison output only, never an operative/signed agreement."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Gaida apstrādi"
+        READY = "ready", "Sagatavots"
+        FAILED = "failed", "Neizdevās"
+
+    agreement = models.ForeignKey("Agreement", on_delete=models.CASCADE, related_name="pdf_shadows")
+    primary_external_id = models.CharField(max_length=128)
+    template_version = models.CharField(max_length=64)
+    signing_path = models.CharField(max_length=16)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    snapshot = models.JSONField(default=dict)
+    provenance = models.JSONField(default=dict)
+    file = models.FileField(storage=private_document_storage, upload_to="agreements/shadow/%Y/%m/", max_length=255, blank=True)
+    file_size = models.PositiveIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, blank=True)
+    error_code = models.CharField(max_length=64, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=("agreement", "primary_external_id", "template_version"),
+            name="unique_agreement_pdf_shadow_submission",
+        )]
+        ordering = ("-created_at",)
+        verbose_name = "Līguma PDF salīdzinājums"
+        verbose_name_plural = "Līgumu PDF salīdzinājumi"
+
+    def __str__(self):
+        return f"PDF shadow #{self.pk} / agreement #{self.agreement_id} / {self.status}"
+
+    @property
+    def can_retry(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        # Worker timeout is 60s. Allow recovery after a killed/lost job without
+        # requiring another DocuSeal submission or overwriting a ready artifact.
+        return bool(self.snapshot) and (
+            self.status == self.Status.FAILED or (
+                self.status == self.Status.PENDING
+                and self.updated_at < timezone.now() - timedelta(minutes=5)
+            )
+        )
+
+
 class Agreement(TimeStampedModel):
     """Per-member membership agreement.
 

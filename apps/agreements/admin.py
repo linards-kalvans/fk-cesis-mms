@@ -15,6 +15,7 @@ from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.core.admin_badges import status_badge
 from apps.core.admin_links import admin_link, admin_links
 from apps.integrations import agreement_platform
+from apps.agreements import shadow_admin  # noqa: F401
 
 
 class AgreementSyncHealthFilter(admin.SimpleListFilter):
