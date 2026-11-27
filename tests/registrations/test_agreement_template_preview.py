@@ -1,10 +1,14 @@
 """The parent preview exposes blank template images, never a signing session/PDF."""
 
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import MagicMock, Mock, patch
 
 import pymupdf
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.urls import reverse
+
+LOCAL_TEMPLATE_VERSION = "v1-2026-11"
 
 
 @pytest.fixture
@@ -314,3 +318,492 @@ def test_oversized_blob_is_rejected_and_closed(docuseal_config):
         with pytest.raises(AgreementPlatformConfigError):
             docuseal.fetch_template_documents()
     blob.__exit__.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — backend/version/signing-path preview identity.
+#
+# Proposed interface (tests only; implementation pending):
+#   template_preview.refresh_template_preview(backend=..., signing_path=...)
+#   template_preview.get_preview(backend=..., signing_path=...)
+#   template_preview.preview_failed(backend=..., signing_path=...)
+#   template_preview.enqueue_template_preview(backend=..., signing_path=...)
+#   manifest: /register/agreement-preview/?backend=<b>&signing_path=<p>
+#   image:    /register/agreement-preview/<content-version>/<page>/
+#             ?backend=<b>&signing_path=<p>
+# Legacy no-argument callers keep their current DocuSeal/electronic identity.
+# ---------------------------------------------------------------------------
+
+
+def _manifest(backend="local", signing_path="electronic"):
+    return (
+        reverse("registrations:agreement-template-preview")
+        + f"?backend={backend}&signing_path={signing_path}"
+    )
+
+
+def _query(url):
+    return parse_qs(urlparse(url).query)
+
+
+def _real_renderer():
+    from apps.agreements import pdf_rendering
+
+    return pdf_rendering.render_agreement_pdf
+
+
+def _run_queued_identity(preview_cache, queued_kwargs):
+    """Run the worker for an identity captured while it was configured.
+
+    Failing closed may be raised as a configuration/identity error or be a
+    silent no-op; both are acceptable. Any other exception is a real defect.
+    """
+    try:
+        preview_cache.refresh_template_preview(**queued_kwargs)
+    except (ValueError, ImproperlyConfigured):
+        pass
+
+
+def test_cache_separates_backend_signing_path_and_content(preview_cache, settings):
+    # Each worker invocation uses the backend configured at that moment; a
+    # legitimate mode change never asks one worker to serve another mode.
+    with (
+        patch(
+            "apps.integrations.agreement_platform.fetch_template_documents",
+            return_value=[pdf_bytes(1)],
+        ) as provider,
+        patch(
+            "apps.agreements.template_preview.render_agreement_pdf",
+            side_effect=lambda *args, **kwargs: pdf_bytes(2),
+        ) as renderer,
+    ):
+        settings.AGREEMENT_DOCUMENT_MODE = "docuseal"
+        preview_cache.refresh_template_preview(
+            backend="docuseal", signing_path="electronic"
+        )
+        settings.AGREEMENT_DOCUMENT_MODE = "local"
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="electronic"
+        )
+        preview_cache.refresh_template_preview(backend="local", signing_path="paper")
+
+    docuseal = preview_cache.get_preview(
+        backend="docuseal", signing_path="electronic"
+    )
+    local_electronic = preview_cache.get_preview(
+        backend="local", signing_path="electronic"
+    )
+    local_paper = preview_cache.get_preview(backend="local", signing_path="paper")
+
+    assert docuseal is not None
+    assert local_electronic is not None
+    assert local_paper is not None
+    assert docuseal["pages"] != local_electronic["pages"]
+    assert local_electronic["version"] != local_paper["version"]
+    assert preview_cache.get_preview(backend="docuseal", signing_path="paper") is None
+    provider.assert_called_once()
+    assert renderer.call_count == 2
+
+
+def test_worker_queue_carries_the_validated_identity(preview_cache, settings):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch("django_q.tasks.async_task") as enqueue:
+        preview_cache.enqueue_template_preview(
+            backend="local", signing_path="paper"
+        )
+
+    enqueue.assert_called_once()
+    args, kwargs = enqueue.call_args
+    assert args[0] == "apps.agreements.template_preview.refresh_template_preview"
+    assert kwargs["backend"] == "local"
+    assert kwargs["signing_path"] == "paper"
+    assert kwargs["template_version"] == LOCAL_TEMPLATE_VERSION
+
+
+def test_queued_docuseal_identity_cannot_call_provider_after_switch_to_local(
+    preview_cache, settings
+):
+    """A DocuSeal render queued before local mode takes effect must not fetch."""
+    settings.AGREEMENT_DOCUMENT_MODE = "docuseal"
+    with patch("django_q.tasks.async_task") as enqueue:
+        preview_cache.enqueue_template_preview(signing_path="electronic")
+
+    _args, queued = enqueue.call_args
+    assert queued["backend"] == "docuseal"
+    assert queued["template_version"] == "docuseal"
+
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with (
+        patch(
+            "apps.integrations.agreement_platform.fetch_template_documents"
+        ) as provider,
+        patch(
+            "apps.agreements.template_preview.render_agreement_pdf"
+        ) as renderer,
+    ):
+        _run_queued_identity(preview_cache, queued)
+
+    provider.assert_not_called()
+    renderer.assert_not_called()
+    assert (
+        preview_cache.get_preview(
+            backend="docuseal",
+            signing_path="electronic",
+            template_version="docuseal",
+        )
+        is None
+    )
+    assert not preview_cache.preview_failed(
+        backend="docuseal",
+        signing_path="electronic",
+        template_version="docuseal",
+    )
+
+
+def test_queued_local_identity_cannot_render_after_switch_to_docuseal(
+    preview_cache, settings
+):
+    """A local render queued before legacy mode takes effect must not render."""
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch("django_q.tasks.async_task") as enqueue:
+        preview_cache.enqueue_template_preview(
+            backend="local", signing_path="paper"
+        )
+
+    _args, queued = enqueue.call_args
+    assert queued["backend"] == "local"
+    assert queued["template_version"] == LOCAL_TEMPLATE_VERSION
+
+    settings.AGREEMENT_DOCUMENT_MODE = "docuseal"
+    with (
+        patch(
+            "apps.agreements.template_preview.render_agreement_pdf"
+        ) as renderer,
+        patch(
+            "apps.integrations.agreement_platform.fetch_template_documents"
+        ) as provider,
+    ):
+        _run_queued_identity(preview_cache, queued)
+
+    renderer.assert_not_called()
+    provider.assert_not_called()
+    assert preview_cache.get_preview(backend="local", signing_path="paper") is None
+    assert not preview_cache.preview_failed(backend="local", signing_path="paper")
+
+
+@pytest.mark.django_db
+def test_invalid_configured_mode_fails_closed_over_http(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "unsupported"
+    with patch("django_q.tasks.async_task") as enqueue:
+        manifest = verified_client.get(
+            reverse("registrations:agreement-template-preview")
+        )
+        page = verified_client.get(
+            reverse(
+                "registrations:agreement-template-page", args=["0" * 64, 1]
+            )
+        )
+    assert manifest.status_code == 400
+    assert page.status_code == 400
+    enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("backend", "signing_path"),
+    [("other", "electronic"), ("local", "wet-ink"), ("", "paper")],
+)
+def test_refresh_rejects_unlisted_identity(preview_cache, backend, signing_path):
+    with patch(
+        "apps.integrations.agreement_platform.fetch_template_documents"
+    ) as provider:
+        with pytest.raises(ValueError):
+            preview_cache.refresh_template_preview(
+                backend=backend, signing_path=signing_path
+            )
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("backend", "signing_path", "template_version"),
+    [
+        ("local", "electronic", "shadow-v1-2026-11"),
+        ("local", "paper", "v2-2027-01"),
+        ("docuseal", "electronic", LOCAL_TEMPLATE_VERSION),
+    ],
+)
+def test_worker_job_with_a_mismatched_version_fails_closed_before_render(
+    preview_cache, settings, backend, signing_path, template_version
+):
+    # Isolate the version check: the configured mode matches the queued backend.
+    settings.AGREEMENT_DOCUMENT_MODE = backend
+    with (
+        patch(
+            "apps.integrations.agreement_platform.fetch_template_documents"
+        ) as provider,
+        patch("apps.agreements.template_preview.render_agreement_pdf") as renderer,
+    ):
+        with pytest.raises(ValueError):
+            preview_cache.refresh_template_preview(
+                backend=backend,
+                signing_path=signing_path,
+                template_version=template_version,
+            )
+    provider.assert_not_called()
+    renderer.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_manifest_and_image_urls_carry_the_selected_identity(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=lambda *args, **kwargs: pdf_bytes(2),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="paper"
+        )
+
+    response = verified_client.get(_manifest(signing_path="paper"))
+    assert response.status_code == 200
+    data = response.json()
+    assert data["backend"] == "local"
+    assert data["signing_path"] == "paper"
+    assert data["template_version"] == LOCAL_TEMPLATE_VERSION
+    assert len(data["version"]) == 64
+    assert data["pages"]
+    for url in data["pages"]:
+        query = _query(url)
+        assert query["backend"] == ["local"]
+        assert query["signing_path"] == ["paper"]
+        assert url.startswith(
+            f"/register/agreement-preview/{data['version']}/"
+        )
+        assert "pdf" not in url.lower()
+
+    image = verified_client.get(data["pages"][0])
+    assert image.status_code == 200
+    assert image["Content-Type"] == "image/png"
+    assert image.content.startswith(b"\x89PNG")
+    assert "no-store" in image["Cache-Control"]
+    assert "attachment" not in image.get("Content-Disposition", "")
+
+
+@pytest.mark.django_db
+def test_stale_image_version_is_rejected_after_a_newer_render(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=lambda *args, **kwargs: pdf_bytes(1),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="electronic"
+        )
+    stale = verified_client.get(_manifest()).json()
+    stale_url = stale["pages"][0]
+
+    preview_cache._cache().clear()
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=lambda *args, **kwargs: pdf_bytes(2),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="electronic"
+        )
+    fresh = verified_client.get(_manifest()).json()
+    assert fresh["version"] != stale["version"]
+    assert verified_client.get(fresh["pages"][0]).status_code == 200
+    assert verified_client.get(stale_url).status_code == 404
+
+
+@pytest.mark.django_db
+def test_unlisted_query_identity_is_rejected_without_enqueue(
+    verified_client, preview_cache
+):
+    with patch("django_q.tasks.async_task") as enqueue:
+        for url in (
+            _manifest(backend="other"),
+            _manifest(signing_path="wet-ink"),
+        ):
+            response = verified_client.get(url)
+            assert response.status_code == 400
+    enqueue.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_http_cannot_override_the_configured_backend_or_template_version(
+    verified_client, preview_cache, settings
+):
+    # Defaults to the legacy backend; a caller cannot force local preview.
+    settings.AGREEMENT_DOCUMENT_MODE = "docuseal"
+    with patch("django_q.tasks.async_task") as enqueue:
+        assert verified_client.get(_manifest(backend="local")).status_code == 400
+        assert verified_client.get(_manifest(backend="other")).status_code == 400
+    enqueue.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_http_rejects_a_mismatched_template_version(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch("django_q.tasks.async_task") as enqueue:
+        response = verified_client.get(
+            _manifest() + "&template_version=shadow-v1-2026-11"
+        )
+        assert response.status_code == 400
+    enqueue.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_image_url_cannot_assert_a_different_backend(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=lambda *args, **kwargs: pdf_bytes(1),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="paper"
+        )
+    page_url = verified_client.get(_manifest(signing_path="paper")).json()["pages"][0]
+    tampered = page_url.replace("backend=local", "backend=docuseal")
+    assert verified_client.get(tampered).status_code == 400
+
+
+@pytest.mark.django_db
+def test_pending_and_failure_are_bounded_per_identity(
+    verified_client, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch("django_q.tasks.async_task") as enqueue:
+        assert verified_client.get(_manifest(signing_path="paper")).status_code == 202
+        assert (
+            verified_client.get(_manifest(signing_path="electronic")).status_code
+            == 202
+        )
+    assert enqueue.call_count == 2
+    assert enqueue.call_args_list[0].kwargs["signing_path"] == "paper"
+    assert enqueue.call_args_list[1].kwargs["signing_path"] == "electronic"
+
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=RuntimeError("secret-render-path"),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="paper"
+        )
+
+    failed = verified_client.get(_manifest(signing_path="paper"))
+    assert failed.status_code == 503
+    assert "secret-render-path" not in failed.content.decode()
+    assert "nav pieejams" in failed.json()["message"]
+    assert (
+        verified_client.get(_manifest(signing_path="electronic")).status_code == 202
+    )
+
+
+@pytest.mark.parametrize("payload", [b"not a PDF", pdf_bytes(21)])
+def test_local_render_limits_fail_closed_per_identity(
+    preview_cache, settings, payload
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        return_value=payload,
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="paper"
+        )
+
+    assert preview_cache.get_preview(backend="local", signing_path="paper") is None
+    assert preview_cache.preview_failed(backend="local", signing_path="paper")
+    assert not preview_cache.preview_failed(
+        backend="local", signing_path="electronic"
+    )
+
+
+@pytest.mark.django_db
+def test_anonymous_and_inactive_parents_cannot_select_a_preview_identity(
+    client, verified_client, parent_account, preview_cache, settings
+):
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    with patch(
+        "apps.agreements.template_preview.render_agreement_pdf",
+        side_effect=lambda *args, **kwargs: pdf_bytes(1),
+    ):
+        preview_cache.refresh_template_preview(
+            backend="local", signing_path="paper"
+        )
+    pages = verified_client.get(_manifest(signing_path="paper")).json()["pages"]
+
+    assert client.get(_manifest(signing_path="paper")).status_code == 404
+    assert client.get(pages[0]).status_code == 404
+
+    parent_account.is_active = False
+    parent_account.save()
+    assert verified_client.get(_manifest(signing_path="paper")).status_code == 404
+    assert verified_client.get(pages[0]).status_code == 404
+
+
+@pytest.mark.django_db
+def test_local_blank_preview_is_real_png_only_without_pii_or_provider(
+    preview_cache, settings
+):
+    from apps.agreements.models import Agreement
+
+    settings.AGREEMENT_DOCUMENT_MODE = "local"
+    render = _real_renderer()
+    with (
+        patch(
+            "apps.agreements.template_preview.render_agreement_pdf", side_effect=render
+        ) as renderer,
+        patch(
+            "apps.integrations.agreement_platform.fetch_template_documents"
+        ) as provider_fetch,
+        patch(
+            "apps.integrations.agreement_platform.create_submission"
+        ) as provider_create,
+    ):
+        for signing_path in ("paper", "electronic"):
+            preview_cache.refresh_template_preview(
+                backend="local", signing_path=signing_path
+            )
+
+    provider_fetch.assert_not_called()
+    provider_create.assert_not_called()
+    assert not Agreement.objects.exists()
+
+    paper = preview_cache.get_preview(backend="local", signing_path="paper")
+    electronic = preview_cache.get_preview(
+        backend="local", signing_path="electronic"
+    )
+    assert paper is not None
+    assert electronic is not None
+    assert paper["pages"]
+    assert electronic["pages"]
+    assert all(page.startswith(b"\x89PNG") for page in paper["pages"])
+    assert all(page.startswith(b"\x89PNG") for page in electronic["pages"])
+    assert paper["pages"] != electronic["pages"]
+    assert paper["version"] != electronic["version"]
+    assert paper["template_version"] == LOCAL_TEMPLATE_VERSION
+    assert electronic["template_version"] == LOCAL_TEMPLATE_VERSION
+
+    snapshots = [call.args[0] for call in renderer.call_args_list]
+    assert [snapshot["signing_path"] for snapshot in snapshots] == [
+        "paper",
+        "electronic",
+    ]
+    for snapshot in snapshots:
+        assert snapshot["fields"]
+        assert all(value == "" for value in snapshot["fields"].values())
+    assert [call.kwargs["template_version"] for call in renderer.call_args_list] == [
+        LOCAL_TEMPLATE_VERSION,
+        LOCAL_TEMPLATE_VERSION,
+    ]
