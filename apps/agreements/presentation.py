@@ -24,6 +24,13 @@ def agreement_status_copy(agreement: Agreement | None) -> str | None:
     if state == Agreement.State.GENERATED:
         return "Līgums sagatavots, drīzumā saņemsiet to parakstīšanai."
     if state == Agreement.State.SENT:
+        if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+            # Local rows are handed over manually; no provider signing email
+            # is ever sent, so do not claim one.
+            return (
+                "Līgums sagatavots parakstīšanai. "
+                "Lūdzu, parakstiet to un iesniedziet klubam."
+            )
         if agreement.signing_path == Agreement.SigningPath.ELECTRONIC:
             return "Līgums nosūtīts uz e-pastu parakstīšanai."
         return "Klubs sazināsies ar Jums par līguma parakstīšanu."

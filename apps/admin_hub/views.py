@@ -669,6 +669,23 @@ def agreement_view(request, pk: int):
         agreement, objects.billing_record
     )
 
+    # Local generation status is read-only here; every mutation stays on the
+    # registered admin review-action endpoint (the Hub is a skin, not a second
+    # business-logic layer).
+    from apps.agreements.models import GeneratedAgreementDocument
+    from apps.agreements.document_generation import (
+        local_document_control_state,
+    )
+
+    local_document = GeneratedAgreementDocument.objects.filter(
+        agreement=agreement
+    ).first()
+    local_controls = local_document_control_state(agreement, local_document)
+    local_ready = (
+        local_document is not None
+        and local_document.status == GeneratedAgreementDocument.Status.READY
+    )
+
     return render(
         request,
         "admin_hub/agreement.html",
@@ -682,10 +699,21 @@ def agreement_view(request, pk: int):
             "steps": steps,
             "steps_done": done,
             "steps_total": total,
-            # DocuSeal writes external_id asynchronously, so it is blank
-            # whenever the worker is behind or the submission failed. Without
-            # it the download view redirects instead of serving a file.
-            "agreement_document_ready": bool(agreement.external_id),
+            # Legacy DocuSeal writes external_id asynchronously, so it is blank
+            # whenever the worker is behind or the submission failed. Local
+            # rows instead need their own ready generated document; a stray
+            # legacy id on a local row is not evidence of a downloadable
+            # artifact. Without the backend's own signal the download view
+            # redirects instead of serving a file.
+            "agreement_document_ready": (
+                local_ready
+                if agreement.document_backend
+                == Agreement.DocumentBackend.LOCAL
+                else bool(agreement.external_id)
+            ),
+            "local_document": local_document,
+            "local_can_generate": local_controls["generate"],
+            "local_can_retry": local_controls["retry"],
             "has_signed_artifact": bool(agreement.signed_artifact),
             # Read step 6's own state rather than recomputing its rule here.
             # The seven-step pipeline no longer has a standalone plan step;
