@@ -9,6 +9,9 @@ from apps.documents.storage import PrivateDocumentStorage
 
 private_document_storage = PrivateDocumentStorage()
 
+# Bound for generated agreement artifacts (render output and ready reads).
+MAX_GENERATED_DOCUMENT_BYTES = 20 * 1024 * 1024
+
 
 class AgreementPDFShadow(TimeStampedModel):
     """Private comparison output only, never an operative/signed agreement."""
@@ -80,6 +83,10 @@ class Agreement(TimeStampedModel):
         ELECTRONIC = "electronic", "Elektroniski"
         PAPER = "paper", "Ar roku, papīra dokuments"
 
+    class DocumentBackend(models.TextChoices):
+        DOCUSEAL = "docuseal", "DocuSeal"
+        LOCAL = "local", "Lokāli ģenerēts PDF"
+
     member = models.ForeignKey(
         "members.Member",
         on_delete=models.CASCADE,
@@ -95,6 +102,14 @@ class Agreement(TimeStampedModel):
         max_length=16,
         choices=SigningPath.choices,
         default=SigningPath.ELECTRONIC,
+    )
+    # Durable per-row document routing. Chosen once at creation from
+    # ``settings.AGREEMENT_DOCUMENT_MODE``; a later mode change affects only
+    # newly created rows. Immutable after creation — see ``save()``.
+    document_backend = models.CharField(
+        max_length=16,
+        choices=DocumentBackend.choices,
+        default=DocumentBackend.DOCUSEAL,
     )
     agreement_number = models.CharField(
         max_length=32,
@@ -159,6 +174,30 @@ class Agreement(TimeStampedModel):
             ),
         ]
 
+    def save(self, *args, **kwargs) -> None:
+        """Write ``document_backend`` once, at creation.
+
+        Existing routing must survive stale ORM instances, admin edits and a
+        later ``AGREEMENT_DOCUMENT_MODE`` change. When a save touches this field
+        on an existing row, the persisted value wins: a full save silently keeps
+        it (no divergent routing is written), while an explicit
+        ``update_fields=["document_backend", ...]`` write fails loudly.
+        """
+        if self.pk is not None:
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or "document_backend" in update_fields:
+                persisted = (
+                    type(self)
+                    .objects.filter(pk=self.pk)
+                    .values_list("document_backend", flat=True)
+                    .first()
+                )
+                if persisted is not None and persisted != self.document_backend:
+                    if update_fields is not None:
+                        raise ValueError("document_backend is immutable")
+                    self.document_backend = persisted
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"Agreement(member={self.member_id}, state={self.state})"
 
@@ -180,6 +219,71 @@ class Agreement(TimeStampedModel):
             args=[application.id],
         )
         return url
+
+
+class GeneratedAgreementDocument(TimeStampedModel):
+    """Private, immutable locally generated agreement PDF.
+
+    One durable async-job result per agreement. ``snapshot`` holds the frozen
+    render input only while the document is pending/failed; it is cleared on a
+    successful publication so a retry can never read changed guardian data.
+    The snapshot is deliberately never exposed through admin, audit metadata,
+    logs or exports.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Gaida apstrādi"
+        READY = "ready", "Sagatavots"
+        FAILED = "failed", "Neizdevās"
+
+    class ErrorCode:
+        """Generic, PII-free codes shared by services and the worker."""
+
+        GENERATION_UNAVAILABLE = "document_generation_unavailable"
+        QUEUE_FAILED = "queue_failed"
+        VERSION_MISMATCH = "version_mismatch"
+        RENDER_FAILED = "render_failed"
+        INVALID_OUTPUT = "invalid_output"
+        NOT_RETRYABLE = "not_retryable"
+        NOT_READY = "document_not_ready"
+        UNAVAILABLE = "document_unavailable"
+        INTEGRITY = "document_integrity"
+
+    agreement = models.OneToOneField(
+        Agreement,
+        on_delete=models.CASCADE,
+        related_name="generated_document",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    template_version = models.CharField(max_length=64)
+    signing_path = models.CharField(max_length=16)
+    snapshot = models.JSONField(default=dict)
+    provenance = models.JSONField(default=dict)
+    file = models.FileField(
+        storage=private_document_storage,
+        upload_to="agreements/generated/%Y/%m/",
+        max_length=255,
+        blank=True,
+    )
+    size_bytes = models.PositiveIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, blank=True, default="")
+    ready_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "Ģenerētais līguma dokuments"
+        verbose_name_plural = "Ģenerētie līguma dokumenti"
+
+    def __str__(self) -> str:
+        return (
+            f"GeneratedAgreementDocument(agreement={self.agreement_id}, "
+            f"state={self.status})"
+        )
 
 
 class AgreementLifecycleEvent(models.Model):

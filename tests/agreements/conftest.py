@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 
@@ -33,7 +35,7 @@ def agreement_member(db, agreement_guardian):
     return Member.objects.create(
         full_name="Jānis Bērziņš",
         personal_id="151210-22222",
-        birth_date="2015-12-10",
+        birth_date=date(2015, 12, 10),
         guardian=agreement_guardian,
         training_group=None,
     )

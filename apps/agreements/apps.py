@@ -9,4 +9,5 @@ class AgreementsConfig(AppConfig):
     label = "agreements"
 
     def ready(self):
+        from apps.agreements import document_generation  # noqa: F401
         from apps.agreements import shadow  # noqa: F401
