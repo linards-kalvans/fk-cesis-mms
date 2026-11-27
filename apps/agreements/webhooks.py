@@ -36,7 +36,12 @@ def docuseal_webhook(request: HttpRequest) -> HttpResponse:
     if not external_id:
         return HttpResponse(status=200)
 
-    agreement = Agreement.objects.filter(external_id=external_id).first()
+    # Legacy-only lookup: a stray external_id on a local row must never drive
+    # a provider-originated signing transition.
+    agreement = Agreement.objects.filter(
+        external_id=external_id,
+        document_backend=Agreement.DocumentBackend.DOCUSEAL,
+    ).first()
     if agreement is None:
         logger.info("DocuSeal webhook for unknown submission %s", external_id)
         return HttpResponse(status=200)

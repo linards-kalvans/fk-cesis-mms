@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import send_mail
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, transaction
@@ -32,6 +33,102 @@ def get_current_agreement(member: Member) -> Agreement | None:
 
 
 _MAX_NUMBER_ATTEMPTS = 5
+
+_ALLOWED_DOCUMENT_BACKENDS = frozenset(
+    {Agreement.DocumentBackend.DOCUSEAL, Agreement.DocumentBackend.LOCAL}
+)
+
+
+def _selected_document_backend() -> str:
+    """Return the configured backend for newly created rows, or fail closed.
+
+    Called only on creation paths. An unsupported value must never fall back to
+    a default and must never touch an existing row, so it raises
+    ``ImproperlyConfigured`` before any write.
+    """
+    mode = getattr(settings, "AGREEMENT_DOCUMENT_MODE", None)
+    if mode not in _ALLOWED_DOCUMENT_BACKENDS:
+        raise ImproperlyConfigured("invalid AGREEMENT_DOCUMENT_MODE")
+    return cast(str, mode)
+
+
+def _is_local_agreement(agreement: Agreement) -> bool:
+    backend: str = agreement.document_backend
+    return backend == str(Agreement.DocumentBackend.LOCAL)
+
+
+def _require_ready_local_pdf(agreement: Agreement) -> None:
+    """Fail closed unless the local agreement has verified ready bytes.
+
+    Missing row, pending/failed render, missing file, size/hash mismatch and
+    non-PDF bytes all raise ``ValueError`` before any lifecycle mutation. The
+    reader never renders or falls back to a provider.
+    """
+    from apps.agreements.document_generation import read_agreement_document_bytes
+
+    read_agreement_document_bytes(agreement)
+
+
+def _require_frozen_path_matches(agreement: Agreement) -> None:
+    """Reject a local transition when the frozen render path has diverged."""
+    from apps.agreements.models import GeneratedAgreementDocument
+
+    frozen_path = (
+        GeneratedAgreementDocument.objects.filter(agreement_id=agreement.pk)
+        .values_list("signing_path", flat=True)
+        .first()
+    )
+    if frozen_path is not None and frozen_path != agreement.signing_path:
+        raise ValueError("signing path mismatch")
+
+
+def _docuseal_creation_enabled() -> bool:
+    enabled: object = getattr(
+        settings, "AGREEMENT_DOCUSEAL_CREATE_ENABLED", True
+    )
+    return enabled is not False
+
+
+def _legacy_new_session_blocked(agreement: Agreement) -> bool:
+    """True when the cutoff must stop a legacy row from opening a session.
+
+    Only DocuSeal rows that have not already issued a submission are blocked,
+    so issued sessions keep syncing and completing.
+    """
+    return (
+        agreement.document_backend == Agreement.DocumentBackend.DOCUSEAL
+        and not _docuseal_creation_enabled()
+        and not agreement.external_id
+    )
+
+
+def _signing_path_is_frozen(agreement: Agreement) -> bool:
+    """A frozen local render input locks the signing path.
+
+    The row exists from the explicit ``Sagatavot PDF`` request onward, so any
+    pending/ready/failed document freezes the path until void/replacement.
+    Callers that intend to write must hold the agreement row lock so this
+    check cannot race the generation freeze.
+    """
+    from apps.agreements.models import GeneratedAgreementDocument
+
+    document_exists: bool = GeneratedAgreementDocument.objects.filter(
+        agreement_id=agreement.pk
+    ).exists()
+    return document_exists
+
+
+def is_signing_path_frozen(agreement: Agreement) -> bool:
+    """Public, read-only check for admin form validation."""
+    return _signing_path_is_frozen(agreement)
+
+
+def _lock_agreement(agreement: Agreement) -> Agreement:
+    """Lock only the agreement row (never joined rows) for a path write."""
+    return cast(
+        Agreement,
+        Agreement.objects.select_for_update(of=("self",)).get(pk=agreement.pk),
+    )
 
 
 def _agreement_number_prefix() -> str:
@@ -120,6 +217,10 @@ def create_agreement_for_member(
     current = get_current_agreement(member)
     if current is not None and current.state != Agreement.State.VOID:
         return current
+
+    # Resolved only on the creation path: the configuration selects future
+    # rows and must never be consulted (or fail) for an idempotent return.
+    document_backend = _selected_document_backend()
     if current is not None and current.state == Agreement.State.VOID:
         current.is_current = False
         current.save(update_fields=["is_current"])
@@ -153,6 +254,7 @@ def create_agreement_for_member(
             generated_at=timezone.now(),
             billing_plan=default_plan,
             first_billing_month=first_billing_month,
+            document_backend=document_backend,
         )
         _assign_agreement_number(agreement)
     return cast(Agreement, agreement)
@@ -168,13 +270,27 @@ def mark_agreement_sent(
     if agreement.state != Agreement.State.GENERATED:
         raise ValueError(f"cannot mark sent from state {agreement.state}")
 
-    # Electronic requires a guardian email to send the signing request.
-    # Without one, degrade to the paper (staff-managed) path before sending.
-    if (
-        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
-        and not agreement.member.guardian.email
-    ):
-        set_signing_path(agreement, str(Agreement.SigningPath.PAPER), actor)
+    is_local = _is_local_agreement(agreement)
+    if is_local:
+        # Handover always needs the staff-prepared, verified PDF.
+        _require_ready_local_pdf(agreement)
+        _require_frozen_path_matches(agreement)
+        if (
+            agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+            and not agreement.member.guardian.email
+        ):
+            # A frozen electronic local path never silently degrades to paper.
+            raise ValueError("guardian email required for electronic agreement")
+    else:
+        if _legacy_new_session_blocked(agreement):
+            raise ValueError("docuseal creation disabled")
+        # Electronic requires a guardian email to send the signing request.
+        # Legacy behaviour degrades to the paper (staff-managed) path.
+        if (
+            agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+            and not agreement.member.guardian.email
+        ):
+            set_signing_path(agreement, str(Agreement.SigningPath.PAPER), actor)
 
     agreement.state = Agreement.State.SENT
     agreement.sent_at = timezone.now()
@@ -186,6 +302,10 @@ def mark_agreement_sent(
         metadata={"signing_path": agreement.signing_path},
     )
     _render_and_send_agreement_email(agreement, template_name="sent")
+
+    if is_local:
+        # Local rows never contact DocuSeal, even after a successful handover.
+        return agreement
 
     # Every sent agreement (electronic OR paper) gets a DocuSeal submission so
     # staff can preview/download the generated PDF through the shared proxy.
@@ -229,6 +349,15 @@ def mark_agreement_signed(
         raise ValueError(
             f"cannot mark signed from state {agreement.state}"
         )
+    if _is_local_agreement(agreement):
+        # Explicit staff confirmation still requires the prepared PDF and a
+        # real uploaded signed artifact; upload alone never signs.
+        _require_ready_local_pdf(agreement)
+        _require_frozen_path_matches(agreement)
+        if not agreement.signed_artifact:
+            raise ValueError("signed artifact required")
+    elif _legacy_new_session_blocked(agreement):
+        raise ValueError("docuseal creation disabled")
     if agreement.billing_plan_id is None:
         raise ValueError("billing plan required")
     if not agreement.first_billing_month:
@@ -293,7 +422,7 @@ def void_agreement(
     )
     _render_and_send_agreement_email(agreement, template_name="void")
 
-    if agreement.external_id:
+    if agreement.external_id and not _is_local_agreement(agreement):
         from apps.integrations.tasks import enqueue_archive_agreement_submission
 
         enqueue_archive_agreement_submission(agreement.external_id)
@@ -323,15 +452,41 @@ def set_signing_path(
     """Change signing_path at any state. Bidirectional sync: also writes back
     to the source application's ``preferred_agreement_signing`` so the two
     fields never drift. No email. Idempotent on same value (no writes when
-    the agreement is already at the desired path)."""
+    the agreement is already at the desired path).
+
+    The check-and-write runs under the agreement row lock, in the same order
+    as the generation freeze (agreement first, then application), so a freeze
+    committing between check and write can never leave the frozen render path
+    and the agreement path divergent.
+    """
     if agreement.signing_path == signing_path:
         return agreement
-    agreement.signing_path = signing_path
-    agreement.save(update_fields=["signing_path"])
-    application = getattr(agreement.member, "source_application", None)
-    if application is not None and application.preferred_agreement_signing != signing_path:
-        application.preferred_agreement_signing = signing_path
-        application.save(update_fields=["preferred_agreement_signing"])
+    with transaction.atomic():
+        locked = _lock_agreement(agreement)
+        if locked.signing_path == signing_path:
+            agreement.signing_path = locked.signing_path
+            return agreement
+        if _signing_path_is_frozen(locked):
+            raise ValueError("signing path is frozen")
+        locked.signing_path = signing_path
+        locked.save(update_fields=["signing_path", "updated_at"])
+        application = getattr(locked.member, "source_application", None)
+        if (
+            application is not None
+            and application.preferred_agreement_signing != signing_path
+        ):
+            from apps.registrations.models import RegistrationApplication
+
+            locked_application = (
+                RegistrationApplication.objects.select_for_update().get(
+                    pk=application.pk
+                )
+            )
+            locked_application.preferred_agreement_signing = signing_path
+            locked_application.save(
+                update_fields=["preferred_agreement_signing", "updated_at"]
+            )
+        agreement.signing_path = signing_path
     return agreement
 
 
@@ -443,16 +598,21 @@ def sync_application_signing_path_to_agreement(application) -> None:
     member = getattr(application, "approved_member", None)
     if member is None:
         return
-    agreement = get_current_agreement(member)
-    if agreement is None:
-        return
-    desired = application.preferred_agreement_signing
-    if not desired:
-        return
-    if agreement.signing_path == desired:
-        return
-    agreement.signing_path = desired
-    agreement.save(update_fields=["signing_path"])
+    with transaction.atomic():
+        agreement = get_current_agreement(member)
+        if agreement is None:
+            return
+        locked = _lock_agreement(agreement)
+        desired = application.preferred_agreement_signing
+        if not desired:
+            return
+        if locked.signing_path == desired:
+            return
+        if _signing_path_is_frozen(locked):
+            raise ValueError("signing path is frozen")
+        locked.signing_path = desired
+        locked.save(update_fields=["signing_path", "updated_at"])
+        agreement.signing_path = desired
 
 
 def _actor_label(actor) -> str:
@@ -496,6 +656,10 @@ def start_material_amendment(
     if agreement.state != Agreement.State.SIGNED:
         raise ValueError("material amendment requires a signed agreement")
 
+    # Fail closed before mutating either row: an unsupported mode must not
+    # supersede the signed agreement or create a replacement.
+    document_backend = _selected_document_backend()
+
     new_path = signing_path or agreement.signing_path
     with transaction.atomic():
         now = timezone.now()
@@ -522,6 +686,7 @@ def start_material_amendment(
             generated_at=now,
             billing_plan=agreement.billing_plan,
             first_billing_month=agreement.first_billing_month,
+            document_backend=document_backend,
         )
         _assign_agreement_number(new_agreement)
 
@@ -703,10 +868,12 @@ def _render_and_send_discontinued_email(
 
 
 def _should_send_email(agreement: Agreement, template_name: str) -> bool:
-    """Electronic path suppresses `sent`/`signed` (DocuSeal notifies the
-    signer). `void` always sends; paper sends on all transitions."""
+    """Electronic legacy suppresses `sent`/`signed` (DocuSeal notifies the
+    signer). Local rows always send the club-owned notice. `void` always
+    sends; paper sends on all transitions."""
     if (
-        agreement.signing_path == Agreement.SigningPath.ELECTRONIC
+        not _is_local_agreement(agreement)
+        and agreement.signing_path == Agreement.SigningPath.ELECTRONIC
         and template_name in {"sent", "signed"}
     ):
         return False
@@ -727,6 +894,7 @@ def _render_and_send_agreement_email(
         "guardian_display_name": guardian.display_name,
         "member_full_name": member.full_name,
         "signing_path": agreement.signing_path,
+        "document_backend": agreement.document_backend,
         "void_reason": agreement.void_reason,
         "portal_url": portal_url,
     }

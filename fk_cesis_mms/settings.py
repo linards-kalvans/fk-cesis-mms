@@ -193,6 +193,15 @@ OCR_ENCRYPTION_KEY = os.environ.get("OCR_ENCRYPTION_KEY", "")
 
 # Agreement-platform integration (P5 Slice D — DocuSeal self-hosted).
 AGREEMENT_PROVIDER_MODE = os.environ.get("AGREEMENT_PROVIDER_MODE") or "stub"
+# Durable route for NEW agreements only: "docuseal" (legacy) or "local".
+# Existing rows keep the backend they were created with. An unsupported value
+# fails closed at creation time rather than silently defaulting.
+AGREEMENT_DOCUMENT_MODE = os.environ.get("AGREEMENT_DOCUMENT_MODE") or "docuseal"
+# Explicit cutoff for NEW DocuSeal sessions. Defaults open to preserve legacy
+# behaviour; setting it false only stops rows without an issued submission.
+AGREEMENT_DOCUSEAL_CREATE_ENABLED = (
+    os.environ.get("AGREEMENT_DOCUSEAL_CREATE_ENABLED", "true").lower() == "true"
+)
 AGREEMENT_PDF_SHADOW_ENABLED = os.environ.get("AGREEMENT_PDF_SHADOW_ENABLED", "false").lower() == "true"
 DOCUSEAL_API_URL = os.environ.get("DOCUSEAL_API_URL", "")
 DOCUSEAL_API_KEY = os.environ.get("DOCUSEAL_API_KEY", "")

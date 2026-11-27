@@ -210,6 +210,18 @@ def _mark_agreement_failed(agreement: Agreement, code: str) -> None:
     )
 
 
+def _docuseal_create_enabled() -> bool:
+    enabled: object = getattr(
+        settings, "AGREEMENT_DOCUSEAL_CREATE_ENABLED", True
+    )
+    return enabled is not False
+
+
+def _local_agreement(agreement: Agreement) -> bool:
+    backend: str = agreement.document_backend
+    return backend == str(Agreement.DocumentBackend.LOCAL)
+
+
 def enqueue_create_agreement_submission(
     agreement_id: int, send_email: bool = True
 ) -> None:
@@ -221,7 +233,21 @@ def enqueue_create_agreement_submission(
     as a positional argument to ``async_task`` so the job body picks it up
     by position, matching the ``create_agreement_submission(agreement_id,
     send_email=...)`` signature.
+
+    Local rows and the closed cutoff produce no queued work at all.
     """
+    try:
+        agreement = Agreement.objects.only(
+            "document_backend", "external_id"
+        ).get(pk=agreement_id)
+    except Agreement.DoesNotExist:
+        # Preserve the historical enqueue contract: a missing row is the
+        # worker's concern, not the caller's.
+        agreement = None
+    if agreement is not None and (
+        _local_agreement(agreement) or not _docuseal_create_enabled()
+    ):
+        return
     try:
         async_task(
             "apps.integrations.tasks.create_agreement_submission",
@@ -233,6 +259,14 @@ def enqueue_create_agreement_submission(
 
 
 def enqueue_sync_agreement_submission(agreement_id: int) -> None:
+    try:
+        agreement = Agreement.objects.only("document_backend").get(
+            pk=agreement_id
+        )
+    except Agreement.DoesNotExist:
+        agreement = None
+    if agreement is not None and _local_agreement(agreement):
+        return
     try:
         async_task(
             "apps.integrations.tasks.sync_agreement_submission", agreement_id
@@ -255,6 +289,8 @@ def create_agreement_submission(agreement_id: int, send_email: bool = True) -> N
             pk=agreement_id
         )
     except Agreement.DoesNotExist:
+        return
+    if _local_agreement(agreement) or not _docuseal_create_enabled():
         return
     try:
         result = agreement_platform.create_submission(
@@ -296,6 +332,8 @@ def sync_agreement_submission(agreement_id: int) -> None:
     try:
         agreement = Agreement.objects.get(pk=agreement_id)
     except Agreement.DoesNotExist:
+        return
+    if _local_agreement(agreement):
         return
     if not agreement.external_id:
         return

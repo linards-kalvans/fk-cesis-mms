@@ -134,6 +134,14 @@ def _mode() -> str:
 
 
 def create_submission(agreement, send_email: bool = True) -> SubmissionResult:
+    # Durable backend boundary: local rows never enter a provider pipeline,
+    # and the cutoff stops new DocuSeal sessions at the last possible boundary.
+    if getattr(agreement, "document_backend", "docuseal") != "docuseal":
+        raise AgreementPlatformConfigError(
+            "local agreements do not use a provider submission"
+        )
+    if not bool(getattr(settings, "AGREEMENT_DOCUSEAL_CREATE_ENABLED", True)):
+        raise AgreementPlatformConfigError("docuseal creation is disabled")
     mode = _mode()
     if mode == "stub":
         return _stub_create(agreement)
