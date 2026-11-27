@@ -5,7 +5,7 @@ Hosts the document-preview classification and per-kind panel builder
 which assembles the full panels + agreement + training-group context.
 """
 
-from django.db.models import F
+from django.db.models import F, Q
 from django.urls import reverse
 
 from apps.agreements.messages import get_agreement_error_message
@@ -177,18 +177,29 @@ def build_review_context(
             agreement.lifecycle_events.order_by("created_at")
         )
 
-    # All non-empty-external-id agreements for the approved member —
-    # current + history (generated, sent, signed, void, superseded,
-    # discontinued). Ordered most-recent-first with pk as the stable tie
-    # breaker. Powers the shared admin/_agreement_list.html partial so
-    # staff can preview/download any document that ever had a DocuSeal
-    # submission. The filter is non-empty external_id only — agreements
-    # that never reached DocuSeal are excluded.
+    # All agreements for the approved member that have a servable document —
+    # non-empty DocuSeal external_id (legacy) or a local generated-document row
+    # (ready, pending or failed) — current + history (generated, sent, signed,
+    # void, superseded, discontinued). Ordered most-recent-first with pk as the
+    # stable tie breaker. Powers the shared admin/_agreement_list.html partial
+    # so staff can preview/download any document that ever reached a backend.
     document_links: list[dict] = []
+    local_document = None
+    if agreement is not None:
+        from apps.agreements.models import GeneratedAgreementDocument
+
+        local_document = GeneratedAgreementDocument.objects.filter(
+            agreement=agreement
+        ).first()
+
+    # One shared policy decides whether the local-PDF controls are offered.
+    from apps.agreements.document_generation import local_document_control_state
+
+    local_controls = local_document_control_state(agreement, local_document)
     if member is not None:
         history_agreements = list(
             Agreement.objects.filter(member=member)
-            .exclude(external_id="")
+            .filter(Q(external_id__gt="") | Q(generated_document__isnull=False))
             .order_by("-generated_at", "-pk")
         )
         if history_agreements:
@@ -281,6 +292,9 @@ def build_review_context(
         "current_inactive_group": current_inactive_group,
         "agreement": agreement,
         "agreement_error_message": agreement_error_message,
+        "local_document": local_document,
+        "local_can_generate": local_controls["generate"],
+        "local_can_retry": local_controls["retry"],
         "medical_permit_status": medical_permit_status_value,
         "medical_permit_status_label": medical_permit_status_label(
             medical_permit_status_value

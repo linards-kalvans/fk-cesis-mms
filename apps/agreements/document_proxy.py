@@ -1,10 +1,16 @@
 """Shared server-side document proxy for the agreements app.
 
-Converts an ``Agreement``'s DocuSeal-generated PDF into a
-``StreamingHttpResponse`` with the requested ``Content-Disposition``. The
-platform stream is the only source of bytes — the DocuSeal document URL is
-fetched once on the server and never exposed in the rendered HTML or
-persisted in the database.
+Serves an ``Agreement``'s document as a ``StreamingHttpResponse`` with the
+requested ``Content-Disposition``. Routing is durable per row:
+
+* ``local`` rows stream the immutable private PDF published by the local
+  generation worker — verified size/hash, never a provider call and never an
+  on-demand render;
+* ``docuseal`` rows keep the existing server-side provider proxy (the DocuSeal
+  document URL is fetched once on the server and never exposed in the rendered
+  HTML or persisted in the database).
+
+Three admin surfaces share this helper:
 
 Three admin surfaces share this helper:
 
@@ -30,7 +36,6 @@ from django.utils.text import slugify
 
 from apps.agreements.models import Agreement
 from apps.integrations import agreement_platform
-
 
 _FALLBACK_FILENAME = "līgums.pdf"
 _FALLBACK_CONTENT_TYPE = "application/pdf"
@@ -69,23 +74,80 @@ _Disposition = Literal["inline", "attachment"]
 _ALLOWED_DISPOSITIONS = ("inline", "attachment")
 
 
+def audit_local_document_access(
+    agreement: Agreement, *, request, disposition: str
+) -> None:
+    """Record one redacted staff view of a locally generated PDF.
+
+    ``inline`` is a preview, ``attachment`` is a download — mirroring the
+    documents-admin audit split. Only identifiers, backend and disposition
+    are stored — never the stored filename, frozen snapshot, personal data or
+    document contents.
+    """
+    from apps.core.audit import record_audit_event
+    from apps.core.models import AuditEvent
+
+    action = (
+        AuditEvent.Action.DOCUMENT_PREVIEWED
+        if disposition == "inline"
+        else AuditEvent.Action.DOCUMENT_DOWNLOADED
+    )
+    record_audit_event(
+        action=str(action),
+        request=request,
+        target=agreement,
+        metadata={"document_backend": "local", "disposition": disposition},
+    )
+
+
+def _build_local_document_response(
+    agreement: Agreement, *, disposition: _Disposition
+) -> StreamingHttpResponse:
+    """Stream a ready local PDF from private storage.
+
+    Missing, unverifiable or corrupt bytes raise ``ValueError``; the caller
+    must surface that as an error. This path never calls a provider and never
+    triggers regeneration.
+    """
+    # Imported lazily: the generation module pulls in the worker/rendering
+    # stack, which the provider proxy does not need.
+    from apps.agreements.document_generation import (
+        get_ready_document,
+        read_ready_document_bytes,
+    )
+
+    document = get_ready_document(agreement)
+    data = read_ready_document_bytes(document)
+
+    response = StreamingHttpResponse(iter((data,)), content_type=_FALLBACK_CONTENT_TYPE)
+    response["Content-Disposition"] = content_disposition_header(
+        disposition == "attachment", download_filename(agreement)
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    # Inline preview is intentionally embeddable only by this same origin
+    # (the admin change page iframe). A forced download never needs framing.
+    response["X-Frame-Options"] = (
+        "SAMEORIGIN" if disposition == "inline" else "DENY"
+    )
+    return response
+
+
 def build_agreement_document_response(
     agreement: Agreement,
     *,
     disposition: _Disposition,
 ) -> StreamingHttpResponse:
-    """Return a streaming response for the agreement's generated PDF.
+    """Return a streaming response for the agreement's document.
 
     ``disposition`` must be one of ``"inline"`` (iframe) or ``"attachment"``
     (forced download); any other value raises ``Http404`` so a typo'd query
     string cannot accidentally stream the PDF as plain ``text/html``.
 
-    The platform stream is the single source of bytes. The DocuSeal URL
-    never reaches the browser: ``stream_submission_document`` fetches the
-    selected document server-side and yields ``%PDF-`` chunks through
-    Django. The HTTP fallback (empty stream filename / content type) only
-    fires when the provider returns a malformed ``DocumentStream``; in
-    practice both fields are populated by the real provider.
+    Local rows serve the immutable private PDF and fail closed on missing or
+    corrupt bytes. Legacy ``docuseal`` rows keep the provider stream as their
+    single source of bytes; a stray local ``external_id`` never reaches the
+    provider because routing is decided by ``document_backend``.
 
     The fallback filename ``līgums.pdf`` is the only place where the
     Latvian diacritic lives outside the database, so the
@@ -100,6 +162,11 @@ def build_agreement_document_response(
     """
     if disposition not in _ALLOWED_DISPOSITIONS:
         raise Http404
+
+    if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+        return _build_local_document_response(
+            agreement, disposition=disposition
+        )
 
     stream = agreement_platform.stream_submission_document(agreement.external_id)
     # Our own descriptive name, not the provider's agreement-<external id>.pdf.

@@ -7,9 +7,12 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import path
 from django.utils.html import format_html
 
-from apps.agreements.document_proxy import build_agreement_document_response
+from apps.agreements.document_proxy import (
+    audit_local_document_access,
+    build_agreement_document_response,
+)
 from apps.agreements.messages import get_agreement_error_message
-from apps.agreements.models import Agreement
+from apps.agreements.models import Agreement, GeneratedAgreementDocument
 from apps.agreements.presentation import build_agreement_document_links
 from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.core.admin_badges import status_badge
@@ -145,6 +148,30 @@ class AgreementAdmin(admin.ModelAdmin):
             raise PermissionDenied
         disposition = request.GET.get("disposition", "inline")
         agreement = get_object_or_404(Agreement, pk=object_id)
+        if disposition not in {"inline", "attachment"}:
+            raise Http404
+        if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+            # Local rows serve only their immutable private bytes; a stray
+            # external_id never reaches the provider.
+            try:
+                response = build_agreement_document_response(
+                    agreement, disposition=disposition
+                )
+            except Http404:
+                raise
+            except ValueError:
+                self.message_user(
+                    request,
+                    "Lokālais līguma PDF nav pieejams. Sagatavojiet to no jauna.",
+                    level="error",
+                )
+                return redirect(
+                    "admin:agreements_agreement_change", agreement.pk
+                )
+            audit_local_document_access(
+                agreement, request=request, disposition=disposition
+            )
+            return response
         if not agreement.external_id:
             self.message_user(
                 request,
@@ -178,7 +205,14 @@ class AgreementAdmin(admin.ModelAdmin):
 
         extra_context = extra_context or {}
         agreement = self.get_object(request, object_id)
-        if agreement is not None and agreement.external_id:
+        has_local_document = (
+            agreement is not None
+            and agreement.document_backend == Agreement.DocumentBackend.LOCAL
+            and GeneratedAgreementDocument.objects.filter(
+                agreement=agreement
+            ).exists()
+        )
+        if agreement is not None and (agreement.external_id or has_local_document):
 
             def _url_builder(_a):
                 return str(

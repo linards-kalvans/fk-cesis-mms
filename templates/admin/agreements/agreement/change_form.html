@@ -15,7 +15,7 @@
     <div class="module mms-agreement-document-module">
       <h2>Līguma dokuments</h2>
       {% for link in document_links %}
-        {% if link.agreement.external_id %}
+        {% if link.agreement.external_id or link.agreement.document_backend == "local" %}
           <p>
             <strong>{{ link.state_label }}</strong>
             —

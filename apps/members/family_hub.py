@@ -84,6 +84,9 @@ class _Child(TypedDict):
     deep_links: dict[str, str]
     anchor_id: str
     billing_setup_error: str
+    local_document: object | None
+    local_can_generate: bool
+    local_can_retry: bool
     document_links: list[dict[str, object]]
     signed_artifact_links: list[dict[str, object]]
     medical_permit_status: str
@@ -269,6 +272,16 @@ def build_family_hub_context(
         )
     )
     members_by_pk = {m.pk: m for m in members_with_agreements}
+    # One query for every locally generated document in this family so the
+    # per-child status and document list stay N+1-free.
+    from apps.agreements.models import GeneratedAgreementDocument
+
+    local_documents = {
+        document.agreement_id: document
+        for document in GeneratedAgreementDocument.objects.filter(
+            agreement__member__guardian=guardian
+        )
+    }
     billing_records = list(
         BillingRecord.objects.filter(member__guardian=guardian)
         .select_related("member", "plan", "agreement")
@@ -318,7 +331,20 @@ def build_family_hub_context(
         agreement = get_current_agreement(member)
         kit_size_label = canonical_kit_size_label(member) if application is None else canonical_kit_size_label(application)
         prefetched = members_by_pk.get(member.pk)
-        document_links = _build_member_document_links(prefetched, member)
+        child_local_document = (
+            local_documents.get(agreement.pk) if agreement else None
+        )
+        # Same shared policy as the registration admin and Admin Hub.
+        from apps.agreements.document_generation import (
+            local_document_control_state,
+        )
+
+        child_local_controls = local_document_control_state(
+            agreement, child_local_document
+        )
+        document_links = _build_member_document_links(
+            prefetched, member, local_documents
+        )
         signed_artifact_links = _build_member_signed_artifact_links(
             prefetched, member
         )
@@ -331,6 +357,9 @@ def build_family_hub_context(
                 "member": member,
                 "application": application,
                 "agreement": agreement,
+                "local_document": child_local_document,
+                "local_can_generate": child_local_controls["generate"],
+                "local_can_retry": child_local_controls["retry"],
                 "kit_size_label": kit_size_label,
                 "application_status": application_lane(application) if application else application_lane(_blank_application()),
                 "agreement_status": agreement_lane(agreement),
@@ -379,6 +408,9 @@ def build_family_hub_context(
                 },
                 "anchor_id": _child_anchor_id(application, None),
                 "billing_setup_error": "",
+                "local_document": None,
+                "local_can_generate": False,
+                "local_can_retry": False,
                 "document_links": [],
                 "signed_artifact_links": [],
                 "medical_permit_status": permit_status,
@@ -435,9 +467,16 @@ def build_family_hub_context(
 
 
 def _build_member_document_links(
-    prefetched_member: "Member | None", member: "Member | None"
+    prefetched_member: "Member | None",
+    member: "Member | None",
+    local_documents: dict[int, object] | None = None,
 ) -> list[dict[str, object]]:
-    """Build the per-child document list, filtered to non-empty external_ids.
+    """Build the per-child document list.
+
+    Includes legacy rows with a non-empty ``external_id`` **and** local rows
+    that have a generated-document row (ready, pending or failed), so a
+    local PDF stays reachable without a provider identifier and a failed
+    local row still links to its visible error state.
 
     Reads from the prefetched ``member.agreements`` cache (populated by the
     hub builder) so this helper stays N+1-free. The list is built via
@@ -448,13 +487,20 @@ def _build_member_document_links(
     """
     if prefetched_member is None or member is None:
         return []
+    from apps.agreements.models import Agreement
     from apps.agreements.presentation import build_agreement_document_links
     from django.urls import reverse
 
+    local_documents = local_documents or {}
     guardian_id = member.guardian_id
     agreements = [
-        a for a in prefetched_member.agreements.all()  # type: ignore[attr-defined]
+        a
+        for a in prefetched_member.agreements.all()  # type: ignore[attr-defined]
         if a.external_id
+        or (
+            a.document_backend == Agreement.DocumentBackend.LOCAL
+            and a.pk in local_documents
+        )
     ]
     if not agreements:
         return []

@@ -6,6 +6,25 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
 
   <p>Stāvoklis: <strong>{{ agreement.get_state_display }}</strong></p>
 
+  {% if agreement.document_backend == "local" and agreement.is_current %}
+  <h3>Lokālais PDF</h3>
+  <p>
+    Statuss:
+    <strong>{% if local_document %}{{ local_document.get_status_display }}{% else %}Nav pieprasīts{% endif %}</strong>
+  </p>
+  {% if local_can_retry %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="retry_pdf" class="default">Mēģināt vēlreiz</button>
+  </form>
+  {% elif local_can_generate %}
+  <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
+    {% csrf_token %}
+    <button type="submit" name="action" value="generate_pdf" class="default">Sagatavot PDF</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
   <h3>Norēķinu plāns</h3>
   {% if not agreement.billing_plan_id %}
   <p class="errornote">Pirms parakstīšanas jāizvēlas norēķinu plāns.</p>
@@ -32,7 +51,7 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
   </form>
   {% endif %}
 
-  {% if agreement_error_message %}
+  {% if agreement_error_message and agreement.document_backend != "local" %}
   <p class="errornote">{{ agreement_error_message }}</p>
   <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
     {% csrf_token %}
@@ -47,7 +66,7 @@ when `agreement` is non-null (i.e. post-approval).{% endcomment %}
     {% include "admin/_agreement_list.html" with agreements=document_links %}
   {% endif %}
 
-  {% if agreement.external_id %}
+  {% if agreement.external_id and agreement.document_backend != "local" %}
   <form method="post" action="{{ review_action_url }}" class="mms-review-actions__form">
     {% csrf_token %}
     <button type="submit" name="action" value="sync_docuseal">Pārbaudīt DocuSeal statusu</button>

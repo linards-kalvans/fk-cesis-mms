@@ -107,6 +107,25 @@
               <button type="button" class="btn btn-primary" disabled>&#8681; Lejupielādēt</button>
             {% endif %}
           </div>
+          {% if agreement.document_backend == "local" %}
+            <p class="hint" style="margin-top:14px">
+              Lokālā PDF statuss:
+              <strong>{% if local_document %}{{ local_document.get_status_display }}{% else %}Nav pieprasīts{% endif %}</strong>
+            </p>
+            {% if local_can_retry %}
+              <form method="post" action="{{ review_action_url }}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="action" value="retry_pdf" class="btn btn-secondary">Mēģināt vēlreiz</button>
+              </form>
+            {% elif local_can_generate %}
+              <form method="post" action="{{ review_action_url }}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="action" value="generate_pdf" class="btn btn-secondary">Sagatavot PDF</button>
+              </form>
+            {% endif %}
+          {% endif %}
           {% if not agreement_document_ready %}
             <div class="callout callout--warn" style="margin-top:14px">
               <span class="callout__icon">&#9888;</span>

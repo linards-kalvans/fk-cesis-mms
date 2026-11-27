@@ -3,9 +3,12 @@
 import datetime
 from urllib.parse import urlencode
 
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -13,13 +16,18 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from apps.agreements.document_proxy import build_agreement_document_response
+from apps.agreements.document_proxy import (
+    audit_local_document_access,
+    build_agreement_document_response,
+)
+from apps.agreements.messages import get_local_lifecycle_message
 from apps.agreements.models import Agreement
 from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.integrations import agreement_platform
 from apps.agreements.services import (
     discontinue_agreement,
     get_current_agreement,
+    is_signing_path_frozen,
     mark_agreement_sent,
     mark_agreement_signed,
     record_minor_amendment,
@@ -69,8 +77,40 @@ from apps.registrations.services import (
 )
 
 
+class RegistrationApplicationAdminForm(forms.ModelForm):
+    """Reject a frozen signing-path change on the ordinary change form.
+
+    The race-safe re-check still happens under the agreement row lock in
+    ``save_model``; this only gives staff a field-level message instead of a
+    request error when no concurrent freeze is involved.
+    """
+
+    class Meta:
+        model = RegistrationApplication
+        fields = "__all__"
+
+    def clean_preferred_agreement_signing(self):
+        value = self.cleaned_data.get("preferred_agreement_signing")
+        instance = self.instance
+        member = None
+        if instance is not None and instance.pk and instance.approved_member_id:
+            member = instance.approved_member
+        if member is not None and value:
+            agreement = get_current_agreement(member)
+            if (
+                agreement is not None
+                and value != agreement.signing_path
+                and is_signing_path_frozen(agreement)
+            ):
+                raise forms.ValidationError(
+                    "Parakstīšanas veids ir fiksēts pēc līguma PDF sagatavošanas."
+                )
+        return value
+
+
 @admin.register(RegistrationApplication)
 class RegistrationApplicationAdmin(admin.ModelAdmin):
+    form = RegistrationApplicationAdminForm
     list_display = (
         "member_full_name",
         "guardian_contact_email",
@@ -125,6 +165,26 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         if app is not None:
             extra_context.update(build_review_context(app))
         return super().change_view(request, object_id, form_url, extra_context)
+
+    def changeform_view(
+        self, request, object_id=None, form_url="", extra_context=None
+    ):
+        """Turn a frozen-path race refusal into an admin message, not a 500.
+
+        Ordinary frozen-path edits are caught by the form's field validation;
+        this covers the narrow case where a generation freeze commits between
+        that validation and ``save_model``.
+        """
+        try:
+            return super().changeform_view(
+                request, object_id, form_url, extra_context
+            )
+        except ValueError as exc:
+            message = get_local_lifecycle_message(str(exc))
+            if message is None:
+                raise
+            self.message_user(request, message, level=messages.ERROR)
+            return redirect(request.get_full_path())
 
     def get_urls(self):
         from django.urls import path
@@ -222,6 +282,26 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
         disposition = request.GET.get("disposition", "attachment")
         if disposition not in {"inline", "attachment"}:
             raise Http404
+        if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+            # Local rows never touch the provider: a stray external_id must
+            # not route a local PDF through DocuSeal.
+            try:
+                response = build_agreement_document_response(
+                    agreement, disposition=disposition
+                )
+            except Http404:
+                raise
+            except ValueError:
+                self.message_user(
+                    request,
+                    "Lokālais līguma PDF nav pieejams. Sagatavojiet to no jauna.",
+                    level=messages.ERROR,
+                )
+                return self._after_review_redirect(request, object_id)
+            audit_local_document_access(
+                agreement, request=request, disposition=disposition
+            )
+            return response
         if not agreement.external_id:
             self.message_user(
                 request,
@@ -397,6 +477,43 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             )
             return self._change_redirect(object_id)
 
+        elif action in {"generate_pdf", "retry_pdf"}:
+            if (
+                agreement is None
+                or agreement.document_backend
+                != Agreement.DocumentBackend.LOCAL
+            ):
+                self.message_user(
+                    request,
+                    "Lokālo PDF var sagatavot tikai lokāli ģenerētam līgumam.",
+                    level=messages.ERROR,
+                )
+                return self._after_review_redirect(request, object_id)
+            # Import at call time so tests/patches resolve the module-level
+            # service and so the rendering stack is never imported eagerly.
+            from apps.agreements.document_generation import (
+                request_document_generation,
+                retry_document_generation,
+            )
+
+            try:
+                if action == "generate_pdf":
+                    request_document_generation(agreement, request.user)
+                else:
+                    retry_document_generation(agreement, request.user)
+            except ValueError as exc:
+                self.message_user(
+                    request,
+                    get_local_lifecycle_message(str(exc))
+                    or "Lokālo līguma PDF nevar sagatavot.",
+                    level=messages.ERROR,
+                )
+                return self._after_review_redirect(request, object_id)
+            self.message_user(
+                request, "Lokālā līguma PDF sagatavošana ielikta rindā."
+            )
+            return self._after_review_redirect(request, object_id)
+
         elif action == "mark_agreement_sent":
             if agreement is None:
                 self.message_user(
@@ -406,7 +523,11 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             try:
                 mark_agreement_sent(agreement, request.user)
             except ValueError as exc:
-                self.message_user(request, str(exc), level=messages.ERROR)
+                self.message_user(
+                    request,
+                    get_local_lifecycle_message(str(exc)) or str(exc),
+                    level=messages.ERROR,
+                )
                 return self._after_review_redirect(request, object_id)
             return self._after_review_redirect(request, object_id)
 
@@ -420,7 +541,10 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                 mark_agreement_signed(agreement, request.user)
             except ValueError as exc:
                 raw = str(exc)
-                if raw == "billing plan required":
+                local_message = get_local_lifecycle_message(raw)
+                if local_message is not None:
+                    latvian = local_message
+                elif raw == "billing plan required":
                     latvian = "Pirms parakstīšanas jāizvēlas norēķinu plāns."
                 elif raw == "next year plan required":
                     latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
@@ -497,7 +621,14 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     request, "Nezināms parakstīšanas veids.", level=messages.ERROR
                 )
                 return self._after_review_redirect(request, object_id)
-            set_signing_path(agreement, new_path, request.user)
+            try:
+                set_signing_path(agreement, new_path, request.user)
+            except ValueError as exc:
+                self.message_user(
+                    request,
+                    get_local_lifecycle_message(str(exc)) or str(exc),
+                    level=messages.ERROR,
+                )
             return self._after_review_redirect(request, object_id)
 
         elif action == "void_agreement":
@@ -545,6 +676,18 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return self._change_redirect(object_id)
+            if (
+                agreement.document_backend == Agreement.DocumentBackend.LOCAL
+                or not getattr(
+                    settings, "AGREEMENT_DOCUSEAL_CREATE_ENABLED", True
+                )
+            ):
+                self.message_user(
+                    request,
+                    "Jaunu DocuSeal sūtījumu izveide ir izslēgta.",
+                    level=messages.ERROR,
+                )
+                return self._change_redirect(object_id)
             enqueue_create_agreement_submission(
                 agreement.id,
                 send_email=(
@@ -557,6 +700,15 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
             if agreement is None:
                 self.message_user(
                     request, "Līgums nav sagatavots.", level=messages.ERROR
+                )
+                return self._change_redirect(object_id)
+            if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+                # Local rows never enter DocuSeal sync, even with a stray
+                # external_id left behind by a failed legacy attempt.
+                self.message_user(
+                    request,
+                    "Lokāliem līgumiem DocuSeal sinhronizācija nav pieejama.",
+                    level=messages.ERROR,
                 )
                 return self._change_redirect(object_id)
             enqueue_sync_agreement_submission(agreement.id)
@@ -1040,11 +1192,44 @@ class RegistrationApplicationAdmin(admin.ModelAdmin):
     quick_actions.short_description = "Darbības"  # type: ignore[assignment,attr-defined]
     quick_actions.admin_order_field = "pk"  # type: ignore[assignment,attr-defined]
 
+    def _lock_applicable_agreement(self, obj):
+        """Lock the current agreement (if any) before the application write.
+
+        This matches ``set_signing_path``'s lock order (agreement, then
+        application) so the two writers cannot deadlock or race the freeze.
+        """
+        if not obj.approved_member_id:
+            return None
+        agreement = get_current_agreement(obj.approved_member)
+        if agreement is None:
+            return None
+        return Agreement.objects.select_for_update(of=("self",)).get(
+            pk=agreement.pk
+        )
+
     def save_model(self, request, obj, form, change):
-        """Persist the application, then sync preferred_agreement_signing to
-        the active agreement when it is still in `generated` state."""
-        super().save_model(request, obj, form, change)
-        sync_application_signing_path_to_agreement(obj)
+        """Persist the application and sync the agreement signing path.
+
+        The agreement row is locked before the application is saved, and a
+        frozen-path refusal rolls back both sides; unchanged values remain a
+        no-op.
+        """
+        with transaction.atomic():
+            locked_agreement = self._lock_applicable_agreement(obj)
+            desired = obj.preferred_agreement_signing
+            if (
+                locked_agreement is not None
+                and desired
+                and desired != locked_agreement.signing_path
+            ):
+                if is_signing_path_frozen(locked_agreement):
+                    raise ValueError("signing path is frozen")
+                locked_agreement.signing_path = desired
+                locked_agreement.save(
+                    update_fields=["signing_path", "updated_at"]
+                )
+            super().save_model(request, obj, form, change)
+            sync_application_signing_path_to_agreement(obj)
 
 
 @admin.register(RegistrationSubmissionDigestSettings)

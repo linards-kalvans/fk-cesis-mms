@@ -84,6 +84,29 @@
         <strong>Kļūda:</strong> {{ child.billing_setup_error }}
       </p>
     {% endif %}
+    {% if child.agreement.document_backend == "local" %}
+      <p>
+        Lokālais PDF:
+        <strong>{% if child.local_document %}{{ child.local_document.get_status_display }}{% else %}Nav pieprasīts{% endif %}</strong>
+      </p>
+      {% if child.local_can_retry %}
+        <form method="post" action="{{ action_url }}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
+          <input type="hidden" name="action" value="retry_pdf">
+          <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
+          <button type="submit">Mēģināt vēlreiz</button>
+        </form>
+      {% elif child.local_can_generate %}
+        <form method="post" action="{{ action_url }}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="return_anchor" value="{{ child.anchor_id }}">
+          <input type="hidden" name="action" value="generate_pdf">
+          <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
+          <button type="submit">Sagatavot PDF</button>
+        </form>
+      {% endif %}
+    {% endif %}
     {% if child.agreement.state == "generated" or child.agreement.state == "sent" %}
     {% if not child.agreement.billing_plan_id %}
       <p class="errornote">
@@ -125,6 +148,7 @@
         <button type="submit">Atzīmēt parakstītu</button>
       </form>
     {% endif %}
+    {% if child.agreement.document_backend != "local" %}
     {% if child.agreement.external_state == "failed" or child.agreement.external_error_code %}
       <form method="post" action="{{ action_url }}" style="display:inline">
         {% csrf_token %}
@@ -140,6 +164,7 @@
         <input type="hidden" name="agreement_id" value="{{ child.agreement.pk }}">
         <button type="submit">Pārbaudīt DocuSeal statusu</button>
       </form>
+    {% endif %}
     {% endif %}
     {% if child.document_links %}
       {% include "admin/_agreement_list.html" with agreements=child.document_links %}

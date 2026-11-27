@@ -12,15 +12,16 @@
    * Registration admin — links point at the application+agreement-scoped
      document route (same disposition).
 
-   The download anchor is rendered conditionally so a blank ``external_id``
-   row never produces a clickable link. The status / signing-path label
-   pair lets staff distinguish a voided agreement from a generated one
-   at a glance.{% endcomment %}
+   The download anchor is rendered for rows with a legacy DocuSeal
+   ``external_id`` and for local rows that reached the generation backend, so
+   a local PDF is reachable without a provider identifier. The status /
+   signing-path label pair lets staff distinguish a voided agreement from a
+   generated one at a glance.{% endcomment %}
 
 {% if agreements %}
   <ul class="mms-agreement-document-list">
     {% for link in agreements %}
-      {% if link.agreement.external_id %}
+      {% if link.agreement.external_id or link.agreement.document_backend == "local" %}
         <li>
           <strong>{{ link.state_label }}</strong>
           —

@@ -4,6 +4,7 @@ import datetime
 import re
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -18,6 +19,11 @@ from django.utils.html import format_html
 from apps.accounts.models import ParentAccount
 from apps.accounts.services import change_parent_email
 from apps.agreements.models import Agreement
+from apps.agreements.document_proxy import (
+    audit_local_document_access,
+    build_agreement_document_response,
+)
+from apps.agreements.messages import get_local_lifecycle_message
 from apps.agreements.signed_artifact_proxy import build_signed_artifact_response
 from apps.agreements.services import (
     get_current_agreement,
@@ -337,8 +343,6 @@ class GuardianAdmin(admin.ModelAdmin):
         """
         from django.http import Http404
 
-        from apps.agreements.document_proxy import build_agreement_document_response
-
         if not self.has_change_permission(request):
             raise PermissionDenied
         guardian = get_object_or_404(
@@ -349,6 +353,28 @@ class GuardianAdmin(admin.ModelAdmin):
         disposition = request.GET.get("disposition", "attachment")
         if disposition not in {"inline", "attachment"}:
             raise Http404
+        if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+            # Local rows never reach the provider, even with a stray
+            # external_id from a failed legacy attempt.
+            try:
+                response = build_agreement_document_response(
+                    agreement, disposition=disposition
+                )
+            except Http404:
+                raise
+            except ValueError:
+                self.message_user(
+                    request,
+                    "Lokālais līguma PDF nav pieejams. Sagatavojiet to no jauna.",
+                    level=messages.ERROR,
+                )
+                return self._family_hub_redirect(
+                    guardian.pk, return_anchor=return_anchor
+                )
+            audit_local_document_access(
+                agreement, request=request, disposition=disposition
+            )
+            return response
         if not agreement.external_id:
             self.message_user(
                 request,
@@ -538,7 +564,10 @@ class GuardianAdmin(admin.ModelAdmin):
             mark_agreement_sent(agreement, request.user)
         except ValueError as exc:
             raw = str(exc)
-            if "cannot mark sent from state" in raw:
+            local_message = get_local_lifecycle_message(raw)
+            if local_message is not None:
+                latvian = local_message
+            elif "cannot mark sent from state" in raw:
                 latvian = "Līgumu nevar atzīmēt kā nosūtītu šajā stāvoklī."
             else:
                 latvian = raw
@@ -554,7 +583,10 @@ class GuardianAdmin(admin.ModelAdmin):
             mark_agreement_signed(agreement, request.user)
         except ValueError as exc:
             raw = str(exc)
-            if raw == "billing plan required":
+            local_message = get_local_lifecycle_message(raw)
+            if local_message is not None:
+                latvian = local_message
+            elif raw == "billing plan required":
                 latvian = "Pirms parakstīšanas jāizvēlas norēķinu plāns."
             elif raw == "next year plan required":
                 latvian = "Nākamajam gadam izvēlieties aktīvu norēķinu plānu."
@@ -635,8 +667,55 @@ class GuardianAdmin(admin.ModelAdmin):
         bucket[str(agreement_id)] = message
         request.session["hub_billing_setup_errors"] = bucket
 
-    def _family_hub_handle_retry_docuseal(self, request, guardian):
+    def _family_hub_handle_generate_pdf(self, request, guardian):
+        agreement = self._get_guardian_agreement(
+            guardian, request.POST.get("agreement_id", "")
+        )
+        self._request_local_document(request, agreement, retry=False)
 
+    def _family_hub_handle_retry_pdf(self, request, guardian):
+        agreement = self._get_guardian_agreement(
+            guardian, request.POST.get("agreement_id", "")
+        )
+        self._request_local_document(request, agreement, retry=True)
+
+    def _request_local_document(self, request, agreement, *, retry: bool):
+        """Delegate explicit local generation to the agreement domain.
+
+        The family hub never renders or publishes a PDF itself; it only asks
+        the documented service to freeze/queue the job. Non-local rows are
+        refused without touching a provider.
+        """
+        if agreement.document_backend != Agreement.DocumentBackend.LOCAL:
+            self.message_user(
+                request,
+                "Lokālo PDF var sagatavot tikai lokāli ģenerētam līgumam.",
+                level=messages.ERROR,
+            )
+            return
+        from apps.agreements.document_generation import (
+            request_document_generation,
+            retry_document_generation,
+        )
+
+        try:
+            if retry:
+                retry_document_generation(agreement, request.user)
+            else:
+                request_document_generation(agreement, request.user)
+        except ValueError as exc:
+            self.message_user(
+                request,
+                get_local_lifecycle_message(str(exc))
+                or "Lokālo līguma PDF nevar sagatavot.",
+                level=messages.ERROR,
+            )
+            return
+        self.message_user(
+            request, "Lokālā līguma PDF sagatavošana ielikta rindā."
+        )
+
+    def _family_hub_handle_retry_docuseal(self, request, guardian):
         agreement = self._get_guardian_agreement(
             guardian, request.POST.get("agreement_id", "")
         )
@@ -644,6 +723,16 @@ class GuardianAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 "Atkārtot var tikai neizdevušos sūtījumu.",
+                level=messages.ERROR,
+            )
+            return
+        if (
+            agreement.document_backend == Agreement.DocumentBackend.LOCAL
+            or not getattr(settings, "AGREEMENT_DOCUSEAL_CREATE_ENABLED", True)
+        ):
+            self.message_user(
+                request,
+                "Jaunu DocuSeal sūtījumu izveide ir izslēgta.",
                 level=messages.ERROR,
             )
             return
@@ -657,6 +746,13 @@ class GuardianAdmin(admin.ModelAdmin):
         agreement = self._get_guardian_agreement(
             guardian, request.POST.get("agreement_id", "")
         )
+        if agreement.document_backend == Agreement.DocumentBackend.LOCAL:
+            self.message_user(
+                request,
+                "Lokāliem līgumiem DocuSeal sinhronizācija nav pieejama.",
+                level=messages.ERROR,
+            )
+            return
         enqueue_sync_agreement_submission(agreement.id)
         self.message_user(request, "DocuSeal statusa pārbaude ielikta rindā.")
 
