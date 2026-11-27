@@ -20,14 +20,18 @@ The approved layout was an inline viewer rather than an expandable disclosure
 
 ## Implementation and operations
 
-- Uses existing `AGREEMENT_PROVIDER_MODE`, `DOCUSEAL_API_URL`,
-  `DOCUSEAL_API_KEY`, and `DOCUSEAL_TEMPLATE_ID`. Stub mode shows a clearly
-  labeled synthetic sample, not the live contract.
+- `AGREEMENT_DOCUMENT_MODE` selects the configured backend, defaulting to
+  `docuseal`. In local mode the worker renders a blank snapshot using the
+  versioned local template; the selected paper/electronic path determines its
+  wording. In DocuSeal mode, `AGREEMENT_PROVIDER_MODE`, `DOCUSEAL_API_URL`,
+  `DOCUSEAL_API_KEY`, and `DOCUSEAL_TEMPLATE_ID` select the provider template.
+  Stub mode shows a synthetic sample, not the live contract. Local preview does
+  not contact the provider.
 - A running **qcluster** is required. The first viewer request enqueues
   `apps.agreements.template_preview.refresh_template_preview`; HTTP handlers
   do not make outbound provider calls. A temporary pending marker coalesces
   requests best-effort; duplicate read-only jobs are safe.
-- The worker reads `GET /templates/{configured_id}` and downloads its
+- In DocuSeal mode the worker reads `GET /templates/{configured_id}` and downloads its
   `documents[].url` PDFs in template order, without creating a submission.
   Blob downloads allow the API origin plus exact origins explicitly configured
   in `DOCUSEAL_TEMPLATE_ALLOWED_ORIGINS` (comma-separated environment setting).
@@ -46,16 +50,27 @@ The approved layout was an inline viewer rather than an expandable disclosure
 - Raster pages are cached for **one hour** in
   `PRIVATE_DOCUMENTS_ROOT/agreement-template-preview/`, shared between web
   and worker through the existing private volume. Both processes need write
-  access. Cache keys include provider mode, API URL, template ID, and the origin
-  allowlist (so changed trust settings also invalidate cached failure markers). Template
-  edits may therefore take up to one hour to appear. Cache files are disposable.
-- Failed fetch/queue/render results are suppressed for 60 seconds; parents
-  can retry afterward. Preview polling is bounded and pauses in hidden tabs.
+  access. Identity includes configured backend, selected signing path, and
+  template version. DocuSeal keys additionally include provider mode, API URL,
+  template ID, and origin allowlist; changed trust settings invalidate cached
+  failure markers. Legacy template edits may take up to one hour to appear.
+  Cache files are disposable and contain raster pages, not source PDFs or PII.
+- The manifest returns 202 while queued, 503 while a failure marker is present,
+  and 200 only when pages are ready. Failed fetch/queue/render results are
+  suppressed for 60 seconds; pending coalescing lasts 90 seconds. Parent polling
+  is bounded and pauses in hidden tabs. A stale job whose backend no longer
+  matches worker configuration fails before fetching or rendering; stale image
+  versions and invalid page numbers return 404. Backend/version assertions that
+  do not match configuration, and invalid signing paths, return 400. A change
+  of signing path does not let an older asynchronous response replace the new
+  selection. Web and worker must use matching configuration.
 - Both the manifest and versioned image routes require an active verified
   parent session and send `Cache-Control: ... no-store`. The blank template is
-  shared, not owned by one application. Staff document proxies stay unchanged.
-- No schema changes or migrations. Rebuild the application image to install
-  the new renderer dependency.
+  shared, not owned by one application. Staff agreement-document access is a
+  separate, backend-routed workflow.
+- Preview remains separate from agreement creation, signing and billing. The
+  local generation rollout and its separate activation prerequisites are
+  described in [Local agreement PDFs](local-agreement-pdfs.md).
 
 ## Download limitation
 
