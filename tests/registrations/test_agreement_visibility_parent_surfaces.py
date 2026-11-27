@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.agreements.models import Agreement
+from apps.agreements.presentation import agreement_status_copy
 from apps.agreements.services import (
     mark_agreement_sent,
     mark_agreement_signed,
@@ -34,6 +35,37 @@ def _workspace_url(app_id):
     from django.urls import reverse
 
     return reverse("registrations:application-workspace", args=[app_id])
+
+
+def test_sent_local_electronic_copy_does_not_claim_a_signing_email():
+    """Local electronic handover is manual; no provider email is sent.
+
+    The parent-facing line must therefore not reuse the legacy DocuSeal copy,
+    which promises an email the local path never delivers.
+    """
+    agreement = Agreement(
+        state=Agreement.State.SENT,
+        signing_path=Agreement.SigningPath.ELECTRONIC,
+        document_backend=Agreement.DocumentBackend.LOCAL,
+    )
+
+    copy = agreement_status_copy(agreement)
+
+    assert copy
+    assert "e-past" not in copy.lower()
+
+
+def test_sent_legacy_electronic_copy_still_claims_the_signing_email():
+    """The legacy DocuSeal path keeps its existing wording unchanged."""
+    agreement = Agreement(
+        state=Agreement.State.SENT,
+        signing_path=Agreement.SigningPath.ELECTRONIC,
+        document_backend=Agreement.DocumentBackend.DOCUSEAL,
+    )
+
+    assert agreement_status_copy(agreement) == (
+        "Līgums nosūtīts uz e-pastu parakstīšanai."
+    )
 
 
 # --- Portal ---

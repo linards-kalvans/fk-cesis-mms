@@ -62,6 +62,45 @@ def test_agreement_page_renders_all_three_step_cards(
     assert "Parakstītais līgums" in body
 
 
+def test_local_row_with_stray_external_id_and_no_ready_pdf_advertises_no_document(
+    client, reviewer, application_with_agreement
+):
+    """A local row trusts only its own ready file, never a stray provider id.
+
+    ``external_id`` belongs to legacy DocuSeal rows. A local row that carries
+    one by accident (manual data fix, a provider-era migration, a failed
+    backfill) still has no locally prepared PDF, so the Hub must not render an
+    enabled download — the download view would refuse it anyway.
+    """
+    from apps.agreements.models import Agreement, GeneratedAgreementDocument
+
+    agreement = application_with_agreement.approved_member.agreements.get(
+        is_current=True
+    )
+    # The backend is write-once in the model, so reproduce the stray legacy
+    # values directly at the row level instead of pretending staff can edit it.
+    Agreement.objects.filter(pk=agreement.pk).update(
+        document_backend=Agreement.DocumentBackend.LOCAL,
+        external_id="stray-provider-id",
+        external_state="completed",
+    )
+    agreement.refresh_from_db()
+    assert not GeneratedAgreementDocument.objects.filter(
+        agreement=agreement
+    ).exists()
+
+    client.force_login(reviewer)
+    url = reverse("admin_hub:agreement", args=[application_with_agreement.pk])
+    body = client.get(url).content.decode()
+
+    download_url = reverse(
+        "admin:registrations_registrationapplication_docuseal_document",
+        args=[application_with_agreement.pk, agreement.pk],
+    )
+    assert download_url not in body
+    assert "Dokuments vēl nav pieejams" in body
+
+
 def test_agreement_page_posts_mark_sent_to_the_existing_endpoint(
     client, reviewer, application_with_agreement
 ):
