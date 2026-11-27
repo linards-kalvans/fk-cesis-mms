@@ -1,0 +1,23 @@
+@page {
+  size: A4;
+  margin: 16mm 15mm 17mm;
+  @bottom-center {
+    content: counter(page) " / " counter(pages);
+    font-family: Body; font-size: 8pt;
+  }
+}
+body { font-family: Body, sans-serif; font-size: 9pt; line-height: 1.2; color: #111; }
+.filled { font-family: Fill, monospace; font-weight: bold; }
+header { text-align: center; margin: 10pt 0 12pt; }
+.logo { width: 18mm; display: block; margin: 0 auto 8pt; }
+h1 { font-size: 12pt; margin-bottom: 4pt; }
+h2 { font-size: 10pt; text-align: center; margin: 12pt 0 5pt; break-after: avoid; }
+p { margin: 0 0 3pt; widows: 3; orphans: 3; }
+.place { margin-bottom: 16pt; }
+.date { float: right; font-size: 8pt; }
+.clauses p { text-align: justify; }
+.requisites { break-inside: avoid; }
+.parties { display: table; width: 100%; table-layout: fixed; }
+.parties > div { display: table-cell; width: 50%; padding-right: 10pt; overflow-wrap: anywhere; }
+.signature { margin-top: 20pt; }
+.signing-note { font-size: 8pt; text-align: center; margin-top: 16pt; }

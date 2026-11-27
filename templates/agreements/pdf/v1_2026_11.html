@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="lv"><head><meta charset="utf-8"><title>Sadarbības līgums</title></head>
+<body>
+<header><img class="logo" src="{{ logo }}" alt="FK Cēsis">
+<h1>SADARBĪBAS LĪGUMS Nr. <span class="filled">{{ fields.agreement_number }}</span></h1>
+<p>par futbola mācību treniņu procesu un spēļu nodrošināšanu.</p></header>
+<p class="place">Cēsis, Cēsu novadā <span class="date">{% if electronic %}*Datums skatāms laika zīmogā{% else %}Datums: __________________{% endif %}</span></p>
+<p>Biedrība ”Futbola Klubs CĒSIS”, Reģ. Nr. 40008324940, juridiskā adrese: Jāņa Poruka iela 8, Cēsis, Cēsu novads, LV-4101, tās valdes priekšsēdētājas Kristīnes Zaķes personā, kura darbojas uz Statūtu pamata, turpmāk tekstā – “Futbola klubs”, no vienas puses, un</p>
+<p><span class="filled">{{ fields.guardian_name }}</span>, personas kods <span class="filled">{{ fields.guardian_personal_id }}</span>, deklarēta dzīvesvieta: <span class="filled">{{ fields.guardian_address }}</span>, turpmāk tekstā – “Vecāks”, turpmāk katrs atsevišķi vai kopā Puses, noslēdz šādu līgumu, turpmāk tekstā – “Līgums”:</p>
+<div class="clauses">
+<h2>1.Līguma priekšmets</h2>
+<p>1.1 Futbola klubs uzņem Dalībnieku: <span class="filled">{{ fields.child_name }}</span>, personas kods <span class="filled">{{ fields.child_personal_id }}</span>, dzimšanas dati: <span class="filled">{{ fields.child_birth_date }}</span>, faktiskā dzīvesvieta: <span class="filled">{{ fields.child_address }}</span>, turpmāk tekstā – “Dalībnieks”.</p>
+<p>1.2 Futbola klubs nodrošina Dalībniekam futbola treniņus, dalību sacensībās un citos ar sporta sagatavošanu saistītos pasākumos atbilstoši Futbola kluba treniņu programmai, turpmāk tekstā – “Pakalpojumi”.</p>
+<p>1.3 Vecāks nodrošina Dalībnieka regulāru apmeklējumu un samaksā Futbola kluba noteikto dalības maksu pielīgtajā termiņā;</p>
+<p>1.4 Vecāks piekrīt dalībnieka reģistrācijai LFF COMET sistēmā visā līguma darbības termiņā, lai Dalībnieks pārstāvētu Futbola klubu jebkādās sacensībās vai turnīros.</p>
+<h2>2. Futbola kluba pienākumi un tiesības</h2>
+<p>2.1. Futbola kluba pienākumi:</p>
+<p>2.1.1. nodrošināt Dalībnieka apmācību futbolā profesionāli kvalificētu treneru vadībā;</p>
+<p>2.1.2. nodrošināt nodarbību norisi pēc sastādītā grafika, pieļaujot izmaiņas tajā, par ko tiek paziņots iepriekš. Futbola klubs apņemas veikt Dalībnieka apmeklētības uzskaiti;</p>
+<p>2.1.3. nodrošināt un ievērot Pakalpojuma īstenošanas apstākļus, kas atbilst normatīvajos aktos noteiktajiem veselības un drošības standartiem;</p>
+<p>2.1.4. veicināt Dalībnieka piedalīšanos Futbola kluba rīkotajos treniņos un sacensībās, turpmāk tekstā – “Pasākumi”, un savlaicīgi informēt Vecāku par plānotajiem Pasākumiem;</p>
+<p>2.1.5. informēt Vecāku par programmas saturu, nodarbību laikiem un Pakalpojuma īstenošanai nepieciešamajiem līdzekļiem.</p>
+<p>2.2. Futbola kluba tiesības:</p>
+<p>2.2.1. izbeigt Līgumu, ja Vecāks un/vai Dalībnieks nepilda Līguma 3.1. punktā paredzētos pienākumus nekavējoties par to iepriekš rakstiski nosūtīt paziņojumu;</p>
+<p>2.2.2. atskaitīt Dalībnieku no treniņu grupas, ja nav veikta līdzfinansējuma maksa līdz norādītam termiņam, kas noteikts Līguma 4.5. punktā;</p>
+<p>2.2.4. liegt dalībniekam dalību jebkādās sacensībās vai turnīros, ja Vecāks nav izpildījis Līguma 1.4. punktu.</p>
+<p>2.2.3. veikt visa veida darbības, lai atgūtu maksu par saņemto Pakalpojumu, t.sk., veikt piespiedu izpildes darbības, nododot parādu piespiedu izpildei parādu piedzinējam.</p>
+<h2>3. Vecāka pienākumi un tiesības</h2>
+<p>3.1. Vecāka un Dalībnieka pienākumi:</p>
+<p>3.1.1. iepazīties ar Futbola kluba treniņu un spēļu procesa organizāciju, Dalībnieku uzņemšanu un atskaitīšanu;</p>
+<p>3.1.2. iesniegt Dalībnieka ģimenes ārsta izzinu, kura apliecina, ka Dalībniekam ir atļauts nodarboties ar paaugstinātām fiziskām slodzēm 3 (trīs) darba dienu laikā no Līguma parakstīšanas dienas, pretējā gadījumā Futbola klubs neuzņemās atbildību par bērna veselību treniņu vai pasākumu laikā;</p>
+<p>3.1.3. sekot Dalībnieka nodarbību apmeklējumam;</p>
+<p>3.1.4. sadarboties ar Futbola kluba un Dalībnieka treneriem, sniegt informāciju, kas saistīta ar Dalībnieka izglītošanu un audzināšanu, sekmēt Dalībnieka izglītošanos;</p>
+<p>3.1.5. Dalībnieka slimības gadījumā savlaicīgi par to ziņot Futbola kluba Dalībnieka trenerim;</p>
+<p>3.1.6. sekmēt Dalībnieka piedalīšanos Futbola kluba rīkotajos Pasākumos, piedalīties vecāku sapulcēs;</p>
+<p>3.1.7. rūpēties, lai Dalībnieks ievēro sabiedrībā pieņemtās morāles un ētikas normas un Futbola kluba iekšējās kārtības noteikumus;</p>
+<p>3.1.8. Saudzīgi izturēties pret Futbola kluba inventāru un pašvaldības infrastruktūru, tīši nebojāt to;</p>
+<p>3.1.9. veikt samaksu par Dalībnieka dalību nodarbībās līgumā noteiktajos termiņos un kārtībā.</p>
+<p>3.2. Vecāka tiesības:</p>
+<p>3.2.1. sniegt un saņemt informāciju par jautājumiem, kas saistīti ar Dalībnieka sasniegumiem u.c. informāciju, kas saistīta ar sekmīgu un pilnvērtīgu treniņu programmas apguvi un spēļu procesu.</p>
+<p>3.3. Parakstot Līgumu, Vecāks piekrīt:</p>
+<p>3.3.1. ka Līguma darbības ietvaros tiek veikta Dalībnieka filmēšana un fotogrāfēšana. Vecāks piekrīt, ka Futbola klubs var izmantot Dalībnieka fotoattēlus un videoierakstus Futbola kluba mājaslapā, sociālajos tīklos, informatīvajos materiālos un publicitātes pasākumos.</p>
+<p>3.3.2. ka Līguma darbības ietvaros, sacensībās vai turnīros Latvijā un ārvalstīs, kur Dalībnieka likumiskais pārstāvis nav klātesošs gadījumos, kad dalībnieks gūst traumu un nepieciešama medicīniska palīdzība stacionārā – Dalībnieku pavada Kluba nozīmēta persona vai treneris. Par šādu gadījumu Klubs nekavējoties informē Vecāku.</p>
+<h2>4.Maksājumu apmērs un kārtība</h2>
+<p>4.1. Maksa pa Pakalpojumu tiek noteikta, pamatojoties uz Futbola kluba valdes lēmumu, kas nosaka līdzfinansējuma apmēru sezonā (10 mēnešos) Futbola kluba Pasākumu sekmīgai norisei. Vecāku līdzfinansējuma maksa tiek noteikta 50.00 EUR mēnesī.</p>
+<p>4.2. Balstoties uz valsts ekonomikas un inflācijas radītājiem Vecāku līdzfinansējuma maksa var tik pārskatīta vienu reizi gadā, par izmaiņām informējot Vecāku vismaz 30 (trīsdesmit) dienas iepriekš.</p>
+<p>4.3. Līdzfinansējumam, kas atrunāts Līguma 4.1. punktā, var tik noteiktas atlaides:</p>
+<p>4.3.1. Ģimenēm, kurās Futbola klubā darbojas divi un vairāk bērni var tikt noteikta atlaide šādā kārtībā – vienam dalībniekam netiek piešķirta atlaide, otram dalībniekam tiek noteikta atlaide 50% apmērā, trešajam dalībniekam tiek noteikta atlaide 75% apmērā un sākot no ceturtā dalībnieka tiek noteikta atlaide 100% apmērā;</p>
+<p>4.3.2. Sociāli mazaizsargātām ģimenēm, kam piešķirts trūcīgas vai maznodrošinātas ģimenes statuss un dalībniekiem ar invaliditāti var tikt noteikta atlaide – 50% apmērā;</p>
+<p>4.3.3. Līguma 4.3. punktā minēto atvieglojumu saņemšanai Vecāks iesniedz Futbola klubā iesniegumu ar lūgumu piešķir atlaidi, norādot pamatojumu atlaides noteikšanai.</p>
+<p>4.4 Vecāku līdzfinansējums, tiek izlietots:</p>
+<p>4.4.1. Inventāram mācību treniņa procesa nodrošināšanai (konusi, treniņu vestes, vārti, tīkli u.tml.);</p>
+<p>4.4.2. Dalību nodrošināšana Latvijas čempionātos;</p>
+<p>4.4.3. Transporta pakalpojumiem nokļūšanai uz Latvijas čempionātu turnīriem;</p>
+<p>4.4.4. Treneru pakalpojuma atalgojums pilnā apmērā;</p>
+<p>4.4.5. Spēļu, treniņu formas iegādei un apdrukai;</p>
+<p>4.4.6. Futbola spēļu laukuma, treniņu bāzes īrei;</p>
+<p>4.4.7. Futbola kluba administrēšanas izmaksām;</p>
+<p>4.4.8. Futbola spēļu apkalpošanai (tehniskais darbinieks, spēļu tiesneši, mediķi, bumbu padevēji utt.);</p>
+<p>4.4.9. Treneru tālākizglītības procesa nodrošināšanai;</p>
+<p>4.4.10. Izdevumiem, kas saistīti ar futbola kluba rīkotajiem pasākumiem dalībnieku saliedēšanai;</p>
+<p>4.4.11. Futbolistu apdrošināšanai, sākot no 10 gadu dalībnieka vecuma;</p>
+<p>4.4.12. Papildus attīstības treniņiem, kas tiek noteikti saskaņā ar treneru norādījumiem;</p>
+<p>4.4.13. Dalībniekiem no 12 gadu vecuma tiek nodrošināti fiziskās sagatavotības treniņi sertificēta fizioterapeita pavadībā;</p>
+<p>4.4.14. Dalībniekiem no 11 gadu vecuma, pēc nepieciešamības tiek nodrošināti vārtu sarga treniņi.</p>
+<p>4.5. Futbola klubs par sniegto Pakalpojumu par visu sezonu Vecākam par 4.1. punktā norādīto summu izraksta rēķinu. Mācību maksa tiek veikta bezskaidras naudas norēķinu veidā veicot pārskaitījumu uz Futbola kluba norādīto bankas kontu, veicot visa rēķina apmaksu vai ne mazāk kā mēneša noteikto maksājumu.</p>
+<p>4.6. Vecāks veic samaksu līdz kārtējā mēneša 10. datumam par iepriekšējo mēnesi, iemaksājot maksu norādītajā Futbola kluba norēķinu kontā.</p>
+<p>4.7. Futbola klubam ir tiesības izmantot Līguma rekvizītos norādīto Vecāka e-pasta adresi saziņai – informācijas un dokumentācijas nosūtīšanai. Rēķini tiek sagatavoti elektroniskā veidā un saskaņā ar noslēgto Līgumu derīgi bez paraksta.</p>
+<p>4.8. Līguma rekvizītos norādītās Vecāka e-pasta adreses maiņas gadījumā, Vecākam ir pienākums rakstveidā informēt Futbola klubu e-pastā. Pretējā gadījumā uz Līguma rekvizītos norādīto Vecāka e-pasta adresi nosūtītais rēķins tiek uzskatīts par saņemtu.</p>
+<p>4.9. Ja, līgumsaistībām beidzoties, tiek konstatēta Vecāku pārmaksa, tad to, uz Vecāka iesnieguma pamata, pārskaita uz Līguma rekvizītos norādīto bankas kontu.</p>
+<h2>5. Līguma darbības termiņš.</h2>
+<p>5.1 Līgums stājas spēkā ar Līguma parakstīšanas mēneša pirmo datumu un ir spēkā līdz Pušu saistību pilnīgai izpildei. Pakalpojums tiek sniegts visu treniņu programmas apguves laiku vai līdz dienai, kad Dalībnieks tiek atskaitīts no Futbola kluba mācību treniņa un pasākumu programmas.</p>
+<p>5.2 Līguma izbeigšana pirms termina pieļaujama, Pusēm savstarpēji vienojoties, kā arī Līgumā noteiktajos gadījumos. Līguma izbeigšanas pamats – iesniegums un apliecinājums par mācību maksas samaksu, laika periodā, līdz Līguma darbības pēdējai dienai.</p>
+<h2>6. Strīdu izšķiršanas kārtība</h2>
+<p>6.1. Visus strīdus, kas rodas starp Pusēm Līguma darbības laikā, izšķir pārrunu ceļā. Ja Puses nespēj panākt vienošanos strīdus jautājumu nodod izšķiršanai tiesai atbilstoši normatīvo aktu prasībām. Attiecībās un prasījumos, kas starp Pusēm var rasties Līguma izpildes gaitā, bet kas Līgumā nav atrunāti, Puses rīkojas saskaņā ar LR normatīvajos aktos noteikto kārtību.</p>
+<h2>7. Nobeiguma noteikumi</h2>
+<p>7.1. Līgums var tikt grozīts pēc tikai Pušu rakstveida vienošanos, kas pēc grozījumu abpusējas parakstīšanas kļūst par Līguma neatņemama sastāvdaļu.</p>
+<p>7.2. Futbola klubs apstrādā Dalībnieka un Vecāka personas datus saskaņā ar spēkā esošajiem Latvijas Republikas normatīvajiem aktiem un Vispārīgā datu aizsardzības regulas (GDPR) prasībām.</p>
+<p>7.3. Personas dati tiek glabāti tikai tik ilgi, cik nepieciešams attiecīgo mērķu sasniegšanai vai cik to paredz normatīvie akti.</p>
+<p>7.4. Futbola klubs var nodot personas datus trešajām personām tikai tad, ja tas nepieciešams sacensību organizēšanai, sporta federāciju prasību izpildei, grāmatvedības nodrošināšanai, parādu piedziņai vai to paredz normatīvie akti.</p>
+<p>7.5. Ar Līguma parakstīšanas brīdi tiek izbeigti visi starp Pusēm iepriekš noslēgtie līgumi, vienošanās un to grozījumi par Dalībnieka dalību Futbola kluba organizētajos treniņos un sporta aktivitātēs. No Līguma spēkā stāšanās dienas Pušu savstarpējās tiesības un pienākumus nosaka tikai šis Līgums, izņemot saistības, kas radušās līdz iepriekšējo līgumu izbeigšanas dienai un pēc savas būtības saglabā spēku (tai skaitā nenokārtoti maksājumi vai citi neizpildīti pienākumi).</p>
+<p>7.5. Līgums sagatavots un parakstīts latviešu valodā.{% if electronic %} Līgums elektroniska dokumenta veidā tiek parakstīts ar drošu elektronisko parakstu un laika zīmogu. Līguma abpusējas parakstīšanas datums ir pēdējā parakstītāja laika zīmoga datums un laiks.{% endif %}</p>
+</div>
+<section class="requisites"><h2>8. Pušu rekvizīti:</h2><div class="parties"><div>
+<strong>Futbola klubs:</strong><br>Biedrība “Futbola Klubs CĒSIS”<br>Reģ. Nr. 40008324940<br>Adrese: Jāņa Poruka iela 8, Cēsis,<br>Cēsu novads, LV-4101<br>Banka: AS Swedbank, HABALV22<br>Konts: LV 79 HABA 0551 0546 7051 1<br>E-pasts: fkcesis@gmail.com
+<p class="signature">___________________<br>Valdes priekšsēdētāja<br>Kristīne Zaķe</p></div><div>
+<strong>Vecāks:</strong> <span class="filled">{{ fields.guardian_name }}</span><br>
+Pers. kods: <span class="filled">{{ fields.guardian_personal_id }}</span><br>
+Adrese: <span class="filled">{{ fields.guardian_address }}</span><br>
+E-pasts: <span class="filled">{{ fields.guardian_email }}</span><br>
+Tel.: <span class="filled">{{ fields.guardian_phone }}</span>
+<p class="signature">________________<br><span class="filled">{{ fields.guardian_name }}</span></p></div></div>
+{% if electronic %}<p class="signing-note">ŠIS DOKUMENTS IR ELEKTRONISKI PARAKSTĪTS AR DROŠU ELEKTRONISKO PARAKSTU UN SATUR LAIKA ZĪMOGU</p>{% endif %}
+</section>
+</body></html>
