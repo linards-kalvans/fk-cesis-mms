@@ -17,6 +17,16 @@ Do **not** use archived implementation plans for current planning unless user ex
 
 ## 2. Current implemented baseline
 
+### WeasyPrint Slice A — local implementation, acceptance pending
+
+- Local generation is implemented with DocuSeal still the default for new rows;
+  deployment, activation and release acceptance remain unapproved. Final isolated
+  PostgreSQL gate: **3273 passed, zero failures or skips**; independent reviews
+  approved after fixes. Exact-image, document-owner, authenticated browser,
+  manual signing and cutoff gates remain open. Evidence and outstanding recovery
+  work: `docs/acceptance/2026-11-26-weasyprint-slice-a.md`; operator guide:
+  `docs/local-agreement-pdfs.md`.
+
 ### Agreement PDF shadow forwarding — local implementation, acceptance pending
 
 - Default-off `AGREEMENT_PDF_SHADOW_ENABLED` mirrors future successful primary
