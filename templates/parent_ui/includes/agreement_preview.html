@@ -1,5 +1,7 @@
+{% load agreement_preview_tags %}
 <section class="fk-agreement-preview" data-agreement-preview
-         data-preview-url="{% url 'registrations:agreement-template-preview' %}"
+         data-preview-url="{% url 'registrations:agreement-template-preview' %}{% agreement_preview_query %}"
+         data-preview-signing-path-source="#id_preferred_agreement_signing"
          data-preview-loading="Līguma priekšskatījums tiek sagatavots…"
          data-preview-error="Līguma priekšskatījums pašlaik nav pieejams. Lūdzu, mēģiniet vēlāk."
          data-preview-page-label="Lapa">
