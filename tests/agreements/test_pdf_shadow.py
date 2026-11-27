@@ -750,3 +750,41 @@ def test_failed_detail_renders_post_retry_control(shadow_row, actor, client, set
     assert "Atkārtot salīdzinājumu" in text
     assert f'formaction="{retry}"' in text
     assert 'formmethod="post"' in text
+
+
+# --- Task 1: the production renderer must not alter the shadow contract -----
+
+
+def test_shadow_renderer_remains_watermarked_and_versioned(shadow_agreement):
+    import pymupdf
+    from apps.agreements.pdf_rendering import (
+        TEMPLATE_VERSION,
+        render_shadow_pdf,
+        shadow_renderer_provenance,
+    )
+
+    assert TEMPLATE_VERSION == "shadow-v1-2026-11"
+    pdf = render_shadow_pdf(
+        snapshot_for(shadow_agreement), template_version=TEMPLATE_VERSION,
+    )
+    with pymupdf.open(stream=pdf, filetype="pdf") as document:
+        for page in document:
+            assert "NAV DERĪGS PARAKSTĪŠANAI" in page.get_text()
+    assert shadow_renderer_provenance()["template_version"] == TEMPLATE_VERSION
+
+
+def test_shadow_renderer_rejects_production_template_version(shadow_agreement):
+    from apps.agreements.pdf_rendering import render_shadow_pdf
+
+    with pytest.raises(ValueError):
+        render_shadow_pdf(
+            snapshot_for(shadow_agreement), template_version="v1-2026-11",
+        )
+
+
+def test_shadow_provenance_keeps_shadow_assets():
+    from apps.agreements.pdf_rendering import shadow_renderer_provenance
+
+    assets = shadow_renderer_provenance()["assets"]
+    assert "shadow_v1.html" in assets
+    assert "shadow_v1.css" in assets
